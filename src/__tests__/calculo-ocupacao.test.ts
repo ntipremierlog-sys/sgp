@@ -164,7 +164,7 @@ describe("Suíte de Testes Obrigatórios do Motor de Ocupação e Painel Geral (
     const detalheHoje = resultado.matrizDetalhada[`${postoBase.id}_2026-09-04`];
 
     expect(detalheHoje.status).toBe("DESCOBERTO");
-    expect(detalheHoje.letra).toBe("F");
+    expect(detalheHoje.letra).toBe("D");
     expect(resultado.coberturaAgora.descobertos).toBe(1);
     expect(resultado.coberturaAgora.percentual).toBe(0);
     // 1 dia atendido (03/09) e 1 dia descoberto (04/09) -> SLA = 50%

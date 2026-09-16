@@ -3,25 +3,49 @@
 @tailwind utilities;
 
 :root {
-  --background: #F8FAFC;
-  --foreground: #0F172A;
+  /* Design Tokens — SGP Premier Logistics (Contrato Petrobras ICJ 5900.0129796.25.2) */
+  --font-sans: var(--font-ibm-sans), "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-ibm-mono), "Courier New", Courier, monospace;
+
+  --background: #F4F5F7;
+  --foreground: #1A2230;
+  
   --card: #FFFFFF;
-  --card-foreground: #0F172A;
-  --popover: #FFFFFF;
-  --popover-foreground: #0F172A;
-  --primary: #0F2042; /* Azul-marinho institucional Premier */
-  --primary-foreground: #FFFFFF;
-  --secondary: #E2E8F0;
-  --secondary-foreground: #0F172A;
-  --muted: #F1F5F9;
-  --muted-foreground: #64748B;
-  --accent: #EBF3FA;
-  --accent-foreground: #0F2042;
-  --destructive: #EF4444;
-  --destructive-foreground: #FFFFFF;
-  --border: #CBD5E1;
-  --input: #CBD5E1;
-  --ring: #0F2042;
+  --card-foreground: #1A2230;
+  --card-border: #E3E6EB;
+
+  --text-primary: #1A2230;
+  --text-secondary: #5B6474;
+  --text-alert: #3A4353;
+
+  --color-primary: #1F4FD1;
+  --color-primary-hover: #163A9E;
+
+  --color-success-text: #0F7B4F;
+  --color-success-bg: #E7F6EE;
+
+  --color-attention-text: #B54708;
+  --color-attention-bg: #FEF4E6;
+
+  --color-error-text: #B42318;
+  --color-error-bg: #FDECEA;
+
+  --color-neutral-text: #667085;
+  --color-neutral-bg: #F1F3F5;
+
+  --sidebar-bg: #0F1E36;
+  --sidebar-active: #1F3A66;
+  --sidebar-text: #C9D2E0;
+  --sidebar-header: #7F90AA;
+
+  --border: #E3E6EB;
+  --ring: #1F4FD1;
+}
+
+html {
+  font-family: var(--font-sans);
+  background-color: var(--background);
+  color: var(--foreground);
 }
 
 body {
@@ -29,28 +53,29 @@ body {
   background: var(--background);
   font-feature-settings: "rlig" 1, "calt" 1;
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
-/* Tipografia com números tabulares obrigatória em relatórios e mapas numéricos */
+/* Tipografia numérica tabular para alinhamento contábil e de postos */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
 
-/* Barra de rolagem discreta e corporativa */
+/* Barra de rolagem corporativa limpa */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #F1F5F9;
+  background: #F1F3F5;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #94A3B8;
-  border-radius: 3px;
+  background: #CBD5E1;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #64748B;
+  background: #94A3B8;
 }

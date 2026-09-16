@@ -1,8 +1,23 @@
 import type { Metadata } from "next";
+import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { Cabecalho } from "@/components/layout/cabecalho";
 import { MenuLateral } from "@/components/layout/menu-lateral";
 import { RodapeLgpd } from "@/components/layout/rodape-lgpd";
+
+const ibmPlexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-ibm-sans",
+  display: "swap",
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-ibm-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "SGP — Sistema de Gestão de Postos | Premier Logistics • Petrobras",
@@ -18,15 +33,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className="h-full">
-      <body className="h-full flex flex-col antialiased text-slate-900 bg-slate-100 font-sans">
-        {/* Cabeçalho Fixo */}
+    <html
+      lang="pt-BR"
+      className={`h-full ${ibmPlexSans.variable} ${ibmPlexMono.variable}`}
+    >
+      <body className="h-full flex flex-col antialiased text-[#1A2230] bg-[#F4F5F7] font-sans">
+        {/* Barra Superior Corporativa */}
         <Cabecalho />
 
-        {/* Corpo Principal com Menu Lateral e Área de Trabalho */}
+        {/* Corpo Principal com Menu Lateral (240px) e Área de Trabalho (Padding 28px 32px) */}
         <div className="flex-1 flex overflow-hidden">
           <MenuLateral />
-          <main className="flex-1 overflow-y-auto bg-slate-50 p-4 md:p-6">
+          <main className="flex-1 overflow-y-auto bg-[#F4F5F7] px-6 py-6 md:px-8 md:py-7">
             {children}
           </main>
         </div>
