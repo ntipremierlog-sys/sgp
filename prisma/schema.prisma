@@ -1,0 +1,633 @@
+// Prisma Schema para o SGP - Sistema de Gestão de Postos
+// Premier Logistics Gestão Empresarial Ltda. / Contrato Petrobras ICJ 5900.0129796.25.2
+// Banco de dados: PostgreSQL Neon na região aws-sa-east-1 (São Paulo)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS DE DOMÍNIO E CONTROLE DE ACESSO
+// -----------------------------------------------------------------------------
+
+enum PerfilUsuario {
+  PETROBRAS_FISCAL
+  PETROBRAS_GESTOR
+  PREMIER_ADMIN
+  PREMIER_GESTOR_CONTRATO
+  PREMIER_SUPERVISOR
+  PREMIER_RH
+  AUDITOR
+  PENDENTE_PERFIL
+}
+
+enum StatusUsuario {
+  ATIVO
+  BLOQUEADO
+  REVOGADO
+  PENDENTE_PRIMEIRO_ACESSO
+}
+
+enum SituacaoUnidade {
+  ATIVA
+  INATIVA
+  SUSPENSA
+}
+
+enum SituacaoPosto {
+  ATIVO
+  SUSPENSO
+  ENCERRADO
+}
+
+enum EscalaTrabalho {
+  ESCALA_5X2
+  ESCALA_12X36
+  ESCALA_6X1
+  OUTRA
+}
+
+enum SituacaoProfissional {
+  ATIVO
+  AFASTADO
+  FERIAS
+  DESLIGADO
+}
+
+enum TipoAlocacao {
+  TITULAR
+  SUBSTITUTO_FIXO
+}
+
+enum GrupoOcorrencia {
+  FERIAS
+  AFASTAMENTO_LEGAL
+  AUSENCIA_JUSTIFICADA
+  AUSENCIA_NAO_JUSTIFICADA
+  FOLGA_ESCALA
+  TREINAMENTO
+  SUSPENSAO
+  DESLIGAMENTO
+  OUTROS
+}
+
+enum StatusOcorrencia {
+  REGISTRADA
+  EM_VALIDACAO
+  VALIDADA
+  CANCELADA
+}
+
+enum OrigemRegistro {
+  MANUAL
+  IMPORTACAO
+}
+
+enum TipoCobertura {
+  SUBSTITUICAO_INTERNA
+  REMANEJAMENTO_ENTRE_POSTOS
+  HORA_EXTRA_TITULAR_OUTRO_POSTO
+  CONTRATACAO_TEMPORARIA
+  SEM_COBERTURA
+}
+
+enum StatusCobertura {
+  PLANEJADA
+  CONFIRMADA
+  CANCELADA
+}
+
+enum SituacaoPonto {
+  PRESENTE
+  AUSENTE
+  FOLGA
+  FERIAS
+  AFASTADO
+  NAO_APLICAVEL
+}
+
+enum StatusOcupacaoPosto {
+  TITULAR_PRESENTE
+  COBERTO
+  DESCOBERTO
+  NAO_EXIGIVEL
+  POSTO_VAGO
+  PENDENTE_APURACAO
+}
+
+enum VisibilidadeDocumento {
+  PUBLICO_CONTRATANTE
+  RESTRITO_PREMIER
+  SENSIVEL
+}
+
+enum StatusApontamento {
+  ABERTO
+  EM_TRATAMENTO
+  RESPONDIDO
+  ENCERRADO
+}
+
+enum TipoImportacao {
+  POSTOS_ANEXO_1A
+  PROFISSIONAIS
+  ALOCACOES
+  FREQUENCIA
+  OCORRENCIAS
+}
+
+enum StatusImportacao {
+  PROCESSANDO
+  CONCLUIDO
+  CONCLUIDO_COM_AVISOS
+  ERRO_CRITICO
+}
+
+enum AbrangenciaFeriado {
+  NACIONAL
+  ESTADUAL
+  MUNICIPAL
+}
+
+// -----------------------------------------------------------------------------
+// MODELOS: CONTRATO, UNIDADES E GOVERNANÇA
+// -----------------------------------------------------------------------------
+
+model Contrato {
+  id              String    @id @default(uuid()) @db.Uuid
+  numeroIcj       String    @unique @map("numero_icj")
+  numeroSap       String?   @map("numero_sap")
+  objeto          String
+  cliente         String    @default("Petróleo Brasileiro S.A. - Petrobras")
+  vigenciaInicio  DateTime  @map("vigencia_inicio")
+  vigenciaFim     DateTime  @map("vigencia_fim")
+  ativo           Boolean   @default(true)
+  
+  // Auditoria e Soft Delete
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  createdBy       String?   @map("created_by")
+  updatedBy       String?   @map("updated_by")
+  deletedAt       DateTime? @map("deleted_at")
+
+  unidades        Unidade[]
+
+  @@map("contrato")
+}
+
+model Unidade {
+  id              String          @id @default(uuid()) @db.Uuid
+  contratoId      String          @map("contrato_id") @db.Uuid
+  codigo          String          @unique
+  nome            String
+  uf              String          @db.VarChar(2)
+  municipio       String
+  centroCusto     String?         @map("centro_custo")
+  gestorPremier   String?         @map("gestor_premier")
+  fiscalPetrobras String?         @map("fiscal_petrobras")
+  situacao        SituacaoUnidade @default(ATIVA)
+
+  // Auditoria e Soft Delete
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  createdBy       String?         @map("created_by")
+  updatedBy       String?         @map("updated_by")
+  deletedAt       DateTime?       @map("deleted_at")
+
+  contrato        Contrato        @relation(fields: [contratoId], references: [id])
+  postos          Posto[]
+  profissionais   Profissional[]
+  feriados        Feriado[]
+  usuarios        UsuarioUnidade[]
+
+  @@map("unidade")
+}
+
+// -----------------------------------------------------------------------------
+// MODELOS: POSTOS E PROFISSIONAIS
+// -----------------------------------------------------------------------------
+
+model Posto {
+  id                  String          @id @default(uuid()) @db.Uuid
+  unidadeId           String          @map("unidade_id") @db.Uuid
+  codigoPosto         String          @unique @map("codigo_posto") // Identificador idêntico ao Anexo 1-A
+  funcao              String
+  descricao           String?
+  escala              EscalaTrabalho  @default(ESCALA_5X2)
+  jornadaSemanalHoras Decimal         @map("jornada_semanal_horas") @db.Decimal(5, 2)
+  horarioInicio       String?         @map("horario_inicio") // Ex: "07:00"
+  horarioFim          String?         @map("horario_fim")    // Ex: "16:48"
+  quantidade          Int             @default(1)
+  dataInicioVigencia  DateTime        @map("data_inicio_vigencia")
+  dataFimVigencia     DateTime?       @map("data_fim_vigencia")
+  situacao            SituacaoPosto   @default(ATIVO)
+  observacoes         String?
+
+  // Auditoria e Soft Delete
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+  createdBy           String?         @map("created_by")
+  updatedBy           String?         @map("updated_by")
+  deletedAt           DateTime?       @map("deleted_at")
+
+  unidade             Unidade         @relation(fields: [unidadeId], references: [id])
+  alocacoes           Alocacao[]
+  ocorrencias         Ocorrencia[]
+  coberturas          Cobertura[]
+  frequencias         FrequenciaDia[]
+  ocupacoesDia        OcupacaoPostoDia[]
+  apontamentos        Apontamento[]
+
+  @@map("posto")
+}
+
+model Profissional {
+  id                    String                @id @default(uuid()) @db.Uuid
+  matricula             String                @unique // Chave natural na folha de pagamento
+  nome                  String
+  cpf                   String                // Cifrado em repouso com AES-256-GCM; mascarado para Petrobras
+  dataNascimento        DateTime?             @map("data_nascimento")
+  funcao                String
+  dataAdmissao          DateTime              @map("data_admissao")
+  dataDesligamento      DateTime?             @map("data_desligamento")
+  situacao              SituacaoProfissional  @default(ATIVO)
+  unidadeId             String                @map("unidade_id") @db.Uuid
+  telefoneCorporativo   String?               @map("telefone_corporativo")
+
+  // Informações de jornada vindas da importação de colaboradores
+  jornadaSemanalHoras   Decimal?              @map("jornada_semanal_horas") @db.Decimal(5, 2)
+  escalaPadrao          EscalaTrabalho?       @map("escala_padrao")
+  horarioInicioPadrao   String?               @map("horario_inicio_padrao")
+  horarioFimPadrao      String?               @map("horario_fim_padrao")
+
+  // Auditoria e Soft Delete
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+  createdBy             String?               @map("created_by")
+  updatedBy             String?               @map("updated_by")
+  deletedAt             DateTime?             @map("deleted_at")
+
+  unidade               Unidade               @relation(fields: [unidadeId], references: [id])
+  dadosRestritos        ProfissionalDadosRestritos?
+  alocacoes             Alocacao[]
+  ocorrencias           Ocorrencia[]
+  coberturasRealizadas  Cobertura[]           @relation("SubstitutoCobertura")
+  frequencias           FrequenciaDia[]
+  titularOcupacoes      OcupacaoPostoDia[]    @relation("TitularOcupacao")
+  ocupanteOcupacoes     OcupacaoPostoDia[]    @relation("OcupanteOcupacao")
+
+  @@map("profissional")
+}
+
+// Tabela isolada para dados não essenciais à fiscalização (Estrito LGPD)
+model ProfissionalDadosRestritos {
+  id              String        @id @default(uuid()) @db.Uuid
+  profissionalId  String        @unique @map("profissional_id") @db.Uuid
+  endereco        String?
+  telefonePessoal String?       @map("telefone_pessoal")
+  emailPessoal    String?       @map("email_pessoal")
+  dadosBancarios  String?       @map("dados_bancarios")
+  dependentes     String?
+  salario         Decimal?      @db.Decimal(12, 2)
+  
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  profissional    Profissional  @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@map("profissional_dados_restritos")
+}
+
+model Alocacao {
+  id                  String        @id @default(uuid()) @db.Uuid
+  postoId             String        @map("posto_id") @db.Uuid
+  profissionalId      String        @map("profissional_id") @db.Uuid
+  tipo                TipoAlocacao  @default(TITULAR)
+  dataInicio          DateTime      @map("data_inicio")
+  dataFim             DateTime?     @map("data_fim") // nulo = vigente
+  motivoMovimentacao  String?       @map("motivo_movimentacao")
+  documentoReferencia String?       @map("documento_referencia")
+
+  // Auditoria e Soft Delete
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+  createdBy           String?       @map("created_by")
+  updatedBy           String?       @map("updated_by")
+  deletedAt           DateTime?     @map("deleted_at")
+
+  posto               Posto         @relation(fields: [postoId], references: [id])
+  profissional        Profissional  @relation(fields: [profissionalId], references: [id])
+
+  @@map("alocacao")
+}
+
+// -----------------------------------------------------------------------------
+// MODELOS: OCORRÊNCIAS, COBERTURAS E DADO SENSÍVEL (LGPD)
+// -----------------------------------------------------------------------------
+
+model TipoOcorrencia {
+  id                String          @id @default(uuid()) @db.Uuid
+  codigo            String          @unique // Ex: ATESTADO_MEDICO, FALTA_JUSTIFICADA, FALTA_INJUSTIFICADA, ABONO_LEGAL
+  descricaoInterna  String          @map("descricao_interna")
+  rotuloPublico     String          @map("rotulo_publico") // Ex: "Ausência justificada – atestado apresentado" (sem saúde)
+  grupo             GrupoOcorrencia
+  geraDadoSensivel  Boolean         @default(false) @map("gera_dado_sensivel")
+  exigeCobertura    Boolean         @default(true)  @map("exige_cobertura")
+  impactaMedicao    Boolean         @default(true)  @map("impacta_medicao")
+  exigeDocumento    Boolean         @default(false) @map("exige_documento")
+
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  ocorrencias       Ocorrencia[]
+
+  @@map("tipo_ocorrencia")
+}
+
+model Ocorrencia {
+  id                  String            @id @default(uuid()) @db.Uuid
+  profissionalId      String            @map("profissional_id") @db.Uuid
+  postoId             String?           @map("posto_id") @db.Uuid
+  tipoOcorrenciaId    String            @map("tipo_ocorrencia_id") @db.Uuid
+  dataInicio          DateTime          @map("data_inicio")
+  dataFim             DateTime          @map("data_fim")
+  diasUteisAfetados   Int               @default(1) @map("dias_uteis_afetados")
+  status              StatusOcorrencia  @default(REGISTRADA)
+  origem              OrigemRegistro    @default(MANUAL)
+  registradoPor       String?           @map("registrado_por")
+  observacaoPublica   String?           @map("observacao_publica")
+
+  // Auditoria e Soft Delete
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  createdBy           String?           @map("created_by")
+  updatedBy           String?           @map("updated_by")
+  deletedAt           DateTime?         @map("deleted_at")
+
+  profissional        Profissional      @relation(fields: [profissionalId], references: [id])
+  posto               Posto?            @relation(fields: [postoId], references: [id])
+  tipoOcorrencia      TipoOcorrencia    @relation(fields: [tipoOcorrenciaId], references: [id])
+  dadoSensivel        OcorrenciaDadoSensivel?
+  coberturas          Cobertura[]
+  ocupacoesDia        OcupacaoPostoDia[]
+
+  @@map("ocorrencia")
+}
+
+// Tabela 1:1 isolada para dados sensíveis de saúde (Retorna 403 para Petrobras)
+model OcorrenciaDadoSensivel {
+  id                  String        @id @default(uuid()) @db.Uuid
+  ocorrenciaId        String        @unique @map("ocorrencia_id") @db.Uuid
+  cid                 String?       // CID-10 (acesso estrito Premier/RH)
+  descricaoClinica    String?       @map("descricao_clinica")
+  profissionalEmissor String?       @map("profissional_emissor") // Nome do médico e CRM
+  documentoId         String?       @map("documento_id") @db.Uuid
+
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  ocorrencia          Ocorrencia    @relation(fields: [ocorrenciaId], references: [id], onDelete: Cascade)
+  documento           Documento?    @relation(fields: [documentoId], references: [id])
+
+  @@map("ocorrencia_dado_sensivel")
+}
+
+model Cobertura {
+  id                        String          @id @default(uuid()) @db.Uuid
+  postoId                   String          @map("posto_id") @db.Uuid
+  ocorrenciaId              String?         @map("ocorrencia_id") @db.Uuid
+  profissionalSubstitutoId  String          @map("profissional_substituto_id") @db.Uuid
+  dataInicio                DateTime        @map("data_inicio")
+  dataFim                   DateTime        @map("data_fim")
+  tipoCobertura             TipoCobertura   @default(SUBSTITUICAO_INTERNA) @map("tipo_cobertura")
+  status                    StatusCobertura @default(CONFIRMADA)
+  justificativa             String?
+  documentoReferencia       String?         @map("documento_referencia")
+
+  // Auditoria e Soft Delete
+  createdAt                 DateTime        @default(now()) @map("created_at")
+  updatedAt                 DateTime        @updatedAt @map("updated_at")
+  createdBy                 String?         @map("created_by")
+  updatedBy                 String?         @map("updated_by")
+  deletedAt                 DateTime?       @map("deleted_at")
+
+  posto                     Posto           @relation(fields: [postoId], references: [id])
+  ocorrencia                Ocorrencia?     @relation(fields: [ocorrenciaId], references: [id])
+  profissionalSubstituto    Profissional    @relation("SubstitutoCobertura", fields: [profissionalSubstitutoId], references: [id])
+  ocupacoesDia              OcupacaoPostoDia[]
+
+  @@map("cobertura")
+}
+
+// -----------------------------------------------------------------------------
+// MODELO: FREQUÊNCIA DIÁRIA (REGISTROS DE PONTO)
+// -----------------------------------------------------------------------------
+
+model FrequenciaDia {
+  id                  String          @id @default(uuid()) @db.Uuid
+  profissionalId      String          @map("profissional_id") @db.Uuid
+  data                DateTime        @db.Date
+  postoId             String?         @map("posto_id") @db.Uuid
+  situacaoPonto       SituacaoPonto   @default(PRESENTE) @map("situacao_ponto")
+  horaEntrada         String?         @map("hora_entrada") // Ex: "07:02"
+  horaSaida           String?         @map("hora_saida")   // Ex: "16:51"
+  horasTrabalhadas    Decimal?        @map("horas_trabalhadas") @db.Decimal(5, 2)
+  origemImportacaoId  String?         @map("origem_importacao_id") @db.Uuid
+
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  profissional        Profissional    @relation(fields: [profissionalId], references: [id])
+  posto               Posto?          @relation(fields: [postoId], references: [id])
+  importacaoOrigem    Importacao?     @relation(fields: [origemImportacaoId], references: [id])
+
+  @@unique([profissionalId, data])
+  @@map("frequencia_dia")
+}
+
+// -----------------------------------------------------------------------------
+// ⭐ MODELO CENTRAL: OCUPAÇÃO DO POSTO DIA A DIA (MOTOR DE CONSOLIDAÇÃO)
+// -----------------------------------------------------------------------------
+
+model OcupacaoPostoDia {
+  id                      String              @id @default(uuid()) @db.Uuid
+  postoId                 String              @map("posto_id") @db.Uuid
+  data                    DateTime            @db.Date
+  titularProfissionalId   String?             @map("titular_profissional_id") @db.Uuid
+  ocupanteProfissionalId  String?             @map("ocupante_profissional_id") @db.Uuid
+  statusOcupacao          StatusOcupacaoPosto @map("status_ocupacao")
+  ocorrenciaId            String?             @map("ocorrencia_id") @db.Uuid
+  coberturaId             String?             @map("cobertura_id") @db.Uuid
+  motivoPublico           String?             @map("motivo_publico")
+  possuiEvidencia         Boolean             @default(false) @map("possui_evidencia")
+  origemDados             String[]            @map("origem_dados") // PONTO, OCORRENCIA, COBERTURA, MANUAL
+  conferidoPor            String?             @map("conferido_por")
+  conferidoEm             DateTime?           @map("conferido_em")
+
+  createdAt               DateTime            @default(now()) @map("created_at")
+  updatedAt               DateTime            @updatedAt @map("updated_at")
+
+  posto                   Posto               @relation(fields: [postoId], references: [id])
+  titular                 Profissional?       @relation("TitularOcupacao", fields: [titularProfissionalId], references: [id])
+  ocupante                Profissional?       @relation("OcupanteOcupacao", fields: [ocupanteProfissionalId], references: [id])
+  ocorrencia              Ocorrencia?         @relation(fields: [ocorrenciaId], references: [id])
+  cobertura               Cobertura?          @relation(fields: [coberturaId], references: [id])
+  apontamentos            Apontamento[]
+
+  @@unique([postoId, data])
+  @@map("ocupacao_posto_dia")
+}
+
+// -----------------------------------------------------------------------------
+// MODELOS: DOCUMENTOS, APONTAMENTOS E IMPORTAÇÕES
+// -----------------------------------------------------------------------------
+
+model Documento {
+  id              String                @id @default(uuid()) @db.Uuid
+  entidadeTipo    String                @map("entidade_tipo") // OCORRENCIA, COBERTURA, POSTO, PROFISSIONAL
+  entidadeId      String                @map("entidade_id") @db.Uuid
+  nome            String
+  tipoDocumento   String                @map("tipo_documento")
+  mimeType        String                @map("mime_type")
+  tamanhoBytes    Int                   @map("tamanho_bytes")
+  conteudo        Bytes                 // Salvo em bytea no Postgres (máx 10 MB) mantendo dados em SP
+  hashSha256      String                @map("hash_sha256")
+  visibilidade    VisibilidadeDocumento @default(RESTRITO_PREMIER)
+  enviadoPor      String                @map("enviado_por")
+
+  createdAt       DateTime              @default(now()) @map("created_at")
+
+  dadosSensiveis  OcorrenciaDadoSensivel[]
+
+  @@map("documento")
+}
+
+model Apontamento {
+  id                  String            @id @default(uuid()) @db.Uuid
+  postoId             String?           @map("posto_id") @db.Uuid
+  ocupacaoPostoDiaId  String?           @map("ocupacao_posto_dia_id") @db.Uuid
+  periodoInicio       DateTime          @map("periodo_inicio")
+  periodoFim          DateTime          @map("periodo_fim")
+  texto               String            // Observação formal da fiscalização Petrobras
+  criadoPor           String            @map("criado_por")
+  status              StatusApontamento @default(ABERTO)
+  respostaPremier     String?           @map("resposta_premier")
+  respondidoPor       String?           @map("respondido_por")
+  respondidoEm        DateTime?         @map("respondido_em")
+
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  posto               Posto?            @relation(fields: [postoId], references: [id])
+  ocupacaoPostoDia    OcupacaoPostoDia? @relation(fields: [ocupacaoPostoDiaId], references: [id])
+
+  @@map("apontamento")
+}
+
+model Importacao {
+  id              String            @id @default(uuid()) @db.Uuid
+  tipo            TipoImportacao
+  arquivoNome     String            @map("arquivo_nome")
+  hashSha256      String?           @map("hash_sha256")
+  linhasLidas     Int               @default(0) @map("linhas_lidas")
+  linhasOk        Int               @default(0) @map("linhas_ok")
+  linhasErro      Int               @default(0) @map("linhas_erro")
+  status          StatusImportacao  @default(PROCESSANDO)
+  logJson         Json?             @map("log_json")
+  usuarioId       String?           @map("usuario_id") @db.Uuid
+  competencia     String?           // Ex: "2026-09"
+
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  frequencias     FrequenciaDia[]
+
+  @@map("importacao")
+}
+
+model Feriado {
+  id          String              @id @default(uuid()) @db.Uuid
+  data        DateTime            @db.Date
+  nome        String
+  abrangencia AbrangenciaFeriado  @default(NACIONAL)
+  uf          String?             @db.VarChar(2)
+  municipio   String?
+  unidadeId   String?             @map("unidade_id") @db.Uuid
+
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  unidade     Unidade?            @relation(fields: [unidadeId], references: [id])
+
+  @@map("feriado")
+}
+
+// -----------------------------------------------------------------------------
+// MODELOS DE USUÁRIOS E AUDITORIA
+// -----------------------------------------------------------------------------
+
+model Usuario {
+  id                  String         @id @default(uuid()) @db.Uuid
+  nome                String
+  email               String         @unique
+  senhaHash           String?        @map("senha_hash")
+  perfil              PerfilUsuario  @default(PENDENTE_PERFIL)
+  status              StatusUsuario  @default(PENDENTE_PRIMEIRO_ACESSO)
+  
+  // TOTP e Segurança
+  totpSegredoCifrado  String?        @map("totp_segredo_cifrado")
+  totpAtivado         Boolean        @default(false) @map("totp_ativado")
+  tentativasFalhas    Int            @default(0) @map("tentativas_falhas")
+  bloqueadoAte        DateTime?      @map("bloqueado_ate")
+  ultimoAcesso        DateTime?      @map("ultimo_acesso")
+
+  // Governança de Acesso (Exigência Seção 5.3)
+  empresa             String         @default("Premier Logistics")
+  cargo               String?
+  autorizadoPor       String?        @map("autorizado_por")
+  dataConcessao       DateTime?      @map("data_concessao")
+
+  // Auditoria e Soft Delete
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  createdBy           String?        @map("created_by")
+  updatedBy           String?        @map("updated_by")
+  deletedAt           DateTime?      @map("deleted_at")
+
+  unidades            UsuarioUnidade[]
+  logsAuditoria       LogAuditoria[]
+
+  @@map("usuario")
+}
+
+model UsuarioUnidade {
+  usuarioId   String   @map("usuario_id") @db.Uuid
+  unidadeId   String   @map("unidade_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  usuario     Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  unidade     Unidade  @relation(fields: [unidadeId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, unidadeId])
+  @@map("usuario_unidade")
+}
+
+model LogAuditoria {
+  id              String    @id @default(uuid()) @db.Uuid
+  usuarioId       String?   @map("usuario_id") @db.Uuid
+  acao            String    // LOGIN, LOGOUT, CRIAR, ATUALIZAR, EXCLUIR, CONSULTA_SENSIVEL
+  entidade        String    // TABELA OU RECURSO
+  entidadeId      String?   @map("entidade_id")
+  ip              String?
+  dadosAnteriores Json?     @map("dados_anteriores")
+  dadosNovos      Json?     @map("dados_novos")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  usuario         Usuario?  @relation(fields: [usuarioId], references: [id])
+
+  @@map("log_auditoria")
+}

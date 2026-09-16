@@ -1,0 +1,5 @@
+matricula;tipo_ocorrencia;data_inicio;data_fim;observacao_publica;cid;medico_emissor;crm
+PRM-00101;ATESTADO_MEDICO;03/09/2026;05/09/2026;Ausência justificada - atestado médico apresentado;M54.5;Dr. Roberto Mendes;12345/MS
+PRM-00103;FALTA_INJUSTIFICADA;02/09/2026;02/09/2026;Falta sem justificativa legal;;;
+PRM-00102;ABONO_LEGAL;10/09/2026;10/09/2026;Abono eleitoral / convocação justiça eleitoral;;;
+PRM-00101;FERIAS;15/09/2026;24/09/2026;Férias regulamentares do colaborador;;;

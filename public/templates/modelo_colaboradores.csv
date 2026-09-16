@@ -1,0 +1,4 @@
+matricula;nome_completo;cpf;data_nascimento;funcao;unidade_codigo;posto_codigo;escala;jornada_semanal_horas;horario_inicio;horario_fim;data_admissao;data_desligamento;situacao;telefone_corporativo
+PRM-00101;Carlos Eduardo Silva;123.456.789-01;15/04/1988;Auxiliar de Almoxarifado;UFN-III;PST-ALM-001;5x2;44,0;07:00;16:48;01/03/2024;;ATIVO;(67) 99888-1122
+PRM-00102;Mariana Costa Oliveira;234.567.890-12;22/08/1992;Técnica de Operações;UFN-III;PST-TEC-001;12x36;40,0;07:00;19:00;15/05/2024;;ATIVO;(67) 99777-2233
+PRM-00103;José Roberto Souza;345.678.901-23;10/11/1985;Motorista Operacional;UFN-III;PST-MOT-001;6x1;44,0;06:00;14:20;10/01/2024;;ATIVO;(67) 99666-3344
