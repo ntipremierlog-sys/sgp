@@ -3,31 +3,40 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
-  CalendarCheck,
-  Briefcase,
-  ArrowRight,
   AlertTriangle,
-  UserCheck2,
-  MessageSquare,
   FileSpreadsheet,
-  CheckCircle2,
   Clock,
-  ShieldCheck,
-  TrendingUp,
   ExternalLink,
   ChevronRight,
+  Info,
+  CheckCircle2,
+  AlertCircle,
+  Filter,
+  ArrowRight,
+  Calendar,
+  Layers,
+  Shield,
+  Eye,
 } from "lucide-react";
+import { carregarEstado, EstadoOperacionalCompleto } from "@/lib/dados/estado-operacional";
 import {
-  carregarEstado,
-  calcularStatusDia,
-  PostoOperacional,
-  CoberturaOperacional,
-  ApontamentoOperacional,
-  EstadoOperacionalCompleto,
-} from "@/lib/dados/estado-operacional";
+  obterOcupacaoConsolidada,
+} from "@/lib/servicos/adaptador-painel";
+import {
+  ResultadoOcupacaoConsolidado,
+  StatusPostoDia,
+  METADADOS_STATUS,
+  DetalhePostoDia,
+} from "@/lib/servicos/calculo-ocupacao";
 
-export default function PaginaInicial() {
+export default function PainelGeralPage() {
   const [estado, setEstado] = useState<EstadoOperacionalCompleto>(carregarEstado);
+  const [filtroBase, setFiltroBase] = useState<string>("UFN-III"); // "TODAS" ou ID de base
+  const [competenciaSelecionada, setCompetenciaSelecionada] = useState<string>("2026-09");
+  const [filtroSoDesvio, setFiltroSoDesvio] = useState<boolean>(true);
+  const [perfilAtivo, setPerfilAtivo] = useState<string>("PREMIER_GESTOR");
+  const [celulaInspecionada, setCelulaInspecionada] = useState<DetalhePostoDia | null>(null);
+  const [tooltipFormula, setTooltipFormula] = useState<string | null>(null);
 
   useEffect(() => {
     const carregar = () => {
@@ -40,516 +49,845 @@ export default function PaginaInicial() {
     return () => window.removeEventListener("sgp-dados-atualizados", handleAtualizacao);
   }, []);
 
-  const postos: PostoOperacional[] = estado?.postos || [];
-  const ocorrencias = estado?.ocorrencias || [];
-  const coberturas: CoberturaOperacional[] = estado?.coberturas || [];
-  const apontamentos: ApontamentoOperacional[] = estado?.apontamentos || [];
-
-  // Dias da janela recente da semana (dias 10 a 16 de Setembro de 2026)
-  const diasSemana = [10, 11, 12, 13, 14, 15, 16];
-  const rotulosDias: Record<number, { nome: string; fds: boolean }> = {
-    10: { nome: "Qui 10", fds: false },
-    11: { nome: "Sex 11", fds: false },
-    12: { nome: "Sáb 12", fds: true },
-    13: { nome: "Dom 13", fds: true },
-    14: { nome: "Seg 14", fds: false },
-    15: { nome: "Ter 15", fds: false },
-    16: { nome: "Qua 16", fds: false }, // Dia atual
-  };
-
-  // Cálculo da distribuição da força de trabalho hoje (dia 16)
-  const statsHoje = useMemo(() => {
-    const psts = estado?.postos || [];
-    const ocrs = estado?.ocorrencias || [];
-    const cobs = estado?.coberturas || [];
-    const apts = estado?.apontamentos || [];
-
-    let presentes = 0;
-    let cobertos = 0;
-    let descobertos = 0;
-    let folga = 0;
-
-    psts.forEach((posto) => {
-      const status = calcularStatusDia(posto, 16, 2026, 8, ocrs, cobs, apts);
-      if (status.statusOcupacao === "TITULAR_PRESENTE") presentes++;
-      else if (status.statusOcupacao === "COBERTO") cobertos++;
-      else if (status.statusOcupacao === "DESCOBERTO" || status.statusOcupacao === "POSTO_VAGO") descobertos++;
-      else folga++;
+  // Motor centralizado único: calcula toda a matriz, grade e indicadores
+  const dadosPainel: ResultadoOcupacaoConsolidado = useMemo(() => {
+    return obterOcupacaoConsolidada(estado, {
+      baseId: filtroBase,
+      competencia: competenciaSelecionada,
+      dataHoje: "2026-09-16",
+      horaHoje: "08:00",
+      perfilUsuario: perfilAtivo,
     });
+  }, [estado, filtroBase, competenciaSelecionada, perfilAtivo]);
 
-    const totalOperaveis = psts.length;
-    const percPresentes = totalOperaveis > 0 ? (presentes / totalOperaveis) * 100 : 0;
-    const percCobertos = totalOperaveis > 0 ? (cobertos / totalOperaveis) * 100 : 0;
-    const percDescobertos = totalOperaveis > 0 ? (descobertos / totalOperaveis) * 100 : 0;
+  // Linhas da grade filtradas por "Só com desvio"
+  const linhasGrade = useMemo(() => {
+    const todas = dadosPainel.gradeSemanal.linhas;
+    if (!filtroSoDesvio) return todas;
+    return todas.filter((linha) => linha.temDesvio);
+  }, [dadosPainel.gradeSemanal.linhas, filtroSoDesvio]);
 
-    return {
-      presentes,
-      cobertos,
-      descobertos,
-      folga,
-      percPresentes,
-      percCobertos,
-      percDescobertos,
-    };
-  }, [estado]);
-
-  const coberturasAtivas = coberturas.filter((c) => c.status === "CONFIRMADA").length;
-  const totalApontamentos = apontamentos.length;
-  const apontamentosPendentes = apontamentos.filter(
-    (a) => a.status === "ABERTO" || a.status === "EM_TRATAMENTO"
-  ).length;
+  // Lista de bases disponíveis para o filtro
+  const listaBases = [
+    { id: "TODAS", nome: "Todas as bases contratuais" },
+    { id: "UFN-III", nome: "UFN III – Três Lagoas/MS (Base principal)" },
+    { id: "MACAE", nome: "Base Macaé / Parque de Tubos" },
+    { id: "SANTOS", nome: "Terminal Portuário Santos/SP" },
+    { id: "PAULINIA", nome: "Refinaria Paulínia (Replan/SP)" },
+  ];
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-10">
-      {/* 1. CABEÇALHO EXECUTIVO */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-medium mb-1">
-            <span className="font-semibold text-slate-800 font-mono">Contrato Petrobras 5900.0129796.25.2</span>
-            <span className="text-slate-300">•</span>
-            <span className="text-slate-600">UFN III – Três Lagoas/MS</span>
-            <span className="text-slate-300">•</span>
-            <span className="text-emerald-700 font-semibold flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              SLA Operacional: 98,2%
-            </span>
-          </div>
-
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Painel Geral de Gestão
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Monitoramento em tempo real de titulares, coberturas e conformidade com o Item 11.3.
-          </p>
-        </div>
-
-        {/* Ações Estratégicas de Topo */}
-        <div className="flex items-center gap-2 shrink-0">
-          <Link
-            href="/relatorios"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-sm transition-all"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-slate-500" />
-            <span>Memória de Cálculo</span>
-          </Link>
-
-          <Link
-            href="/mapa-ocupacao"
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-premier-900 hover:bg-premier-800 rounded-lg shadow-sm transition-all"
-          >
-            <CalendarCheck className="w-4 h-4 text-blue-300" />
-            <span>Mapa do Mês (30 Dias)</span>
-            <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
-          </Link>
-        </div>
-      </div>
-
-      {/* 2. LINHA DE KPIS EXECUTIVOS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: SLA Contratual */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              SLA do Contrato
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-slate-900 tabular-nums">98,2%</span>
-              <span className="text-xs font-medium text-slate-500">• Meta ≥ 95%</span>
-            </div>
-            <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2.5 overflow-hidden">
-              <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: "98.2%" }} />
-            </div>
-            <p className="text-[11px] text-slate-500 mt-2">
-              Operação sem glosa projetada para a medição.
-            </p>
-          </div>
-        </div>
-
-        {/* KPI 2: Postos em Atividade */}
-        <Link
-          href="/postos"
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-slate-400 hover:shadow-md transition-all group flex flex-col justify-between"
-        >
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Postos Contratados
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <Briefcase className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-slate-900 tabular-nums">{postos.length}</span>
-              <span className="text-xs text-slate-500">postos no Anexo 1-A</span>
-            </div>
-            <div className="flex items-center gap-2 mt-2.5 text-[11px] text-slate-600">
-              <span className="text-emerald-700 font-semibold">{statsHoje.presentes} titulares ativos</span>
-              <span>•</span>
-              <span className="text-blue-700 font-semibold">{statsHoje.cobertos} em cobertura</span>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 group-hover:text-premier-800 transition-colors">
-              <span>Ver relação de postos</span>
-              <ChevronRight className="w-3 h-3" />
-            </p>
-          </div>
-        </Link>
-
-        {/* KPI 3: Coberturas Ativas */}
-        <Link
-          href="/coberturas"
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-slate-400 hover:shadow-md transition-all group flex flex-col justify-between"
-        >
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Coberturas Vigentes
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <UserCheck2 className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-blue-700 tabular-nums">{coberturasAtivas}</span>
-              <span className="text-xs text-slate-500">substitutos escalados</span>
-            </div>
-            <div className="flex items-center gap-1.5 mt-2.5 text-[11px] text-slate-600">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Trava contra sobreposição ativa</span>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 group-hover:text-premier-800 transition-colors">
-              <span>Histórico de substituições</span>
-              <ChevronRight className="w-3 h-3" />
-            </p>
-          </div>
-        </Link>
-
-        {/* KPI 4: Notificações da Fiscalização */}
-        <Link
-          href="/apontamentos"
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-slate-400 hover:shadow-md transition-all group flex flex-col justify-between"
-        >
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              Fiscalização Petrobras
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <MessageSquare className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-slate-900 tabular-nums">{totalApontamentos}</span>
-              <span className="text-xs font-semibold text-amber-700">
-                • {apontamentosPendentes} pendente(s)
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* ------------------------------------------------------------------- */}
+      {/* 1. BARRA DE CONTEXTO E CABEÇALHO */}
+      {/* ------------------------------------------------------------------- */}
+      <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            {/* Breadcrumb oficial */}
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 font-medium">
+              <span className="font-semibold text-slate-800 font-mono">
+                Contrato Petrobras 5900.0129796.25.2
               </span>
+              <span className="text-slate-300">/</span>
+              <span className="text-premier-800 font-medium">{dadosPainel.filtroAplicado.baseNome}</span>
+              <span className="text-slate-300">/</span>
+              <span className="text-slate-600">Setembro de 2026</span>
             </div>
-            <div className="flex items-center gap-1.5 mt-2.5 text-[11px] text-slate-600">
-              <Clock className="w-3.5 h-3.5 text-amber-500" />
-              <span>Aguardando contra-evidência Premier</span>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 group-hover:text-premier-800 transition-colors">
-              <span>Apresentar manifestação</span>
-              <ChevronRight className="w-3 h-3" />
+
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+              Painel geral de gestão
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Acompanhamento de alocação de postos, presença da força de trabalho e conformidade com o Item 11.3.
             </p>
           </div>
-        </Link>
+
+          {/* Frescor dos dados e simulação de perfil */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0">
+            {/* Selo de Frescor */}
+            <div
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium ${
+                dadosPainel.frescor.rhidAtrasado
+                  ? "bg-amber-50 text-amber-900 border-amber-300"
+                  : "bg-slate-50 text-slate-700 border-slate-200"
+              }`}
+            >
+              <Clock
+                className={`w-3.5 h-3.5 ${
+                  dadosPainel.frescor.rhidAtrasado ? "text-amber-600" : "text-slate-400"
+                }`}
+              />
+              <div>
+                <span>Ponto RHID até </span>
+                <span className="font-semibold">{dadosPainel.frescor.pontoRhidAte}</span>
+                <span className="text-slate-400"> · </span>
+                <span>RM até </span>
+                <span className="font-semibold">{dadosPainel.frescor.rmAte}</span>
+              </div>
+            </div>
+
+            {/* Alternador de Perfil para Demonstração de LGPD */}
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+              <span className="text-[11px] font-semibold text-slate-500 px-2 flex items-center gap-1">
+                <Eye className="w-3.5 h-3.5" />
+                <span>Perfil:</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setPerfilAtivo("PREMIER_GESTOR")}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                  perfilAtivo === "PREMIER_GESTOR"
+                    ? "bg-white text-slate-900 shadow-sm font-semibold"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Gestor Premier
+              </button>
+              <button
+                type="button"
+                onClick={() => setPerfilAtivo("PETROBRAS_FISCAL")}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                  perfilAtivo === "PETROBRAS_FISCAL"
+                    ? "bg-white text-emerald-900 shadow-sm font-semibold border border-emerald-300"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Fiscal Petrobras (LGPD)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Filtros de Base e Competência */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label htmlFor="filtro-base" className="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                <Filter className="w-3.5 h-3.5 text-slate-400" />
+                <span>Base operacional:</span>
+              </label>
+              <select
+                id="filtro-base"
+                value={filtroBase}
+                onChange={(e) => setFiltroBase(e.target.value)}
+                className="text-xs bg-white border border-slate-300 rounded-md px-2.5 py-1.5 font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-premier-600 shadow-sm"
+              >
+                {listaBases.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label htmlFor="filtro-competencia" className="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <span>Competência:</span>
+              </label>
+              <select
+                id="filtro-competencia"
+                value={competenciaSelecionada}
+                onChange={(e) => setCompetenciaSelecionada(e.target.value)}
+                className="text-xs bg-white border border-slate-300 rounded-md px-2.5 py-1.5 font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-premier-600 shadow-sm"
+              >
+                <option value="2026-09">Setembro / 2026 (Atual)</option>
+                <option value="2026-08">Agosto / 2026</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Link
+              href="/relatorios"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-md shadow-sm transition-all"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
+              <span>Memória de cálculo</span>
+            </Link>
+          </div>
+        </div>
       </div>
 
-      {/* 3. BARRA VISUAL DE DISTRIBUIÇÃO DA FORÇA DE TRABALHO HOJE */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+      {/* ------------------------------------------------------------------- */}
+      {/* 2. FAIXA DE AÇÃO IMEDIATA (TOP 5 POR URGÊNCIA) */}
+      {/* ------------------------------------------------------------------- */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Situação do Efetivo no Turno Atual (Hoje • 16/Set)
+              Faixa de ação imediata
             </h2>
-            <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              Turno 100% Coberto
-            </span>
           </div>
-          <span className="text-[11px] text-slate-400 font-mono">
-            {postos.length} postos contratados em operação
+          <span className="text-[11px] text-slate-400">
+            {dadosPainel.faixaAcao.length > 0
+              ? `${dadosPainel.faixaAcao.length} item(ns) prioritário(s)`
+              : "Nenhuma ação pendente"}
           </span>
         </div>
 
-        {/* Barra Proporcional Multissegmentada */}
-        <div className="w-full bg-slate-100 h-3 rounded-full flex overflow-hidden">
-          <div
-            style={{ width: `${statsHoje.percPresentes}%` }}
-            className="bg-emerald-500 transition-all"
-            title={`${statsHoje.presentes} Titulares Presentes`}
-          />
-          <div
-            style={{ width: `${statsHoje.percCobertos}%` }}
-            className="bg-blue-500 transition-all"
-            title={`${statsHoje.cobertos} Substitutos em Cobertura`}
-          />
-          <div
-            style={{ width: `${statsHoje.percDescobertos}%` }}
-            className="bg-rose-500 transition-all"
-            title={`${statsHoje.descobertos} Descobertos`}
-          />
+        {dadosPainel.faixaAcao.length === 0 ? (
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Sem pendências ou prazos críticos no momento. Todos os apontamentos estão respondidos.</span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {dadosPainel.faixaAcao.map((item) => {
+              const isPerigo = item.urgencia === "PERIGO";
+              return (
+                <div
+                  key={item.id}
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border text-xs transition-colors ${
+                    isPerigo
+                      ? "bg-rose-50/60 border-rose-200 text-rose-950"
+                      : "bg-amber-50/50 border-amber-200 text-amber-950"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    {isPerigo ? (
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    )}
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2 font-semibold">
+                        {item.posto && (
+                          <span className="px-1.5 py-0.2 rounded bg-white font-mono text-[11px] border border-slate-200 text-slate-800">
+                            {item.posto}
+                          </span>
+                        )}
+                        <span className="text-slate-700">{item.base}</span>
+                        {item.prazoTexto && (
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isPerigo
+                                ? "bg-rose-200 text-rose-900"
+                                : "bg-amber-200 text-amber-900"
+                            }`}
+                          >
+                            {item.prazoTexto}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-slate-600 mt-0.5 text-xs line-clamp-1">{item.descricao}</p>
+                    </div>
+                  </div>
+
+                  <Link
+                    href={item.acaoLink}
+                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md font-semibold text-xs shrink-0 self-start sm:self-center transition-all ${
+                      isPerigo
+                        ? "bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
+                        : "bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+                    }`}
+                  >
+                    <span>{item.acaoTexto}</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ------------------------------------------------------------------- */}
+      {/* 3. QUATRO INDICADORES EM GRID EQUIVALENTE */}
+      {/* ------------------------------------------------------------------- */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Indicador 1: Cobertura Agora */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Cobertura agora
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setTooltipFormula(
+                    tooltipFormula === "cobertura" ? null : "cobertura"
+                  )
+                }
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+                title="Ver fórmula"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            </div>
+
+            {tooltipFormula === "cobertura" && (
+              <div className="p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600 mt-1.5">
+                <strong>Fórmula:</strong> (Titulares presentes + substitutos) ÷ postos com escala prevista no turno hoje × 100.
+              </div>
+            )}
+
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="text-3xl font-bold text-slate-900 tabular-nums">
+                {dadosPainel.coberturaAgora.percentual.toFixed(1)}%
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  dadosPainel.coberturaAgora.isAlertaDescoberto
+                    ? "bg-rose-100 text-rose-800 border border-rose-200"
+                    : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                }`}
+              >
+                {dadosPainel.coberturaAgora.statusSelo}
+              </span>
+            </div>
+
+            {/* Barra de composição */}
+            <div className="w-full bg-slate-100 rounded-full h-2 mt-3 overflow-hidden flex">
+              <div
+                className="bg-emerald-500 h-2"
+                style={{
+                  width: `${
+                    dadosPainel.coberturaAgora.postosComEscalaHoje > 0
+                      ? (dadosPainel.coberturaAgora.presentes /
+                          dadosPainel.coberturaAgora.postosComEscalaHoje) *
+                        100
+                      : 0
+                  }%`,
+                }}
+                title={`${dadosPainel.coberturaAgora.presentes} titular(es)`}
+              />
+              <div
+                className="bg-blue-500 h-2"
+                style={{
+                  width: `${
+                    dadosPainel.coberturaAgora.postosComEscalaHoje > 0
+                      ? (dadosPainel.coberturaAgora.substitutos /
+                          dadosPainel.coberturaAgora.postosComEscalaHoje) *
+                        100
+                      : 0
+                  }%`,
+                }}
+                title={`${dadosPainel.coberturaAgora.substitutos} substituto(s)`}
+              />
+              <div
+                className="bg-rose-600 h-2"
+                style={{
+                  width: `${
+                    dadosPainel.coberturaAgora.postosComEscalaHoje > 0
+                      ? (dadosPainel.coberturaAgora.descobertos /
+                          dadosPainel.coberturaAgora.postosComEscalaHoje) *
+                        100
+                      : 0
+                  }%`,
+                }}
+                title={`${dadosPainel.coberturaAgora.descobertos} descoberto(s)`}
+              />
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-600 mt-3 font-medium">
+            {dadosPainel.coberturaAgora.textoApoio}
+          </p>
         </div>
 
-        {/* Legenda Limpa Inline */}
-        <div className="flex flex-wrap items-center gap-6 mt-3 text-xs text-slate-600">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span>
-              <strong>{statsHoje.presentes}</strong> Titulares Presentes ({Math.round(statsHoje.percPresentes)}%)
-            </span>
+        {/* Indicador 2: SLA da Competência */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                SLA da competência
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setTooltipFormula(tooltipFormula === "sla" ? null : "sla")
+                }
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+                title="Ver fórmula"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            </div>
+
+            {tooltipFormula === "sla" && (
+              <div className="p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600 mt-1.5">
+                {dadosPainel.slaCompetencia.formulaExplicativa}
+              </div>
+            )}
+
+            <div className="mt-3 flex items-baseline gap-2">
+              {dadosPainel.slaCompetencia.valor !== null ? (
+                <>
+                  <span className="text-3xl font-bold text-slate-900 tabular-nums">
+                    {dadosPainel.slaCompetencia.valor.toFixed(1)}%
+                  </span>
+                  <span className="text-xs font-semibold text-slate-500">
+                    Meta ≥ {dadosPainel.slaCompetencia.meta}%
+                  </span>
+                </>
+              ) : (
+                <Link
+                  href="/admin"
+                  className="text-sm font-bold text-premier-800 underline flex items-center gap-1"
+                >
+                  <span>Parametrizar</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
+              )}
+            </div>
+
+            {dadosPainel.slaCompetencia.valor !== null && (
+              <div className="w-full bg-slate-100 rounded-full h-2 mt-3 overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-2 rounded-full"
+                  style={{
+                    width: `${Math.min(100, dadosPainel.slaCompetencia.valor)}%`,
+                  }}
+                />
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+
+          <p className="text-[11px] text-slate-500 mt-3 flex items-center justify-between">
             <span>
-              <strong>{statsHoje.cobertos}</strong> Substitutos em Cobertura ({Math.round(statsHoje.percCobertos)}%)
+              {dadosPainel.slaCompetencia.totalAtendidos} atendidos de{" "}
+              {dadosPainel.slaCompetencia.totalAvaliados} avaliados
             </span>
+            {dadosPainel.slaCompetencia.variacaoPp && (
+              <span className="text-emerald-700 font-semibold">
+                +{dadosPainel.slaCompetencia.variacaoPp} p.p.
+              </span>
+            )}
+          </p>
+        </div>
+
+        {/* Indicador 3: Postos-dia Descobertos */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Postos-dia descobertos
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setTooltipFormula(
+                    tooltipFormula === "descobertos" ? null : "descobertos"
+                  )
+                }
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+                title="Ver fórmula"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            </div>
+
+            {tooltipFormula === "descobertos" && (
+              <div className="p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600 mt-1.5">
+                {dadosPainel.descobertosCompetencia.formulaExplicativa}
+              </div>
+            )}
+
+            <div className="mt-3 flex items-baseline gap-2">
+              <span
+                className={`text-3xl font-bold tabular-nums ${
+                  dadosPainel.descobertosCompetencia.totalDescobertos > 0
+                    ? "text-rose-600"
+                    : "text-slate-900"
+                }`}
+              >
+                {dadosPainel.descobertosCompetencia.totalDescobertos}
+              </span>
+              <span className="text-xs text-slate-500">no mês acumulado</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-            <span>
-              <strong>{statsHoje.descobertos}</strong> Descobertos (0%)
-            </span>
+
+          <p className="text-[11px] text-slate-500 mt-3">
+            {dadosPainel.descobertosCompetencia.textoApoio}
+          </p>
+        </div>
+
+        {/* Indicador 4: Glosa Estimada (R$) */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Glosa estimada
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setTooltipFormula(tooltipFormula === "glosa" ? null : "glosa")
+                }
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+                title="Ver fórmula"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            </div>
+
+            {tooltipFormula === "glosa" && (
+              <div className="p-2 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600 mt-1.5">
+                {dadosPainel.glosaEstimada.formulaExplicativa}
+              </div>
+            )}
+
+            <div className="mt-3">
+              {dadosPainel.glosaEstimada.status === "OMITIDO_LGPD" ? (
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 p-2 rounded border border-slate-200">
+                  <Shield className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Acesso restrito à gestão contratual Premier</span>
+                </div>
+              ) : dadosPainel.glosaEstimada.status === "PARAMETRIZAR" ? (
+                <Link
+                  href="/admin"
+                  className="inline-flex items-center gap-1 text-sm font-bold text-amber-700 hover:text-amber-800 underline"
+                >
+                  <span>Parametrizar</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
+              ) : (
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs font-semibold text-slate-500">R$</span>
+                  <span className="text-3xl font-bold text-slate-900 tabular-nums">
+                    {dadosPainel.glosaEstimada.valorTotal !== null
+                      ? dadosPainel.glosaEstimada.valorTotal.toLocaleString("pt-BR", {
+                          minimumFractionDigits: 2,
+                        })
+                      : "0,00"}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="ml-auto text-[11px] text-slate-400">
-            Zero glosa registrada no turno
+
+          <p className="text-[11px] text-slate-500 mt-3">
+            {dadosPainel.glosaEstimada.textoApoio}
+          </p>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------------- */}
+      {/* 4. COMPARATIVO POR BASE (QUANDO "TODAS AS BASES") */}
+      {/* ------------------------------------------------------------------- */}
+      {filtroBase === "TODAS" && (
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-premier-800" />
+              <span>Comparativo de bases operacionais</span>
+            </h2>
+            <span className="text-xs text-slate-400">Ordenado por criticidade</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-700">
+              <thead className="bg-slate-50 text-slate-500 font-semibold border-y border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-3">Base operacional</th>
+                  <th className="py-2.5 px-3 text-center">Postos</th>
+                  <th className="py-2.5 px-3 text-center">Descobertos hoje</th>
+                  <th className="py-2.5 px-3 text-center">Descobertos no mês</th>
+                  <th className="py-2.5 px-3 text-center">SLA do mês</th>
+                  <th className="py-2.5 px-3 text-center">Pendências</th>
+                  <th className="py-2.5 px-3 text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {dadosPainel.comparativoBases.map((base) => (
+                  <tr
+                    key={base.baseId}
+                    onClick={() => setFiltroBase(base.baseId)}
+                    className="hover:bg-slate-50/80 cursor-pointer transition-colors"
+                  >
+                    <td className="py-3 px-3 font-semibold text-slate-900">
+                      {base.baseNome}
+                    </td>
+                    <td className="py-3 px-3 text-center tabular-nums">
+                      {base.postosTotal}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
+                          base.descobertosHoje > 0
+                            ? "bg-rose-100 text-rose-800"
+                            : "bg-emerald-100 text-emerald-800"
+                        }`}
+                      >
+                        {base.descobertosHoje}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-center tabular-nums font-semibold">
+                      {base.descobertosMes}
+                    </td>
+                    <td className="py-3 px-3 text-center tabular-nums font-semibold">
+                      {base.slaPercentual !== null ? `${base.slaPercentual}%` : "—"}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+                          base.pendenciasCount > 0
+                            ? "bg-amber-100 text-amber-900"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        {base.pendenciasCount}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <span className="text-premier-800 font-semibold text-[11px] hover:underline">
+                        Filtrar base →
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------- */}
+      {/* 5. GRADE DOS ÚLTIMOS 7 DIAS */}
+      {/* ------------------------------------------------------------------- */}
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <span>Grade de ocupação recente (últimos 7 dias)</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                {linhasGrade.length} de {dadosPainel.gradeSemanal.totalPostos} postos
+              </span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Identificação de conformidade por célula diária. Letra e cor para acessibilidade visual completa.
+            </p>
+          </div>
+
+          {/* Controles da grade */}
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={filtroSoDesvio}
+                onChange={(e) => setFiltroSoDesvio(e.target.checked)}
+                className="w-4 h-4 text-premier-700 rounded border-slate-300 focus:ring-premier-600"
+              />
+              <span>Só com desvio ({dadosPainel.gradeSemanal.totalPostosComDesvio})</span>
+            </label>
+
+            <Link
+              href="/mapa-ocupacao"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-premier-800 hover:text-premier-900 underline"
+            >
+              <span>Abrir mapa do mês (30 dias)</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Tabela de grade */}
+        <div className="overflow-x-auto border border-slate-200 rounded-lg">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+              <tr>
+                <th className="py-2.5 px-3 min-w-[100px]">Posto</th>
+                <th className="py-2.5 px-3 min-w-[140px]">Função contratual</th>
+                <th className="py-2.5 px-3 min-w-[130px]">Titular do posto</th>
+                {dadosPainel.gradeSemanal.dias.map((d) => (
+                  <th
+                    key={d.data}
+                    className={`py-2 px-1 text-center min-w-[48px] ${
+                      d.isHoje
+                        ? "bg-blue-50 font-bold text-premier-900"
+                        : d.fds
+                        ? "bg-slate-100 text-slate-400 font-normal"
+                        : ""
+                    }`}
+                  >
+                    <div>{d.rotulo}</div>
+                  </th>
+                ))}
+                <th className="py-2.5 px-3 text-center min-w-[70px]">Desvios</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {linhasGrade.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={4 + dadosPainel.gradeSemanal.dias.length}
+                    className="text-center py-6 text-slate-400 text-xs"
+                  >
+                    Nenhum posto encontrado com os filtros selecionados.
+                  </td>
+                </tr>
+              ) : (
+                linhasGrade.map((linha) => (
+                  <tr key={linha.postoId} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-2 px-3 font-mono font-bold text-slate-800">
+                      {linha.codigoPosto}
+                    </td>
+                    <td className="py-2 px-3 text-slate-700 truncate max-w-[160px]">
+                      {linha.funcao}
+                    </td>
+                    <td className="py-2 px-3 text-slate-600">
+                      {linha.titularNome ? (
+                        <span>{linha.titularNome}</span>
+                      ) : (
+                        <span className="text-rose-600 font-semibold">Posto vago</span>
+                      )}
+                    </td>
+                    {dadosPainel.gradeSemanal.dias.map((d) => {
+                      const celula = linha.celulas[d.data];
+                      if (!celula) return <td key={d.data} className="text-center">—</td>;
+
+                      const meta = METADADOS_STATUS[celula.status];
+                      return (
+                        <td key={d.data} className="py-1 px-1 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setCelulaInspecionada(celula)}
+                            title={`${celula.rotulo} (${celula.data}): ${celula.motivo}`}
+                            className={`w-7 h-7 mx-auto rounded flex items-center justify-center font-bold text-xs border transition-transform hover:scale-110 shadow-xs ${meta.corFundo} ${meta.corTexto} ${meta.corBorda}`}
+                          >
+                            {meta.letra}
+                          </button>
+                        </td>
+                      );
+                    })}
+                    <td className="py-2 px-3 text-center">
+                      <span
+                        className={`inline-block px-1.5 py-0.5 rounded font-bold text-[11px] ${
+                          linha.totalDesvios > 0
+                            ? "bg-rose-100 text-rose-800"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        {linha.totalDesvios}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Modal / Drawer de Detalhe da Célula Inspecionada */}
+        {celulaInspecionada && (
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2 relative">
+            <button
+              type="button"
+              onClick={() => setCelulaInspecionada(null)}
+              className="absolute top-3 right-3 text-slate-400 hover:text-slate-700 font-bold"
+            >
+              ✕
+            </button>
+            <div className="font-bold text-slate-800 flex items-center gap-2">
+              <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-300">
+                {celulaInspecionada.codigoPosto}
+              </span>
+              <span>{celulaInspecionada.funcao}</span>
+              <span className="text-slate-400">·</span>
+              <span>Data: {celulaInspecionada.data}</span>
+            </div>
+            <div className="text-slate-700">
+              <strong>Situação apurada:</strong> {celulaInspecionada.rotulo} ({celulaInspecionada.letra})
+            </div>
+            {celulaInspecionada.ocupanteNome && (
+              <div className="text-slate-700">
+                <strong>Profissional atuante:</strong> {celulaInspecionada.ocupanteNome}
+              </div>
+            )}
+            {celulaInspecionada.horarioPonto && (
+              <div className="text-slate-700">
+                <strong>Marcações do ponto:</strong> {celulaInspecionada.horarioPonto}
+              </div>
+            )}
+            <div className="text-slate-600 bg-white p-2.5 rounded border border-slate-200">
+              <strong>Motivo e auditoria:</strong> {celulaInspecionada.motivo}
+            </div>
+          </div>
+        )}
+
+        {/* Legenda fixa dos 6 status padronizados (Parte 2) */}
+        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <span className="font-semibold text-slate-500">Legenda contratual de ocupação:</span>
+          <div className="flex flex-wrap items-center gap-3">
+            {(Object.keys(METADADOS_STATUS) as StatusPostoDia[]).map((st) => {
+              const item = METADADOS_STATUS[st];
+              return (
+                <div key={st} className="flex items-center gap-1.5">
+                  <span
+                    className={`w-5 h-5 rounded flex items-center justify-center font-bold text-[11px] border ${item.corFundo} ${item.corTexto} ${item.corBorda}`}
+                  >
+                    {item.letra}
+                  </span>
+                  <span className="text-slate-600">{item.rotulo}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* 4. ÁREA CENTRAL: VISÃO DA SEMANA DOS POSTOS (ESQUERDA) + PENDÊNCIAS CRÍTICAS (DIREITA) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* COLUNA ESQUERDA (7 colunas): Mini Grade Semanal dos 15 Postos */}
-        <div className="lg:col-span-7 bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Acompanhamento Recente dos Postos (Últimos 7 Dias)
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Status diário da escala de 10/Set a 16/Set para detecção rápida de desvios.
-              </p>
-            </div>
-            <Link
-              href="/mapa-ocupacao"
-              className="text-xs text-blue-700 hover:text-blue-900 font-medium inline-flex items-center gap-1"
-            >
-              <span>Grade Completa</span>
-              <ExternalLink className="w-3 h-3" />
-            </Link>
+      {/* ------------------------------------------------------------------- */}
+      {/* 6. RÉGUA DE FISCALIZAÇÃO (ITEM 11.3) */}
+      {/* ------------------------------------------------------------------- */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Régua de fiscalização contratual (Item 11.3 do contrato)
+            </h3>
           </div>
-
-          {/* Tabela / Grade Compacta de 7 Dias */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead>
-                <tr className="text-[11px] text-slate-400 font-semibold border-b border-slate-100">
-                  <th className="py-2 pr-3 font-medium">Posto / Função</th>
-                  <th className="py-2 pr-3 font-medium hidden sm:table-cell">Titular</th>
-                  {diasSemana.map((dia) => (
-                    <th
-                      key={dia}
-                      className={`py-2 px-1 text-center font-mono text-[10px] ${
-                        dia === 16
-                          ? "text-blue-700 font-bold bg-blue-50/50 rounded-t"
-                          : rotulosDias[dia].fds
-                          ? "text-slate-300"
-                          : "text-slate-500"
-                      }`}
-                    >
-                      {rotulosDias[dia].nome}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {postos.slice(0, 10).map((posto) => {
-                  return (
-                    <tr key={posto.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-2 pr-3">
-                        <span className="font-mono font-bold text-slate-800 block text-[11px]">
-                          {posto.codigoPosto}
-                        </span>
-                        <span className="text-slate-500 truncate block text-[10px] max-w-[140px]">
-                          {posto.funcao}
-                        </span>
-                      </td>
-                      <td className="py-2 pr-3 text-slate-600 hidden sm:table-cell text-[11px] truncate max-w-[120px]">
-                        {posto.titularNome || <span className="text-amber-600 italic">Reserva Técnica</span>}
-                      </td>
-                      {diasSemana.map((dia) => {
-                        const statusDia = calcularStatusDia(
-                          posto,
-                          dia,
-                          2026,
-                          8,
-                          ocorrencias,
-                          coberturas,
-                          apontamentos
-                        );
-
-                        // Cores dos quadradinhos de status
-                        let corQuadradinho = "bg-emerald-500 text-white"; // Presente
-                        let tooltip = "Presente";
-
-                        if (statusDia.statusOcupacao === "COBERTO") {
-                          corQuadradinho = "bg-blue-500 text-white";
-                          tooltip = `Coberto: ${statusDia.ocupanteNome}`;
-                        } else if (statusDia.statusOcupacao === "DESCOBERTO") {
-                          corQuadradinho = "bg-rose-500 text-white";
-                          tooltip = "Descoberto";
-                        } else if (statusDia.statusOcupacao === "NAO_EXIGIVEL") {
-                          corQuadradinho = "bg-slate-200 text-slate-400";
-                          tooltip = "Folga / Não exigível";
-                        } else if (statusDia.statusOcupacao === "POSTO_VAGO") {
-                          corQuadradinho = "bg-amber-400 text-white";
-                          tooltip = "Posto Vago";
-                        }
-
-                        return (
-                          <td key={dia} className="py-2 px-1 text-center" title={`${rotulosDias[dia].nome}: ${tooltip}`}>
-                            <span
-                              className={`inline-block w-4 h-4 rounded-sm text-[9px] leading-4 text-center font-bold ${corQuadradinho}`}
-                            >
-                              {statusDia.statusOcupacao === "COBERTO" ? "C" : statusDia.statusOcupacao === "DESCOBERTO" ? "D" : ""}
-                            </span>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="pt-2 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-100">
-            <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> Presente
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block" /> Coberto (C)
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-slate-200 inline-block" /> Folga
-              </span>
-            </div>
-            <Link
-              href="/mapa-ocupacao"
-              className="font-semibold text-premier-800 hover:text-premier-950 flex items-center gap-1"
-            >
-              <span>Ver todos os {postos.length} postos</span>
-              <ArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
+          <span className="text-[11px] text-slate-400">Auditoria contínua</span>
         </div>
 
-        {/* COLUNA DIREITA (5 colunas): Pendências Críticas + Régua de Requisitos Contratuais */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* PENDÊNCIAS E DECISÕES DO GESTOR */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3.5">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Atenção Imediata do Gestor
-              </h2>
-              <span className="text-xs font-semibold text-amber-700">
-                {apontamentosPendentes} ação pendente
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {/* Notificação Petrobras */}
-              <div className="p-3 rounded-lg border border-slate-200 bg-slate-50/60 text-xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-900 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    Notificação Petrobras Aguardando Réplica
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-500">PST-ALM-001</span>
-                </div>
-                <p className="text-slate-600 text-[11px] leading-relaxed">
-                  Apontamento formal sobre frequência do dia 05/09 pendente de contra-evidência.
-                </p>
-                <div className="pt-1 flex justify-end">
-                  <Link
-                    href="/apontamentos"
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-premier-800 hover:text-premier-950 underline"
-                  >
-                    <span>Responder Apontamento</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </Link>
-                </div>
-              </div>
-
-              {/* Cobertura Ativa */}
-              <div className="p-3 rounded-lg border border-slate-200 bg-slate-50/60 text-xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-900 flex items-center gap-1.5">
-                    <UserCheck2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    Substituição Temporária em Andamento
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-500">PST-OPE-003</span>
-                </div>
-                <p className="text-slate-600 text-[11px] leading-relaxed">
-                  Substituto Lucas Farias cobrindo titular em atestado médico até 18/09.
-                </p>
-                <div className="pt-1 flex justify-end">
-                  <Link
-                    href="/coberturas"
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-premier-800 hover:text-premier-950 underline"
-                  >
-                    <span>Acompanhar Cobertura</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </Link>
-                </div>
-              </div>
-            </div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+          <div className="p-2.5 rounded bg-slate-50 border border-slate-200">
+            <span className="text-[10px] font-bold text-slate-500 uppercase block">
+              1. Titulares
+            </span>
+            <span className="font-semibold text-slate-800">
+              {dadosPainel.reguaFiscalizacao.r1Titulares}
+            </span>
           </div>
 
-          {/* RÉGUA DE CONFORMIDADE COM AS 5 PERGUNTAS CONTRATUAIS */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-premier-800" />
-                <span>Régua de Fiscalização (Item 11.3)</span>
-              </h2>
-              <Link
-                href="/conformidade"
-                className="text-[11px] text-blue-700 hover:text-blue-900 font-medium"
-              >
-                Ver Detalhes
-              </Link>
-            </div>
+          <div className="p-2.5 rounded bg-slate-50 border border-slate-200">
+            <span className="text-[10px] font-bold text-slate-500 uppercase block">
+              2. Frequência
+            </span>
+            <span className="font-semibold text-slate-800">
+              {dadosPainel.reguaFiscalizacao.r2Frequencia}
+            </span>
+          </div>
 
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between py-1 border-b border-slate-50">
-                <span className="text-slate-600">R1 • Titularidade dos Postos</span>
-                <span className="font-semibold text-emerald-700">15/15 Mapeados</span>
-              </div>
-              <div className="flex items-center justify-between py-1 border-b border-slate-50">
-                <span className="text-slate-600">R2 • Presença & Frequência</span>
-                <span className="font-semibold text-blue-700">Auditável (LGPD)</span>
-              </div>
-              <div className="flex items-center justify-between py-1 border-b border-slate-50">
-                <span className="text-slate-600">R3 • Gestão de Substituições</span>
-                <span className="font-semibold text-emerald-700">{coberturasAtivas} em Campo</span>
-              </div>
-              <div className="flex items-center justify-between py-1 border-b border-slate-50">
-                <span className="text-slate-600">R4 • Controle de Descoberturas</span>
-                <span className="font-semibold text-emerald-700">0 Descobertos Hoje</span>
-              </div>
-              <div className="flex items-center justify-between py-1">
-                <span className="text-slate-600">R5 • Memória de Cálculo</span>
-                <span className="font-semibold text-slate-800">Pronta p/ Medição</span>
-              </div>
-            </div>
+          <div className="p-2.5 rounded bg-slate-50 border border-slate-200">
+            <span className="text-[10px] font-bold text-slate-500 uppercase block">
+              3. Substitutos
+            </span>
+            <span className="font-semibold text-slate-800">
+              {dadosPainel.reguaFiscalizacao.r3Substitutos}
+            </span>
+          </div>
+
+          <div className="p-2.5 rounded bg-slate-50 border border-slate-200">
+            <span className="text-[10px] font-bold text-slate-500 uppercase block">
+              4. Descoberturas
+            </span>
+            <span className="font-semibold text-slate-800">
+              {dadosPainel.reguaFiscalizacao.r4Descoberturas}
+            </span>
+          </div>
+
+          <div className="p-2.5 rounded bg-slate-50 border border-slate-200 col-span-2 sm:col-span-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase block">
+              5. Medição
+            </span>
+            <span className="font-semibold text-slate-800">
+              {dadosPainel.reguaFiscalizacao.r5Medicao}
+            </span>
           </div>
         </div>
       </div>
