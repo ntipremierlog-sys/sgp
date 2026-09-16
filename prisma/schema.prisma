@@ -631,3 +631,45 @@ model LogAuditoria {
 
   @@map("log_auditoria")
 }
+
+// -----------------------------------------------------------------------------
+// MODELOS: LOG DE IMPORTAÇÃO E PARAMETRIZAÇÃO CONTRATUAL
+// -----------------------------------------------------------------------------
+
+model LogImportacao {
+  id              String    @id @default(uuid()) @db.Uuid
+  fonte           String    // "RHID" ou "RM"
+  dataExecucao    DateTime  @default(now()) @map("data_execucao")
+  periodoInicio   DateTime  @map("periodo_inicio")
+  periodoFim      DateTime  @map("periodo_fim")
+  registrosLidos  Int       @map("registros_lidos")
+  registrosErro   Int       @default(0) @map("registros_erro")
+  usuarioProcesso String    @map("usuario_processo")
+  status          String    @default("CONCLUIDO") // CONCLUIDO, ERRO
+  detalhes        String?
+
+  @@map("log_importacao")
+}
+
+model ParametroContrato {
+  id              String    @id @default(uuid()) @db.Uuid
+  contratoId      String    @map("contrato_id") @db.Uuid
+  unidadeId       String?   @map("unidade_id") @db.Uuid
+  metaSla         Decimal   @default(95.0) @map("meta_sla") @db.Decimal(5, 2)
+  fatorGlosa      Decimal   @default(1.0) @map("fator_glosa") @db.Decimal(5, 4)
+  vigenciaInicio  DateTime  @map("vigencia_inicio")
+  vigenciaFim     DateTime? @map("vigencia_fim")
+  ativo           Boolean   @default(true)
+
+  @@map("parametro_contrato")
+}
+
+model ValorPostoContrato {
+  id              String    @id @default(uuid()) @db.Uuid
+  postoId         String    @map("posto_id") @db.Uuid
+  valorMensal     Decimal   @map("valor_mensal") @db.Decimal(12, 2)
+  vigenciaInicio  DateTime  @map("vigencia_inicio")
+  vigenciaFim     DateTime? @map("vigencia_fim")
+
+  @@map("valor_posto_contrato")
+}
