@@ -21,6 +21,7 @@ import {
   FiltrosCalculoOcupacao,
   calcularOcupacao,
   ResultadoOcupacaoConsolidado,
+  TratamentoPostoVago,
 } from "./calculo-ocupacao";
 
 export interface OpcoesAdaptador {
@@ -29,13 +30,16 @@ export interface OpcoesAdaptador {
   dataHoje?: string;    // "YYYY-MM-DD", padrão "2026-09-16"
   horaHoje?: string;    // "HH:MM", padrão "08:00"
   perfilUsuario?: string;
-  parametroAusente?: boolean; // Para testes do indicador "Parametrizar"
+  parametroAusente?: boolean; // Se true, remove qualquer parâmetro cadastrado
+  fatorGlosa?: number | null; // Se informado, substitui o parâmetro
+  tratamentoPostoVago?: TratamentoPostoVago | null; // GLOSA | NAO_FATURADO | DESCOBERTO_SEM_GLOSA
+  valoresPostos?: Record<string, number | null>; // Valores do Anexo 1-A por posto
   simularRhidAtrasado?: boolean;
 }
 
 // Bases operacionais adicionais para composição do comparativo contratual
 const POSTOS_OUTRAS_BASES: PostoEntrada[] = [
-  // Base Macaé / Parque de Tubos (8 postos)
+  // Base Macaé / Parque de Tubos (4 postos)
   {
     id: "pst-mac-001",
     codigoPosto: "MAC-LOG-001",
@@ -49,7 +53,7 @@ const POSTOS_OUTRAS_BASES: PostoEntrada[] = [
     titularMatricula: "MAC-001",
     titularNome: "Ricardo Silveira Peixoto",
     situacao: "ATIVO",
-    valorMensal: 11200.0,
+    valorMensal: null,
   },
   {
     id: "pst-mac-002",
@@ -64,7 +68,7 @@ const POSTOS_OUTRAS_BASES: PostoEntrada[] = [
     titularMatricula: "MAC-002",
     titularNome: "Gleice Vasconcelos",
     situacao: "ATIVO",
-    valorMensal: 9800.0,
+    valorMensal: null,
   },
   {
     id: "pst-mac-003",
@@ -79,7 +83,7 @@ const POSTOS_OUTRAS_BASES: PostoEntrada[] = [
     titularMatricula: "MAC-003",
     titularNome: "Rodrigo Brandão",
     situacao: "ATIVO",
-    valorMensal: 12500.0,
+    valorMensal: null,
   },
   {
     id: "pst-mac-004",
@@ -94,10 +98,10 @@ const POSTOS_OUTRAS_BASES: PostoEntrada[] = [
     titularMatricula: "MAC-004",
     titularNome: "Cleber Maranhão",
     situacao: "ATIVO",
-    valorMensal: 10400.0,
+    valorMensal: null,
   },
 
-  // Base Santos / Terminal Portuário (6 postos)
+  // Base Santos / Terminal Portuário (2 postos)
   {
     id: "pst-san-001",
     codigoPosto: "SAN-LOG-001",
@@ -111,7 +115,7 @@ const POSTOS_OUTRAS_BASES: PostoEntrada[] = [
     titularMatricula: "SAN-001",
     titularNome: "Vitor Hugo Santana",
     situacao: "ATIVO",
-    valorMensal: 13500.0,
+    valorMensal: null,
   },
   {
     id: "pst-san-002",
@@ -126,10 +130,10 @@ const POSTOS_OUTRAS_BASES: PostoEntrada[] = [
     titularMatricula: "SAN-002",
     titularNome: "Aline Cristina Fonseca",
     situacao: "ATIVO",
-    valorMensal: 9200.0,
+    valorMensal: null,
   },
 
-  // Base Paulínia / Refinaria Replan (5 postos)
+  // Base Paulínia / Refinaria Replan (2 postos)
   {
     id: "pst-pau-001",
     codigoPosto: "PAU-ALM-001",
@@ -143,7 +147,7 @@ const POSTOS_OUTRAS_BASES: PostoEntrada[] = [
     titularMatricula: "PAU-001",
     titularNome: "Everton Guimarães",
     situacao: "ATIVO",
-    valorMensal: 9900.0,
+    valorMensal: null,
   },
   {
     id: "pst-pau-002",
@@ -158,12 +162,12 @@ const POSTOS_OUTRAS_BASES: PostoEntrada[] = [
     titularMatricula: "PAU-002",
     titularNome: "Renata Cordeiro",
     situacao: "ATIVO",
-    valorMensal: 9100.0,
+    valorMensal: null,
   },
 ];
 
 /**
- * Gera entradas completas para cálculo consolidado de ocupação e indicadores.
+ * Prepara a entrada completa para o cálculo consolidado de ocupação e indicadores.
  */
 export function prepararEntradaCalculo(
   estadoCustomizado?: EstadoOperacionalCompleto,
@@ -178,28 +182,35 @@ export function prepararEntradaCalculo(
     horaHoje = "08:00",
     perfilUsuario = "PREMIER_GESTOR",
     parametroAusente = false,
+    fatorGlosa,
+    tratamentoPostoVago,
+    valoresPostos,
     simularRhidAtrasado = false,
   } = opcoes;
 
-  // 1. Mapeamento de Postos
-  const valorPadraoPosto = parametroAusente ? null : 9850.0;
-  const postosUfn3: PostoEntrada[] = estado.postos.map((p) => ({
-    id: p.id,
-    codigoPosto: p.codigoPosto,
-    funcao: p.funcao,
-    unidadeId: p.unidadeId,
-    unidadeNome: p.unidadeNome,
-    escala: p.escala,
-    jornadaSemanalHoras: p.jornadaSemanalHoras,
-    horarioInicio: p.horarioInicio,
-    horarioFim: p.horarioFim,
-    titularMatricula: p.titularMatricula,
-    titularNome: p.titularNome,
-    situacao: p.situacao,
-    valorMensal: valorPadraoPosto,
-  }));
+  // 1. Mapeamento de Postos (Item 6: sem valor fixo em código; sem cadastro => null)
+  const postosUfn3: PostoEntrada[] = estado.postos.map((p) => {
+    let vMensal: number | null = null;
+    if (!parametroAusente && valoresPostos && valoresPostos[p.codigoPosto] !== undefined) {
+      vMensal = valoresPostos[p.codigoPosto];
+    }
+    return {
+      id: p.id,
+      codigoPosto: p.codigoPosto,
+      funcao: p.funcao,
+      unidadeId: p.unidadeId,
+      unidadeNome: p.unidadeNome,
+      escala: p.escala,
+      jornadaSemanalHoras: p.jornadaSemanalHoras,
+      horarioInicio: p.horarioInicio,
+      horarioFim: p.horarioFim,
+      titularMatricula: p.titularMatricula,
+      titularNome: p.titularNome,
+      situacao: p.situacao,
+      valorMensal: vMensal,
+    };
+  });
 
-  // Se o filtro for TODAS ou não especificado, agregamos as bases da malha Petrobras
   const postosCompletos: PostoEntrada[] = [...postosUfn3, ...POSTOS_OUTRAS_BASES];
 
   // 2. Mapeamento de Ocorrências
@@ -329,7 +340,6 @@ export function prepararEntradaCalculo(
   });
 
   // Pontos de substitutos alocados nas coberturas
-  // Substituto PRM-00115 (Diego Camargo) nos dias 03/09 a 05/09 para PST-ALM-014
   ["2026-09-03", "2026-09-04", "2026-09-05"].forEach((dt) => {
     pontos.push({
       matricula: "PRM-00115",
@@ -342,7 +352,6 @@ export function prepararEntradaCalculo(
     });
   });
 
-  // Substituto PRM-00116 (Aline Mendes) no dia 11/09 para PST-ALM-002
   pontos.push({
     matricula: "PRM-00116",
     data: "2026-09-11",
@@ -369,10 +378,23 @@ export function prepararEntradaCalculo(
     },
   ];
 
-  // 7. Parâmetros da Base / Contrato
+  // 7. Parâmetros da Base / Contrato (Itens 5 e 6: sem valores fixos forçados)
+  const fatorGlosaFinal = parametroAusente
+    ? null
+    : fatorGlosa !== undefined
+    ? fatorGlosa
+    : null; // Padrão null se não cadastrado
+
+  const tratamentoPostoVagoFinal = parametroAusente
+    ? null
+    : tratamentoPostoVago !== undefined
+    ? tratamentoPostoVago
+    : null;
+
   const parametros: ParametroBaseEntrada = {
     metaSla: 95.0,
-    fatorGlosa: parametroAusente ? null : 1.0,
+    fatorGlosa: fatorGlosaFinal,
+    tratamentoPostoVago: tratamentoPostoVagoFinal,
   };
 
   const baseIdsFiltro =

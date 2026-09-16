@@ -172,8 +172,8 @@ describe("Suíte de Testes Obrigatórios do Motor de Ocupação e Painel Geral (
     expect(resultado.glosaEstimada.valorTotal).toBeGreaterThan(0);
   });
 
-  // 4. Data posterior à última importação do RHID -> SEM_DADO, fora do SLA e da glosa
-  it("Cenário 4: Data posterior ao corte de carga do RHID -> SEM_DADO, fora do SLA e da glosa", () => {
+  // 4. Data posterior à última importação do RHID -> SEM_DADO, estritamente fora dos indicadores da competência (Item 1)
+  it("Cenário 4: Data posterior ao corte de carga do RHID -> SEM_DADO na grade, estritamente fora dos indicadores da competência", () => {
     const filtros: FiltrosCalculoOcupacao = {
       competencia: "2026-09",
       dataReferenciaHoje: "2026-09-10",
@@ -184,10 +184,13 @@ describe("Suíte de Testes Obrigatórios do Motor de Ocupação e Painel Geral (
         coberturas: [],
         pontos: [
           { matricula: "PRM-TESTE-01", data: "2026-09-01", situacaoPonto: "PRESENTE" },
+          { matricula: "PRM-TESTE-01", data: "2026-09-02", situacaoPonto: "PRESENTE" },
+          { matricula: "PRM-TESTE-01", data: "2026-09-03", situacaoPonto: "PRESENTE" },
+          { matricula: "PRM-TESTE-01", data: "2026-09-04", situacaoPonto: "PRESENTE" },
         ],
         logsImportacao: [
-          // RHID cobriu apenas até 05/09
-          { fonte: "RHID", dataExecucao: "2026-09-05 18:00", periodoFim: "2026-09-05 18:00", status: "CONCLUIDO" },
+          // RHID cobriu apenas até 04/09 (4 dias úteis)
+          { fonte: "RHID", dataExecucao: "2026-09-04 18:00", periodoFim: "2026-09-04 18:00", status: "CONCLUIDO" },
         ],
         apontamentos: [],
         parametros: { metaSla: 95.0, fatorGlosa: 1.0 },
@@ -197,10 +200,15 @@ describe("Suíte de Testes Obrigatórios do Motor de Ocupação e Painel Geral (
     const resultado = calcularOcupacao(filtros);
     const detalheDiaAlem = resultado.matrizDetalhada[`${postoBase.id}_2026-09-08`];
 
+    // Na matriz detalhada da grade, o dia futuro sem carga é identificado como SEM_DADO
     expect(detalheDiaAlem.status).toBe("SEM_DADO");
     expect(detalheDiaAlem.letra).toBe("?");
-    // SEM_DADO não deve somar como descoberto no cálculo de glosa
-    expect(resultado.descobertosCompetencia.totalSemDado).toBeGreaterThan(0);
+
+    // REGRA ITEM 1: Indicadores da competência consideram apenas do dia 1 até o corte da carga do RHID (04/09).
+    // Datas futuras (05 a 30) NÃO entram em totalPrevistos nem em totalSemDado.
+    expect(resultado.descobertosCompetencia.totalPrevistos).toBe(4); // Apenas 01 a 04/09
+    expect(resultado.descobertosCompetencia.totalSemDado).toBe(0); // Sem falhas nos dias cobertos
+    expect(resultado.slaCompetencia.valor).toBe(100);
   });
 
   // 5. Dia sem escala -> SEM_ESCALA, fora de todos os cálculos
@@ -232,8 +240,8 @@ describe("Suíte de Testes Obrigatórios do Motor de Ocupação e Painel Geral (
     expect(resultado.coberturaAgora.postosSemEscalaHoje).toBe(1);
   });
 
-  // 6. Cenário de regressão da tela anterior: 15 postos, 1 descoberto hoje e 2 coberturas vigentes
-  it("Cenário 6 (Regressão): 15 postos de UFN-III, 1 descoberto hoje e 2 coberturas cadastradas -> Coerência 100% entre cards, selo e barra", () => {
+  // 6. Cenário de regressão: 15 postos em UFN-III, 1 posto vago (PST-LOG-013), conciliação exata
+  it("Cenário 6 (Regressão): 15 postos de UFN-III, 1 posto vago hoje -> Coerência 100% entre cards, selo e barra", () => {
     const resultado = obterOcupacaoConsolidada(undefined, {
       baseId: "UFN-III",
       dataHoje: "2026-09-16",
@@ -243,23 +251,26 @@ describe("Suíte de Testes Obrigatórios do Motor de Ocupação e Painel Geral (
     // UFN-III possui 15 postos no Anexo 1-A
     expect(resultado.gradeSemanal.totalPostos).toBe(15);
 
-    // Hoje (16/09/2026): 12 titulares presentes, 0 coberturas hoje (as coberturas foram nos dias 03-05 e 11), 1 descoberto (PST-LOG-013 vago), 2 em folga de escala (PST-LOG-004 e 005)
-    expect(resultado.coberturaAgora.descobertos).toBe(1);
-    expect(resultado.coberturaAgora.substitutos).toBe(0);
+    // Hoje (16/09/2026): 12 titulares presentes, 0 coberturas ativas hoje, 1 vago (PST-LOG-013), 2 em folga de escala 12x36
     expect(resultado.coberturaAgora.presentes).toBe(12);
-    expect(resultado.coberturaAgora.postosComEscalaHoje).toBe(13); // 12 presentes + 1 descoberto = 13 com escala (2 postos em folga de escala 12x36)
+    expect(resultado.coberturaAgora.substitutos).toBe(0);
+    expect(resultado.coberturaAgora.descobertos).toBe(0);
+    expect(resultado.coberturaAgora.vagos).toBe(1);
+    expect(resultado.coberturaAgora.postosComEscalaHoje).toBe(13); // 12 presentes + 1 vago com escala 5x2 = 13
+    expect(resultado.coberturaAgora.postosSemEscalaHoje).toBe(2);
 
-    // Coerência do Selo: NUNCA '100% coberto' se há 1 descoberto!
+    // Coerência do Selo: NUNCA '100% coberto' se há desvio!
     expect(resultado.coberturaAgora.statusSelo).not.toContain("100% coberto");
-    expect(resultado.coberturaAgora.statusSelo).toContain("1 descoberto");
+    expect(resultado.coberturaAgora.statusSelo).toContain("1 desvio");
     expect(resultado.coberturaAgora.isAlertaDescoberto).toBe(true);
 
     // Percentual coerente: 12 / 13 * 100 = 92.3%
     expect(resultado.coberturaAgora.percentual).toBe(92.3);
 
-    // Barra e subtítulo coerentes
-    expect(resultado.coberturaAgora.textoApoio).toContain("12 titular(es)");
-    expect(resultado.coberturaAgora.textoApoio).toContain("1 descoberto(s)");
+    // Texto de apoio reconciliado (soma = 15)
+    expect(resultado.coberturaAgora.textoApoio).toContain("12 titulares");
+    expect(resultado.coberturaAgora.textoApoio).toContain("1 vago");
+    expect(resultado.coberturaAgora.textoApoio).toContain("15 postos");
   });
 
   // 7. Parâmetro de glosa ausente -> Indicador retorna estado 'PARAMETRIZAR', não zero
@@ -290,5 +301,98 @@ describe("Suíte de Testes Obrigatórios do Motor de Ocupação e Painel Geral (
       expect(celula.motivo).not.toContain("M54.5");
       expect(celula.motivo).not.toContain("CRM");
     });
+  });
+
+  // 9. Posto Vago (Item 5): Tratamento por parâmetro contratual (GLOSA | NAO_FATURADO | DESCOBERTO_SEM_GLOSA)
+  it("Cenário 9 (Posto Vago): Posto vago sem cobertura recebe status VAGO e respeita parametrização de glosa", () => {
+    const postoVago: PostoEntrada = {
+      ...postoBase,
+      id: "pst-vago-01",
+      codigoPosto: "PST-LOG-013",
+      titularMatricula: undefined,
+      titularNome: undefined,
+      valorMensal: 10000,
+    };
+
+    // Caso A: Parâmetro indefinido -> Glosa não inclui posto vago e sinaliza 'PARAMETRIZAR'
+    const filtrosSemParam: FiltrosCalculoOcupacao = {
+      competencia: "2026-09",
+      dataReferenciaHoje: "2026-09-04",
+      perfilUsuario: "PREMIER_GESTOR",
+      dados: {
+        postos: [postoVago],
+        ocorrencias: [],
+        coberturas: [],
+        pontos: [],
+        logsImportacao: [
+          { fonte: "RHID", dataExecucao: "2026-09-04 18:00", periodoFim: "2026-09-04 18:00", status: "CONCLUIDO" },
+        ],
+        apontamentos: [],
+        parametros: { metaSla: 95.0, fatorGlosa: 1.0, tratamentoPostoVago: undefined },
+      },
+    };
+
+    const resSemParam = calcularOcupacao(filtrosSemParam);
+    const celulaVaga = resSemParam.matrizDetalhada[`${postoVago.id}_2026-09-04`];
+    expect(celulaVaga.status).toBe("VAGO");
+    expect(celulaVaga.letra).toBe("V");
+    expect(resSemParam.glosaEstimada.statusPostoVago).toBe("PARAMETRIZAR");
+    expect(resSemParam.glosaEstimada.valorTotal).toBe(0); // Não glosa sem definição
+
+    // Caso B: Parâmetro GLOSA -> Enquadra posto vago na glosa
+    const filtrosComGlosa: FiltrosCalculoOcupacao = {
+      ...filtrosSemParam,
+      dados: {
+        ...filtrosSemParam.dados,
+        parametros: { metaSla: 95.0, fatorGlosa: 1.0, tratamentoPostoVago: "GLOSA" },
+      },
+    };
+
+    const resComGlosa = calcularOcupacao(filtrosComGlosa);
+    expect(resComGlosa.glosaEstimada.statusPostoVago).toBe("DEFINIDO");
+    expect(resComGlosa.glosaEstimada.valorTotal).toBeGreaterThan(0);
+  });
+
+  // 10. Cor por Meta de SLA (Item 4)
+  it("Cenário 10 (SLA por Meta): Cores semafóricas verde, amarelo e vermelho conforme a meta contratual", () => {
+    const postoAtendido: PostoEntrada = { ...postoBase, id: "p-01", codigoPosto: "P-01" };
+    const postoDescoberto: PostoEntrada = { ...postoBase, id: "p-02", codigoPosto: "P-02" };
+
+    // 19 atendidos e 1 descoberto = 95.0% -> Verde
+    // Meta = 95.0%
+    const resultadoVerde = calcularOcupacao({
+      competencia: "2026-09",
+      dataReferenciaHoje: "2026-09-01",
+      perfilUsuario: "PREMIER_GESTOR",
+      dados: {
+        postos: [postoAtendido],
+        ocorrencias: [],
+        coberturas: [],
+        pontos: [{ matricula: postoAtendido.titularMatricula!, data: "2026-09-01", situacaoPonto: "PRESENTE" }],
+        logsImportacao: [{ fonte: "RHID", dataExecucao: "2026-09-01 18:00", periodoFim: "2026-09-01 18:00", status: "CONCLUIDO" }],
+        apontamentos: [],
+        parametros: { metaSla: 95.0, fatorGlosa: 1.0 },
+      },
+    });
+    expect(resultadoVerde.slaCompetencia.valor).toBe(100);
+    expect(resultadoVerde.slaCompetencia.corSla).toBe("verde");
+
+    // Abaixo da meta - 2 p.p. (< 93%) -> Vermelho
+    const resultadoVermelho = calcularOcupacao({
+      competencia: "2026-09",
+      dataReferenciaHoje: "2026-09-01",
+      perfilUsuario: "PREMIER_GESTOR",
+      dados: {
+        postos: [postoDescoberto],
+        ocorrencias: [],
+        coberturas: [],
+        pontos: [{ matricula: postoDescoberto.titularMatricula!, data: "2026-09-01", situacaoPonto: "AUSENTE" }],
+        logsImportacao: [{ fonte: "RHID", dataExecucao: "2026-09-01 18:00", periodoFim: "2026-09-01 18:00", status: "CONCLUIDO" }],
+        apontamentos: [],
+        parametros: { metaSla: 95.0, fatorGlosa: 1.0 },
+      },
+    });
+    expect(resultadoVermelho.slaCompetencia.valor).toBe(0);
+    expect(resultadoVermelho.slaCompetencia.corSla).toBe("vermelho");
   });
 });

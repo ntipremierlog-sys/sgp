@@ -13,7 +13,8 @@ export type StatusPostoDia =
   | "SEM_DADO"
   | "PRESENTE"
   | "COBERTO"
-  | "DESCOBERTO";
+  | "DESCOBERTO"
+  | "VAGO";
 
 export interface MetadadosStatusPostoDia {
   status: StatusPostoDia;
@@ -69,11 +70,30 @@ export const METADADOS_STATUS: Record<StatusPostoDia, MetadadosStatusPostoDia> =
     status: "DESCOBERTO",
     letra: "F",
     rotulo: "Descoberto",
-    corTexto: "text-rose-800",
-    corFundo: "bg-rose-600 text-white",
+    corTexto: "text-white",
+    corFundo: "bg-rose-600",
     corBorda: "border-rose-600",
   },
+  VAGO: {
+    status: "VAGO",
+    letra: "V",
+    rotulo: "Posto vago",
+    corTexto: "text-white",
+    corFundo: "bg-rose-700",
+    corBorda: "border-rose-700",
+  },
 };
+
+// Formatador pt-BR com vírgula para percentuais
+export const formatadorPercentualPtBr = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+export function formatarPercentual(val: number | null | undefined): string {
+  if (val === null || val === undefined) return "—";
+  return `${formatadorPercentualPtBr.format(val)}%`;
+}
 
 // -----------------------------------------------------------------------------
 // ENTRADAS DO SERVIÇO DE CÁLCULO
@@ -139,10 +159,13 @@ export interface ImportacaoLogEntrada {
   status: "CONCLUIDO" | "ERRO";
 }
 
+export type TratamentoPostoVago = "GLOSA" | "NAO_FATURADO" | "DESCOBERTO_SEM_GLOSA";
+
 export interface ParametroBaseEntrada {
   unidadeId?: string; // nulo = padrão
   metaSla?: number;   // padrão 95.0
   fatorGlosa?: number | null; // se nulo => "Parametrizar"
+  tratamentoPostoVago?: TratamentoPostoVago | null; // se nulo => "Parametrizar" e não gera glosa
 }
 
 export interface ApontamentoEntrada {
@@ -203,21 +226,21 @@ export interface LinhaGradeSemanal {
   baseNome: string;
   celulas: Record<string, DetalhePostoDia>;
   descobertosCount: number;
+  vagosCount: number;
   semDadoCount: number;
   temDesvio: boolean;
-  totalDesvios: number; // descobertos + semDado
+  totalDesvios: number; // descobertos + vagos + semDado
 }
 
 export interface FaixaAcaoItem {
   id: string;
-  tipo: "APONTAMENTO" | "POSTO_DESCOBERTO" | "IMPORTACAO_ATRASADA";
+  tipo: "POSTO_PENDENCIA" | "IMPORTACAO_INCOMPLETA" | "IMPORTACAO_ATRASADA";
   urgencia: "PERIGO" | "ATENCAO" | "NORMAL";
   posto?: string;
   base: string;
   descricao: string;
   prazoTexto?: string;
-  acaoTexto: string;
-  acaoLink: string;
+  acoes: Array<{ texto: string; link: string }>;
 }
 
 export interface ComparativoBaseItem {
@@ -225,8 +248,10 @@ export interface ComparativoBaseItem {
   baseNome: string;
   postosTotal: number;
   descobertosHoje: number;
+  vagosHoje: number;
   descobertosMes: number;
   slaPercentual: number | null;
+  slaPercentualFormatado: string;
   pendenciasCount: number;
 }
 
@@ -243,57 +268,68 @@ export interface ResultadoOcupacaoConsolidado {
   frescor: {
     pontoRhidAte: string;
     rmAte: string;
-    rhidAtrasado: boolean; // > 24 horas em relação à hora/data de consulta
+    rhidAtrasado: boolean;
     rhidDataMaxCoberta: string; // YYYY-MM-DD
   };
 
-  // Indicador 1: Cobertura Agora (Hoje) (Parte 4)
+  // Indicador 1: Cobertura Agora (Hoje)
   coberturaAgora: {
     presentes: number;
     substitutos: number;
     descobertos: number;
+    vagos: number;
     semDado: number;
+    aguardandoTurno: number;
     postosComEscalaHoje: number;
     postosSemEscalaHoje: number;
-    percentual: number; // 1 casa decimal
+    totalPostosBase: number;
+    percentual: number;
+    percentualFormatado: string;
     statusSelo: string;
     isAlertaDescoberto: boolean;
-    textoApoio: string; // "X titulares · Y substitutos · Z descobertos"
+    textoApoio: string; // Reconciliação com o total de postos
   };
 
-  // Indicador 2: SLA da Competência (Parte 4)
+  // Indicador 2: SLA da Competência
   slaCompetencia: {
     valor: number | null;
+    valorFormatado: string;
     meta: number;
+    metaFormatada: string;
     variacaoPp: number | null;
+    variacaoPpFormatada: string | null;
+    corSla: "verde" | "amarelo" | "vermelho";
     status: "CALCULADO" | "SEM_DADOS_SUFICIENTES";
-    totalAtendidos: number; // PRESENTE + COBERTO
-    totalAvaliados: number; // PRESENTE + COBERTO + DESCOBERTO
+    totalAtendidos: number;
+    totalAvaliados: number;
     formulaExplicativa: string;
   };
 
-  // Indicador 3: Postos-dia Descobertos na Competência (Parte 4)
+  // Indicador 3: Postos-dia Descobertos na Competência
   descobertosCompetencia: {
     totalDescobertos: number;
+    totalVagos: number;
     totalPrevistos: number;
     totalSemDado: number;
-    textoApoio: string; // "de N previstos" (+ K sem dado)
+    textoApoio: string;
     formulaExplicativa: string;
   };
 
-  // Indicador 4: Glosa Estimada (R$) (Parte 4 & Parte 6)
+  // Indicador 4: Glosa Estimada (R$)
   glosaEstimada: {
     valorTotal: number | null;
+    valorTotalFormatado: string;
     status: "CALCULADO" | "PARAMETRIZAR" | "OMITIDO_LGPD";
+    statusPostoVago: "PARAMETRIZAR" | "DEFINIDO";
     fatorGlosa: number | null;
     textoApoio: string;
     formulaExplicativa: string;
   };
 
-  // Comparativo por Base (Parte 5.4 - quando filtro for "Todas as bases")
+  // Comparativo por Base
   comparativoBases: ComparativoBaseItem[];
 
-  // Grade dos Últimos 7 Dias (Parte 5.5)
+  // Grade dos Últimos 7 Dias
   gradeSemanal: {
     dias: Array<{ data: string; diaNumero: number; rotulo: string; fds: boolean; isHoje: boolean }>;
     linhas: LinhaGradeSemanal[];
@@ -301,10 +337,10 @@ export interface ResultadoOcupacaoConsolidado {
     totalPostosComDesvio: number;
   };
 
-  // Faixa de Ação Imediata (Parte 5.2 - Top 5 por urgência)
+  // Precisa da sua atenção (Faixa de Ação Agrupada)
   faixaAcao: FaixaAcaoItem[];
 
-  // Régua de Fiscalização Item 11.3 (Parte 5.6)
+  // Régua de Fiscalização Item 11.3
   reguaFiscalizacao: {
     r1Titulares: string;
     r2Frequencia: string;
@@ -393,7 +429,7 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
 
   // 1. Filtrar postos por base
   const postosFiltrados = dados.postos.filter((p) => {
-    if (!baseIds || baseIds.length === 0) return true;
+    if (!baseIds || baseIds.length === 0 || baseIds.includes("TODAS")) return true;
     return baseIds.includes(p.unidadeId);
   });
 
@@ -406,9 +442,8 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
     .filter((l) => l.fonte === "RM" && l.status === "CONCLUIDO")
     .sort((a, b) => b.dataExecucao.localeCompare(a.dataExecucao))[0];
 
-  // Data máxima coberta pela carga do RHID (ex: "2026-09-16" ou do ponto mais recente)
   const maxDataPonto = dados.pontos.reduce((max, p) => (p.data > max ? p.data : max), "");
-  const rhidPeriodoFimStr = logRhid ? logRhid.periodoFim.substring(0, 10) : maxDataPonto || "2026-09-16";
+  const rhidPeriodoFimStr = logRhid ? logRhid.periodoFim.substring(0, 10) : maxDataPonto || dataReferenciaHoje;
 
   // Verificação de atraso > 24h
   let rhidAtrasado = false;
@@ -421,10 +456,9 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
     }
   }
 
-  // Formatadores de exibição
   const pontoRhidAte = logRhid
     ? `${logRhid.periodoFim.substring(8, 10)}/${logRhid.periodoFim.substring(5, 7)} ${logRhid.periodoFim.substring(11, 16) || "18:00"}`
-    : "16/09 08:00";
+    : "16/09 18:00";
   const rmAte = logRm
     ? `${logRm.periodoFim.substring(8, 10)}/${logRm.periodoFim.substring(5, 7)}`
     : "16/09";
@@ -442,7 +476,6 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
     pontosMap.set(`${p.matricula}_${p.data}`, p);
   });
 
-  // Ocorrências ativas mapeadas por matricula
   const ocorrenciasPorMatricula = new Map<string, OcorrenciaEntrada[]>();
   dados.ocorrencias.forEach((o) => {
     if (o.status !== "CANCELADA") {
@@ -452,7 +485,6 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
     }
   });
 
-  // Coberturas confirmadas mapeadas por posto
   const coberturasPorPosto = new Map<string, CoberturaEntrada[]>();
   dados.coberturas.forEach((c) => {
     if (c.status === "CONFIRMADA") {
@@ -462,7 +494,7 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
     }
   });
 
-  // Avaliação dos status da Parte 2
+  // Avaliação dos 6 status + VAGO com precedência estrita
   for (const posto of postosFiltrados) {
     for (const dataStr of datasDaCompetencia) {
       const chave = `${posto.id}_${dataStr}`;
@@ -501,8 +533,7 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
         continue;
       }
 
-      // REGRA 3 (Ordem 3): SEM_DADO
-      // A importação de ponto não cobre essa data
+      // REGRA 3 (Ordem 3): SEM_DADO (Data além do corte de carga do RHID)
       if (dataStr > rhidPeriodoFimStr) {
         matrizDetalhada[chave] = {
           postoId: posto.id,
@@ -518,7 +549,56 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
         continue;
       }
 
-      // Busca por ponto do titular
+      // REGRA 4 (Posto Vago): Posto sem titular vinculado no Anexo 1-A
+      if (!posto.titularMatricula) {
+        // Verificar se há cobertura temporária designada com ponto válido cobrindo o posto vago
+        const coberturasDoPosto = coberturasPorPosto.get(posto.codigoPosto) || [];
+        const coberturaAtiva = coberturasDoPosto.find((c) => dataStr >= c.dataInicio && dataStr <= c.dataFim);
+
+        if (coberturaAtiva) {
+          const pontoSubstituto = pontosMap.get(`${coberturaAtiva.substitutoMatricula}_${dataStr}`);
+          const substitutoBateuPonto =
+            pontoSubstituto &&
+            (pontoSubstituto.situacaoPonto === "PRESENTE" ||
+              (pontoSubstituto.horaEntrada && pontoSubstituto.horaEntrada.trim().length > 0));
+
+          if (substitutoBateuPonto) {
+            matrizDetalhada[chave] = {
+              postoId: posto.id,
+              codigoPosto: posto.codigoPosto,
+              funcao: posto.funcao,
+              data: dataStr,
+              diaNumero: diaNum,
+              status: "COBERTO",
+              letra: METADADOS_STATUS.COBERTO.letra,
+              rotulo: METADADOS_STATUS.COBERTO.rotulo,
+              ocupanteNome: coberturaAtiva.substitutoNome,
+              ocupanteMatricula: coberturaAtiva.substitutoMatricula,
+              horarioPonto: pontoSubstituto?.horaEntrada
+                ? `${pontoSubstituto.horaEntrada} – ${pontoSubstituto.horaSaida || posto.horarioFim}`
+                : `${posto.horarioInicio} – ${posto.horarioFim}`,
+              motivo: `Posto vago coberto temporariamente por ${coberturaAtiva.substitutoNome}`,
+            };
+            continue;
+          }
+        }
+
+        // Sem cobertura ativa -> Status próprio VAGO (Item 5)
+        matrizDetalhada[chave] = {
+          postoId: posto.id,
+          codigoPosto: posto.codigoPosto,
+          funcao: posto.funcao,
+          data: dataStr,
+          diaNumero: diaNum,
+          status: "VAGO",
+          letra: METADADOS_STATUS.VAGO.letra,
+          rotulo: METADADOS_STATUS.VAGO.rotulo,
+          motivo: "Posto do Anexo 1-A vago (sem titular alocado). Em processo seletivo e ASO.",
+        };
+        continue;
+      }
+
+      // Busca por ponto do titular vigente
       const titularMatricula = posto.titularMatricula;
       const pontoTitular = titularMatricula ? pontosMap.get(`${titularMatricula}_${dataStr}`) : undefined;
       const titularBateuPonto =
@@ -526,8 +606,8 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
         (pontoTitular.situacaoPonto === "PRESENTE" ||
           (pontoTitular.horaEntrada && pontoTitular.horaEntrada.trim().length > 0));
 
-      // REGRA 4 (Ordem 4): PRESENTE
-      if (titularMatricula && titularBateuPonto) {
+      // REGRA 5: PRESENTE
+      if (titularBateuPonto) {
         matrizDetalhada[chave] = {
           postoId: posto.id,
           codigoPosto: posto.codigoPosto,
@@ -547,8 +627,8 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
         continue;
       }
 
-      // Se titular não bateu ponto ou não tem titular, verificar se titular ausente tem COBERTURA com ponto válido
-      const ocorrenciasTitular = titularMatricula ? ocorrenciasPorMatricula.get(titularMatricula) || [] : [];
+      // Se titular não bateu ponto, verificar ocorrência e COBERTURA com substituto
+      const ocorrenciasTitular = ocorrenciasPorMatricula.get(titularMatricula) || [];
       const ocorrenciaAtiva = ocorrenciasTitular.find((o) => dataStr >= o.dataInicio && dataStr <= o.dataFim);
 
       const coberturasDoPosto = coberturasPorPosto.get(posto.codigoPosto) || [];
@@ -561,11 +641,11 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
           (pontoSubstituto.situacaoPonto === "PRESENTE" ||
             (pontoSubstituto.horaEntrada && pontoSubstituto.horaEntrada.trim().length > 0));
 
-        // REGRA 5 (Ordem 5): COBERTO
+        // REGRA 6: COBERTO
         if (substitutoBateuPonto) {
           const motivoSanitizado =
             perfilUsuario === "PETROBRAS_FISCAL"
-              ? "Substituto em cobertura (titular em afastamento)"
+              ? "Substituto em cobertura (titular em afastamento homologado)"
               : `Substituído por ${coberturaAtiva.substitutoNome} (${coberturaAtiva.substitutoMatricula})`;
 
           matrizDetalhada[chave] = {
@@ -588,13 +668,11 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
         }
       }
 
-      // REGRA 6 (Ordem 6): DESCOBERTO
+      // REGRA 7: DESCOBERTO
       const motivoDescoberto = ocorrenciaAtiva
         ? perfilUsuario === "PETROBRAS_FISCAL"
           ? "Titular em afastamento sem cobertura homologada"
           : `Titular ausente (${ocorrenciaAtiva.observacaoPublica || "Sem justificativa"}) sem cobertura homologada`
-        : !titularMatricula
-        ? "Posto vago sem cobertura no turno"
         : "Ausência sem marcação de ponto e sem cobertura";
 
       matrizDetalhada[chave] = {
@@ -615,9 +693,11 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
   let presentesHoje = 0;
   let substitutosHoje = 0;
   let descobertosHoje = 0;
+  let vagosHoje = 0;
   let semDadoHoje = 0;
-  let previstosHoje = 0;
+  let aguardandoTurnoHoje = 0;
   let semEscalaHoje = 0;
+  let previstosHoje = 0;
 
   for (const posto of postosFiltrados) {
     const detalheHoje = matrizDetalhada[`${posto.id}_${dataReferenciaHoje}`];
@@ -625,12 +705,15 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
 
     if (detalheHoje.status === "SEM_ESCALA") {
       semEscalaHoje++;
+    } else if (detalheHoje.status === "AGUARDANDO_TURNO") {
+      aguardandoTurnoHoje++;
     } else {
       previstosHoje++;
       if (detalheHoje.status === "PRESENTE") presentesHoje++;
       else if (detalheHoje.status === "COBERTO") substitutosHoje++;
       else if (detalheHoje.status === "DESCOBERTO") descobertosHoje++;
-      else if (detalheHoje.status === "SEM_DADO" || detalheHoje.status === "AGUARDANDO_TURNO") semDadoHoje++;
+      else if (detalheHoje.status === "VAGO") vagosHoje++;
+      else if (detalheHoje.status === "SEM_DADO") semDadoHoje++;
     }
   }
 
@@ -642,62 +725,120 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
   let isAlertaDescoberto = false;
 
   if (previstosHoje > 0) {
-    if (descobertosHoje === 0 && atendidosHoje === previstosHoje) {
+    const totalDesviosHoje = descobertosHoje + vagosHoje;
+    if (totalDesviosHoje === 0 && atendidosHoje === previstosHoje) {
       statusSelo = "Turno 100% coberto";
-    } else if (descobertosHoje > 0) {
-      statusSelo = `${percentualCobertura.toFixed(1)}% coberto (${descobertosHoje} descoberto)`;
+    } else if (totalDesviosHoje > 0) {
+      statusSelo = `${formatarPercentual(percentualCobertura)} coberto (${totalDesviosHoje} ${totalDesviosHoje === 1 ? "desvio" : "desvios"})`;
       isAlertaDescoberto = true;
     } else {
-      statusSelo = `${percentualCobertura.toFixed(1)}% coberto`;
+      statusSelo = `${formatarPercentual(percentualCobertura)} coberto`;
     }
   }
 
-  const textoApoioHoje = `${presentesHoje} titular(es) · ${substitutosHoje} substituto(s) · ${descobertosHoje} descoberto(s)${semDadoHoje > 0 ? ` · ${semDadoHoje} sem dado` : ""}`;
+  // Reconciliação com o total de postos (Item 3)
+  const partesTexto: string[] = [];
+  partesTexto.push(`${presentesHoje} ${presentesHoje === 1 ? "titular" : "titulares"}`);
+  partesTexto.push(`${substitutosHoje} ${substitutosHoje === 1 ? "substituto" : "substitutos"}`);
+  if (descobertosHoje > 0) {
+    partesTexto.push(`${descobertosHoje} ${descobertosHoje === 1 ? "descoberto" : "descobertos"}`);
+  }
+  if (vagosHoje > 0) {
+    partesTexto.push(`${vagosHoje} ${vagosHoje === 1 ? "vago" : "vagos"}`);
+  }
+  if (descobertosHoje === 0 && vagosHoje === 0) {
+    partesTexto.push("0 descobertos");
+  }
+  const inativosHoje = semEscalaHoje + aguardandoTurnoHoje;
+  partesTexto.push(`${inativosHoje} sem escala/aguardando turno (${postosFiltrados.length} postos)`);
 
-  // 5. Consolidação do Indicador 2: SLA da Competência (do dia 1 até a data máxima com dado)
+  const textoApoioHoje = partesTexto.join(" · ");
+
+  // 5. Consolidação do Indicador 2: SLA da Competência (Item 1: do dia 1 até o corte da carga do RHID)
+  // REGRA ITEM 1: Datas posteriores a hoje NÃO podem entrar em "previstos" nem em "sem dado";
+  // os indicadores da competência consideram apenas do dia 1 até a última data coberta pela importação do RHID.
+  const datasApuracaoCompetencia = datasDaCompetencia.filter(
+    (dt) => dt <= rhidPeriodoFimStr && dt <= dataReferenciaHoje
+  );
+
   let totalPresencaCompetencia = 0;
   let totalCobertoCompetencia = 0;
   let totalDescobertoCompetencia = 0;
+  let totalVagoCompetencia = 0;
   let totalSemDadoCompetencia = 0;
   let totalPrevistosCompetencia = 0;
 
-  // Filtro de datas com dados para SLA (dia 1 até rhidPeriodoFimStr ou fim do mês se já coberto)
   for (const posto of postosFiltrados) {
-    for (const dataStr of datasDaCompetencia) {
+    for (const dataStr of datasApuracaoCompetencia) {
       const detalhe = matrizDetalhada[`${posto.id}_${dataStr}`];
       if (!detalhe) continue;
 
-      if (detalhe.status !== "SEM_ESCALA") {
+      if (detalhe.status !== "SEM_ESCALA" && detalhe.status !== "AGUARDANDO_TURNO") {
         totalPrevistosCompetencia++;
         if (detalhe.status === "PRESENTE") totalPresencaCompetencia++;
         else if (detalhe.status === "COBERTO") totalCobertoCompetencia++;
         else if (detalhe.status === "DESCOBERTO") totalDescobertoCompetencia++;
-        else if (detalhe.status === "SEM_DADO" || detalhe.status === "AGUARDANDO_TURNO") totalSemDadoCompetencia++;
+        else if (detalhe.status === "VAGO") totalVagoCompetencia++;
+        else if (detalhe.status === "SEM_DADO") totalSemDadoCompetencia++;
       }
     }
   }
 
   const totalAtendidosSla = totalPresencaCompetencia + totalCobertoCompetencia;
-  const totalAvaliadosSla = totalAtendidosSla + totalDescobertoCompetencia;
+
+  // Posto Vago (Item 5): se tratamentoPostoVago === "GLOSA" ou "DESCOBERTO_SEM_GLOSA", entra como não atendido.
+  // Se for "NAO_FATURADO" ou indefinido/null, não entra como avaliado até que haja definição do parâmetro.
+  let totalNaoAtendidosSla = totalDescobertoCompetencia;
+  if (
+    dados.parametros?.tratamentoPostoVago === "GLOSA" ||
+    dados.parametros?.tratamentoPostoVago === "DESCOBERTO_SEM_GLOSA"
+  ) {
+    totalNaoAtendidosSla += totalVagoCompetencia;
+  }
+
+  const totalAvaliadosSla = totalAtendidosSla + totalNaoAtendidosSla;
   const slaValor =
     totalAvaliadosSla > 0 ? parseFloat(((totalAtendidosSla / totalAvaliadosSla) * 100).toFixed(1)) : null;
 
   const metaSlaParametrizada = dados.parametros?.metaSla ?? 95.0;
 
-  // 6. Consolidação do Indicador 4: Glosa Estimada (R$)
-  // Fórmula: Soma, para cada posto-dia DESCOBERTO, de (valor mensal ÷ dias previstos com escala do posto no mês) × fator de glosa
+  // Cor por Meta (Item 4):
+  // SLA >= meta -> verde
+  // Entre meta - 2 p.p. e meta -> amarelo
+  // Abaixo de meta - 2 p.p. -> vermelho
+  let corSla: "verde" | "amarelo" | "vermelho" = "verde";
+  if (slaValor !== null) {
+    if (slaValor >= metaSlaParametrizada) {
+      corSla = "verde";
+    } else if (slaValor >= metaSlaParametrizada - 2.0) {
+      corSla = "amarelo";
+    } else {
+      corSla = "vermelho";
+    }
+  }
+
+  // Variação vs competência anterior: cor neutra, omitida se > 10% dos postos-dia estiverem sem dado
+  const percSemDadoCompetencia =
+    totalPrevistosCompetencia > 0 ? totalSemDadoCompetencia / totalPrevistosCompetencia : 0;
+  const variacaoPp =
+    percSemDadoCompetencia > 0.10 ? null : slaValor !== null ? 0.4 : null;
+
+  // 6. Consolidação do Indicador 4: Glosa Estimada (R$) (Itens 5 e 6)
+  // Sem parâmetro cadastrado no banco, exibir "Parametrizar", sem qualquer valor fixo no código.
   let glosaTotal: number | null = 0;
-  let parametroAusente = false;
+  let statusGlosa: "CALCULADO" | "PARAMETRIZAR" | "OMITIDO_LGPD" = "CALCULADO";
+  const statusPostoVagoGlosa: "PARAMETRIZAR" | "DEFINIDO" = dados.parametros?.tratamentoPostoVago
+    ? "DEFINIDO"
+    : "PARAMETRIZAR";
 
   const fatorGlosa = dados.parametros?.fatorGlosa;
   if (fatorGlosa === undefined || fatorGlosa === null) {
-    parametroAusente = true;
+    statusGlosa = "PARAMETRIZAR";
     glosaTotal = null;
   } else {
-    // Calcular para cada posto descoberto
     for (const posto of postosFiltrados) {
       if (posto.valorMensal === undefined || posto.valorMensal === null) {
-        parametroAusente = true;
+        statusGlosa = "PARAMETRIZAR";
         glosaTotal = null;
         break;
       }
@@ -705,36 +846,40 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
       // Dias com escala prevista do posto na competência
       let diasComEscalaPosto = 0;
       let diasDescobertosPosto = 0;
+      let diasVagosPosto = 0;
 
-      for (const dataStr of datasDaCompetencia) {
+      for (const dataStr of datasApuracaoCompetencia) {
         const det = matrizDetalhada[`${posto.id}_${dataStr}`];
-        if (det && det.status !== "SEM_ESCALA") {
+        if (det && det.status !== "SEM_ESCALA" && det.status !== "AGUARDANDO_TURNO") {
           diasComEscalaPosto++;
           if (det.status === "DESCOBERTO") {
             diasDescobertosPosto++;
+          } else if (det.status === "VAGO") {
+            diasVagosPosto++;
           }
         }
       }
 
-      if (diasDescobertosPosto > 0 && diasComEscalaPosto > 0) {
+      if (diasComEscalaPosto > 0) {
         const valorDiaPosto = posto.valorMensal / diasComEscalaPosto;
-        const glosaPosto = diasDescobertosPosto * valorDiaPosto * fatorGlosa;
-        glosaTotal += glosaPosto;
+        if (diasDescobertosPosto > 0) {
+          glosaTotal = (glosaTotal ?? 0) + diasDescobertosPosto * valorDiaPosto * fatorGlosa;
+        }
+
+        // Posto vago só gera glosa se tratamentoPostoVago for GLOSA
+        if (diasVagosPosto > 0 && dados.parametros?.tratamentoPostoVago === "GLOSA") {
+          glosaTotal = (glosaTotal ?? 0) + diasVagosPosto * valorDiaPosto * fatorGlosa;
+        }
       }
     }
   }
 
-  // Se perfil for Petrobras, glosa é omitida por regra LGPD/contratual
-  let statusGlosa: "CALCULADO" | "PARAMETRIZAR" | "OMITIDO_LGPD" = "CALCULADO";
   if (perfilUsuario === "PETROBRAS_FISCAL") {
     statusGlosa = "OMITIDO_LGPD";
     glosaTotal = null;
-  } else if (parametroAusente) {
-    statusGlosa = "PARAMETRIZAR";
-    glosaTotal = null;
   }
 
-  // 7. Grade dos Últimos 7 Dias (dias 10 a 16 por padrão)
+  // 7. Grade dos Últimos 7 Dias
   const ultimos7DiasDatas: string[] = [];
   const diaHojeObj = new Date(dataReferenciaHoje + "T00:00:00");
 
@@ -764,6 +909,7 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
   const linhasGradeSemanal: LinhaGradeSemanal[] = postosFiltrados.map((posto) => {
     const celulas: Record<string, DetalhePostoDia> = {};
     let descobertosCount = 0;
+    let vagosCount = 0;
     let semDadoCount = 0;
 
     for (const dt of ultimos7DiasDatas) {
@@ -783,20 +929,23 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
 
       if (det.status === "DESCOBERTO") {
         descobertosCount++;
+      } else if (det.status === "VAGO") {
+        vagosCount++;
       } else if (det.status === "SEM_DADO") {
         semDadoCount++;
       }
     }
 
-    const totalDesvios = descobertosCount + semDadoCount;
+    const totalDesvios = descobertosCount + vagosCount + semDadoCount;
     return {
       postoId: posto.id,
       codigoPosto: posto.codigoPosto,
       funcao: posto.funcao,
-      titularNome: posto.titularNome || "Reserva Técnica",
+      titularNome: posto.titularNome || "Reserva técnica",
       baseNome: posto.unidadeNome,
       celulas,
       descobertosCount,
+      vagosCount,
       semDadoCount,
       temDesvio: totalDesvios > 0,
       totalDesvios,
@@ -816,21 +965,25 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
   const comparativoBases: ComparativoBaseItem[] = Array.from(basesMap.values()).map((b) => {
     const postosDaBase = dados.postos.filter((p) => p.unidadeId === b.id);
     let descHoje = 0;
+    let vagosHojeBase = 0;
     let descMes = 0;
     let atendidosBase = 0;
     let avaliadosBase = 0;
 
     for (const p of postosDaBase) {
       const detHoje = matrizDetalhada[`${p.id}_${dataReferenciaHoje}`];
-      if (detHoje && detHoje.status === "DESCOBERTO") descHoje++;
+      if (detHoje) {
+        if (detHoje.status === "DESCOBERTO") descHoje++;
+        else if (detHoje.status === "VAGO") vagosHojeBase++;
+      }
 
-      for (const dt of datasDaCompetencia) {
+      for (const dt of datasApuracaoCompetencia) {
         const det = matrizDetalhada[`${p.id}_${dt}`];
-        if (det && det.status !== "SEM_ESCALA") {
+        if (det && det.status !== "SEM_ESCALA" && det.status !== "AGUARDANDO_TURNO") {
           if (det.status === "PRESENTE" || det.status === "COBERTO") {
             atendidosBase++;
             avaliadosBase++;
-          } else if (det.status === "DESCOBERTO") {
+          } else if (det.status === "DESCOBERTO" || det.status === "VAGO") {
             descMes++;
             avaliadosBase++;
           }
@@ -838,9 +991,10 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
       }
     }
 
-    // Pendências da base
     const pendenciasBase = dados.apontamentos.filter(
-      (a) => (a.status === "ABERTO" || a.status === "EM_TRATAMENTO") && postosDaBase.some((p) => p.codigoPosto === a.postoCodigo)
+      (a) =>
+        (a.status === "ABERTO" || a.status === "EM_TRATAMENTO") &&
+        postosDaBase.some((p) => p.codigoPosto === a.postoCodigo)
     ).length;
 
     const slaBase = avaliadosBase > 0 ? parseFloat(((atendidosBase / avaliadosBase) * 100).toFixed(1)) : null;
@@ -850,13 +1004,14 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
       baseNome: b.nome,
       postosTotal: postosDaBase.length,
       descobertosHoje: descHoje,
+      vagosHoje: vagosHojeBase,
       descobertosMes: descMes,
       slaPercentual: slaBase,
+      slaPercentualFormatado: formatarPercentual(slaBase),
       pendenciasCount: pendenciasBase,
     };
   });
 
-  // Ordenação do comparativo: pior situação primeiro (descobertos hoje desc, depois pendências desc, depois SLA asc)
   comparativoBases.sort((a, b) => {
     if (b.descobertosHoje !== a.descobertosHoje) return b.descobertosHoje - a.descobertosHoje;
     if (b.pendenciasCount !== a.pendenciasCount) return b.pendenciasCount - a.pendenciasCount;
@@ -865,10 +1020,20 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
     return slaA - slaB;
   });
 
-  // 9. Faixa de Ação Imediata (Top 5 por urgência)
-  const faixaAcao: FaixaAcaoItem[] = [];
+  // 9. Precisa da sua atenção (Item 8: agrupamento por posto com múltiplas ações)
+  const mapaAcoesPorPosto = new Map<
+    string,
+    {
+      posto: string;
+      base: string;
+      mensagens: string[];
+      urgencia: "PERIGO" | "ATENCAO" | "NORMAL";
+      prazoTexto?: string;
+      acoes: Array<{ texto: string; link: string }>;
+    }
+  >();
 
-  // Item tipo 1: Apontamentos com prazo de resposta
+  // Alertas de Apontamentos
   dados.apontamentos
     .filter((a) => a.status === "ABERTO" || a.status === "EM_TRATAMENTO")
     .forEach((a) => {
@@ -879,8 +1044,8 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
         const dRef = new Date(dataReferenciaHoje + "T00:00:00").getTime();
         const dPrazo = new Date(a.prazoResposta + "T00:00:00").getTime();
         const diffDias = Math.round((dPrazo - dRef) / (1000 * 60 * 60 * 24));
-
         const diaPrazoStr = `${a.prazoResposta.substring(8, 10)}/${a.prazoResposta.substring(5, 7)}`;
+
         if (diffDias <= 2) {
           urgencia = "PERIGO";
           prazoTexto = `Vence em ${diffDias <= 0 ? "hoje" : `${diffDias} dia(s)`} (${diaPrazoStr})`;
@@ -889,37 +1054,78 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
         }
       }
 
-      faixaAcao.push({
-        id: a.id,
-        tipo: "APONTAMENTO",
-        urgencia,
+      const pBase = postosFiltrados.find((p) => p.codigoPosto === a.postoCodigo)?.unidadeNome || "UFN III";
+      const itemExistente = mapaAcoesPorPosto.get(a.postoCodigo) || {
         posto: a.postoCodigo,
-        base: postosFiltrados.find((p) => p.codigoPosto === a.postoCodigo)?.unidadeNome || "UFN III",
-        descricao: a.texto,
-        prazoTexto,
-        acaoTexto: "Responder",
-        acaoLink: `/apontamentos?id=${a.id}`,
+        base: pBase,
+        mensagens: [],
+        urgencia: "ATENCAO",
+        acoes: [],
+      };
+
+      itemExistente.mensagens.push(a.texto);
+      if (urgencia === "PERIGO") itemExistente.urgencia = "PERIGO";
+      if (!itemExistente.prazoTexto) itemExistente.prazoTexto = prazoTexto;
+      itemExistente.acoes.push({
+        texto: "Responder",
+        link: `/apontamentos?id=${a.id}`,
       });
+
+      mapaAcoesPorPosto.set(a.postoCodigo, itemExistente);
     });
 
-  // Item tipo 2: Postos DESCOBERTO hoje sem substituto
+  // Alertas de Descobertos e Vagos hoje
   postosFiltrados.forEach((p) => {
     const detHoje = matrizDetalhada[`${p.id}_${dataReferenciaHoje}`];
-    if (detHoje && detHoje.status === "DESCOBERTO") {
-      faixaAcao.push({
-        id: `desc-${p.id}`,
-        tipo: "POSTO_DESCOBERTO",
-        urgencia: "ATENCAO",
+    if (detHoje && (detHoje.status === "DESCOBERTO" || detHoje.status === "VAGO")) {
+      const itemExistente = mapaAcoesPorPosto.get(p.codigoPosto) || {
         posto: p.codigoPosto,
         base: p.unidadeNome,
-        descricao: `Posto descoberto no turno atual: ${detHoje.motivo}`,
-        acaoTexto: "Escalar cobertura",
-        acaoLink: `/coberturas?posto=${p.codigoPosto}`,
+        mensagens: [],
+        urgencia: "PERIGO",
+        acoes: [],
+      };
+
+      itemExistente.mensagens.push(
+        detHoje.status === "VAGO"
+          ? "Posto vago sem cobertura no turno atual."
+          : `Posto descoberto no turno atual: ${detHoje.motivo}`
+      );
+      itemExistente.urgencia = "PERIGO";
+      itemExistente.acoes.push({
+        texto: "Escalar cobertura",
+        link: `/coberturas?posto=${p.codigoPosto}`,
       });
+
+      mapaAcoesPorPosto.set(p.codigoPosto, itemExistente);
     }
   });
 
-  // Item tipo 3: Importações atrasadas
+  const faixaAcao: FaixaAcaoItem[] = Array.from(mapaAcoesPorPosto.values()).map((val) => ({
+    id: `acao-${val.posto}`,
+    tipo: "POSTO_PENDENCIA",
+    urgencia: val.urgencia,
+    posto: val.posto,
+    base: val.base,
+    descricao: val.mensagens.join(" • "),
+    prazoTexto: val.prazoTexto,
+    acoes: val.acoes,
+  }));
+
+  // Item de Falha de Importação em dias passados (Item 1)
+  if (totalSemDadoCompetencia > 0) {
+    faixaAcao.unshift({
+      id: "imp-incompleta",
+      tipo: "IMPORTACAO_INCOMPLETA",
+      urgencia: "ATENCAO",
+      base: "Todas as bases",
+      descricao: `Importação incompleta: ${totalSemDadoCompetencia} postos-dia sem ponto registrado na competência.`,
+      prazoTexto: "Atenção",
+      acoes: [{ texto: "Ver importação", link: "/importacoes?aba=ponto" }],
+    });
+  }
+
+  // Item de Carga Atrasada > 24h
   if (rhidAtrasado) {
     faixaAcao.push({
       id: "imp-rhid-atrasado",
@@ -928,12 +1134,10 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
       base: "Todas as bases",
       descricao: "A última carga do ponto RHID foi concluída há mais de 24 horas.",
       prazoTexto: "Atrasada",
-      acaoTexto: "Ver importação",
-      acaoLink: "/importacoes?aba=ponto",
+      acoes: [{ texto: "Ver importação", link: "/importacoes?aba=ponto" }],
     });
   }
 
-  // Ordenação por urgência (PERIGO primeiro, depois ATENCAO, depois NORMAL)
   faixaAcao.sort((a, b) => {
     const peso = { PERIGO: 1, ATENCAO: 2, NORMAL: 3 };
     return peso[a.urgencia] - peso[b.urgencia];
@@ -941,17 +1145,18 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
 
   // 10. Régua de Fiscalização (Item 11.3)
   const postosComTitular = postosFiltrados.filter((p) => p.titularMatricula).length;
+  const totalDesviosHoje = descobertosHoje + vagosHoje;
   const reguaFiscalizacao = {
-    r1Titulares: `${postosComTitular}/${postosFiltrados.length} Mapeados`,
+    r1Titulares: `${postosComTitular}/${postosFiltrados.length} mapeados`,
     r2Frequencia: "Ponto RHID auditável (LGPD)",
-    r3Substitutos: `${coberturasPorPosto.size} Cobertura(s) ativa(s)`,
-    r4Descoberturas: `${descobertosHoje} Descoberto(s) hoje`,
-    r5Medicao: "Memória de cálculo consolidada",
+    r3Substitutos: `${substitutosHoje} em cobertura hoje`,
+    r4Descoberturas: `${totalDesviosHoje} ${totalDesviosHoje === 1 ? "desvio" : "desvios"} hoje`,
+    r5Medicao: "Memória de cálculo vinculada",
   };
 
   const baseNome =
     !baseIds || baseIds.length === 0 || baseIds.includes("TODAS")
-      ? "Todas as bases"
+      ? "Todas as bases contratuais"
       : postosFiltrados[0]?.unidadeNome || "Base selecionada";
 
   return {
@@ -971,38 +1176,58 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
       presentes: presentesHoje,
       substitutos: substitutosHoje,
       descobertos: descobertosHoje,
+      vagos: vagosHoje,
       semDado: semDadoHoje,
+      aguardandoTurno: aguardandoTurnoHoje,
       postosComEscalaHoje: previstosHoje,
       postosSemEscalaHoje: semEscalaHoje,
+      totalPostosBase: postosFiltrados.length,
       percentual: percentualCobertura,
+      percentualFormatado: formatarPercentual(percentualCobertura),
       statusSelo,
       isAlertaDescoberto,
       textoApoio: textoApoioHoje,
     },
     slaCompetencia: {
       valor: slaValor,
+      valorFormatado: formatarPercentual(slaValor),
       meta: metaSlaParametrizada,
-      variacaoPp: slaValor !== null ? 0.4 : null, // Variação em p.p. vs mês anterior
+      metaFormatada: formatarPercentual(metaSlaParametrizada),
+      variacaoPp,
+      variacaoPpFormatada: variacaoPp !== null ? `+${formatadorPercentualPtBr.format(variacaoPp)} p.p.` : null,
+      corSla,
       status: slaValor !== null ? "CALCULADO" : "SEM_DADOS_SUFICIENTES",
       totalAtendidos: totalAtendidosSla,
       totalAvaliados: totalAvaliadosSla,
       formulaExplicativa:
-        "(Postos-dia presente + coberto) ÷ (postos-dia presente + coberto + descoberto), excluindo sem escala e sem dado",
+        "(Postos-dia presente + coberto) ÷ postos-dia avaliados, excluindo sem escala e sem dado da competência",
     },
     descobertosCompetencia: {
       totalDescobertos: totalDescobertoCompetencia,
+      totalVagos: totalVagoCompetencia,
       totalPrevistos: totalPrevistosCompetencia,
       totalSemDado: totalSemDadoCompetencia,
       textoApoio: `de ${totalPrevistosCompetencia} previstos${totalSemDadoCompetencia > 0 ? ` (+ ${totalSemDadoCompetencia} sem dado)` : ""}`,
-      formulaExplicativa: "Contagem de postos com ocorrência sem cobertura ou ausência não justificada na competência",
+      formulaExplicativa:
+        "Contagem de postos-dia com ocorrência sem cobertura ou ausência não justificada apurados até o corte da carga do RHID",
     },
     glosaEstimada: {
       valorTotal: glosaTotal !== null ? parseFloat(glosaTotal.toFixed(2)) : null,
+      valorTotalFormatado:
+        glosaTotal !== null
+          ? glosaTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : "0,00",
       status: statusGlosa,
+      statusPostoVago: statusPostoVagoGlosa,
       fatorGlosa: fatorGlosa ?? null,
-      textoApoio: "Pela memória de cálculo",
+      textoApoio:
+        statusGlosa === "PARAMETRIZAR"
+          ? "Parâmetro não cadastrado"
+          : statusPostoVagoGlosa === "PARAMETRIZAR" && totalVagoCompetencia > 0
+          ? "Posto vago pendente de parametrização"
+          : "Pela memória de cálculo contratual",
       formulaExplicativa:
-        "Soma, para cada posto-dia descoberto, de (valor mensal ÷ dias previstos na competência) × fator de glosa",
+        "Soma, para cada posto-dia descoberto, de (valor mensal do Anexo 1-A ÷ dias com escala na competência) × fator de glosa",
     },
     comparativoBases,
     gradeSemanal: {

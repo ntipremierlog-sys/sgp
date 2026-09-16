@@ -34,6 +34,7 @@ export default function PainelGeralPage() {
   const [filtroBase, setFiltroBase] = useState<string>("UFN-III"); // "TODAS" ou ID de base
   const [competenciaSelecionada, setCompetenciaSelecionada] = useState<string>("2026-09");
   const [filtroSoDesvio, setFiltroSoDesvio] = useState<boolean>(true);
+  const [perfilLogado] = useState<string>("PREMIER_ADMIN");
   const [perfilAtivo, setPerfilAtivo] = useState<string>("PREMIER_GESTOR");
   const [celulaInspecionada, setCelulaInspecionada] = useState<DetalhePostoDia | null>(null);
   const [tooltipFormula, setTooltipFormula] = useState<string | null>(null);
@@ -127,35 +128,37 @@ export default function PainelGeralPage() {
               </div>
             </div>
 
-            {/* Alternador de Perfil para Demonstração de LGPD */}
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
-              <span className="text-[11px] font-semibold text-slate-500 px-2 flex items-center gap-1">
-                <Eye className="w-3.5 h-3.5" />
-                <span>Perfil:</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setPerfilAtivo("PREMIER_GESTOR")}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-                  perfilAtivo === "PREMIER_GESTOR"
-                    ? "bg-white text-slate-900 shadow-sm font-semibold"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Gestor Premier
-              </button>
-              <button
-                type="button"
-                onClick={() => setPerfilAtivo("PETROBRAS_FISCAL")}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-                  perfilAtivo === "PETROBRAS_FISCAL"
-                    ? "bg-white text-emerald-900 shadow-sm font-semibold border border-emerald-300"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Fiscal Petrobras (LGPD)
-              </button>
-            </div>
+            {/* Alternador de Perfil para Demonstração de LGPD (Apenas para PREMIER_ADMIN) */}
+            {perfilLogado === "PREMIER_ADMIN" && (
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+                <span className="text-[11px] font-semibold text-slate-500 px-2 flex items-center gap-1">
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Simular perfil:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPerfilAtivo("PREMIER_GESTOR")}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    perfilAtivo === "PREMIER_GESTOR"
+                      ? "bg-white text-slate-900 shadow-sm font-semibold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Gestor Premier
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPerfilAtivo("PETROBRAS_FISCAL")}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    perfilAtivo === "PETROBRAS_FISCAL"
+                      ? "bg-white text-emerald-900 shadow-sm font-semibold border border-emerald-300"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Fiscal Petrobras (LGPD)
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -211,14 +214,14 @@ export default function PainelGeralPage() {
       </div>
 
       {/* ------------------------------------------------------------------- */}
-      {/* 2. FAIXA DE AÇÃO IMEDIATA (TOP 5 POR URGÊNCIA) */}
+      {/* 2. PRECISA DA SUA ATENÇÃO */}
       {/* ------------------------------------------------------------------- */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-amber-500" />
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Faixa de ação imediata
+              Precisa da sua atenção
             </h2>
           </div>
           <span className="text-[11px] text-slate-400">
@@ -272,21 +275,43 @@ export default function PainelGeralPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-slate-600 mt-0.5 text-xs line-clamp-1">{item.descricao}</p>
+                      <p className="text-slate-600 mt-0.5 text-xs line-clamp-2">{item.descricao}</p>
                     </div>
                   </div>
 
-                  <Link
-                    href={item.acaoLink}
-                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md font-semibold text-xs shrink-0 self-start sm:self-center transition-all ${
-                      isPerigo
-                        ? "bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
-                        : "bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
-                    }`}
-                  >
-                    <span>{item.acaoTexto}</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </Link>
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0 self-start sm:self-center">
+                    {item.acoes && item.acoes.length > 0 ? (
+                      item.acoes.map((acao, idx) => {
+                        const linkDestino = acao.link || (item as any).acaoLink || "/apontamentos";
+                        return (
+                          <Link
+                            key={idx}
+                            href={linkDestino}
+                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md font-semibold text-xs transition-all ${
+                              isPerigo
+                                ? "bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
+                                : "bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+                            }`}
+                          >
+                            <span>{acao.texto || (item as any).acaoTexto || "Verificar"}</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </Link>
+                        );
+                      })
+                    ) : (item as any).acaoLink ? (
+                      <Link
+                        href={(item as any).acaoLink || "/apontamentos"}
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md font-semibold text-xs transition-all ${
+                          isPerigo
+                            ? "bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
+                            : "bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+                        }`}
+                      >
+                        <span>{(item as any).acaoTexto || "Verificar"}</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
               );
             })}
@@ -327,7 +352,7 @@ export default function PainelGeralPage() {
 
             <div className="mt-3 flex items-baseline gap-2">
               <span className="text-3xl font-bold text-slate-900 tabular-nums">
-                {dadosPainel.coberturaAgora.percentual.toFixed(1)}%
+                {dadosPainel.coberturaAgora.percentualFormatado}
               </span>
               <span
                 className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -381,6 +406,19 @@ export default function PainelGeralPage() {
                 }}
                 title={`${dadosPainel.coberturaAgora.descobertos} descoberto(s)`}
               />
+              <div
+                className="bg-rose-800 h-2"
+                style={{
+                  width: `${
+                    dadosPainel.coberturaAgora.postosComEscalaHoje > 0
+                      ? (dadosPainel.coberturaAgora.vagos /
+                          dadosPainel.coberturaAgora.postosComEscalaHoje) *
+                        100
+                      : 0
+                  }%`,
+                }}
+                title={`${dadosPainel.coberturaAgora.vagos} vago(s)`}
+              />
             </div>
           </div>
 
@@ -417,11 +455,19 @@ export default function PainelGeralPage() {
             <div className="mt-3 flex items-baseline gap-2">
               {dadosPainel.slaCompetencia.valor !== null ? (
                 <>
-                  <span className="text-3xl font-bold text-slate-900 tabular-nums">
-                    {dadosPainel.slaCompetencia.valor.toFixed(1)}%
+                  <span
+                    className={`text-3xl font-bold tabular-nums ${
+                      dadosPainel.slaCompetencia.corSla === "verde"
+                        ? "text-emerald-700"
+                        : dadosPainel.slaCompetencia.corSla === "amarelo"
+                        ? "text-amber-700"
+                        : "text-rose-700"
+                    }`}
+                  >
+                    {dadosPainel.slaCompetencia.valorFormatado}
                   </span>
                   <span className="text-xs font-semibold text-slate-500">
-                    Meta ≥ {dadosPainel.slaCompetencia.meta}%
+                    Meta ≥ {dadosPainel.slaCompetencia.metaFormatada}
                   </span>
                 </>
               ) : (
@@ -438,7 +484,13 @@ export default function PainelGeralPage() {
             {dadosPainel.slaCompetencia.valor !== null && (
               <div className="w-full bg-slate-100 rounded-full h-2 mt-3 overflow-hidden">
                 <div
-                  className="bg-emerald-500 h-2 rounded-full"
+                  className={`h-2 rounded-full ${
+                    dadosPainel.slaCompetencia.corSla === "verde"
+                      ? "bg-emerald-500"
+                      : dadosPainel.slaCompetencia.corSla === "amarelo"
+                      ? "bg-amber-500"
+                      : "bg-rose-600"
+                  }`}
                   style={{
                     width: `${Math.min(100, dadosPainel.slaCompetencia.valor)}%`,
                   }}
@@ -452,9 +504,9 @@ export default function PainelGeralPage() {
               {dadosPainel.slaCompetencia.totalAtendidos} atendidos de{" "}
               {dadosPainel.slaCompetencia.totalAvaliados} avaliados
             </span>
-            {dadosPainel.slaCompetencia.variacaoPp && (
-              <span className="text-emerald-700 font-semibold">
-                +{dadosPainel.slaCompetencia.variacaoPp} p.p.
+            {dadosPainel.slaCompetencia.variacaoPpFormatada && (
+              <span className="text-slate-600 font-medium">
+                {dadosPainel.slaCompetencia.variacaoPpFormatada}
               </span>
             )}
           </p>
@@ -546,15 +598,19 @@ export default function PainelGeralPage() {
                   <ExternalLink className="w-3.5 h-3.5" />
                 </Link>
               ) : (
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs font-semibold text-slate-500">R$</span>
-                  <span className="text-3xl font-bold text-slate-900 tabular-nums">
-                    {dadosPainel.glosaEstimada.valorTotal !== null
-                      ? dadosPainel.glosaEstimada.valorTotal.toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                        })
-                      : "0,00"}
-                  </span>
+                <div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-xs font-semibold text-slate-500">R$</span>
+                    <span className="text-3xl font-bold text-slate-900 tabular-nums">
+                      {dadosPainel.glosaEstimada.valorTotalFormatado}
+                    </span>
+                  </div>
+                  {dadosPainel.glosaEstimada.statusPostoVago === "PARAMETRIZAR" &&
+                    dadosPainel.descobertosCompetencia.totalVagos > 0 && (
+                      <span className="block text-[10px] text-amber-700 font-medium mt-1">
+                        Posto vago aguarda definição de tratamento
+                      </span>
+                    )}
                 </div>
               )}
             </div>
@@ -698,9 +754,7 @@ export default function PainelGeralPage() {
                     key={d.data}
                     className={`py-2 px-1 text-center min-w-[48px] ${
                       d.isHoje
-                        ? "bg-blue-50 font-bold text-premier-900"
-                        : d.fds
-                        ? "bg-slate-100 text-slate-400 font-normal"
+                        ? "bg-blue-50 font-bold text-premier-900 border-x border-blue-200"
                         : ""
                     }`}
                   >
@@ -738,11 +792,27 @@ export default function PainelGeralPage() {
                     </td>
                     {dadosPainel.gradeSemanal.dias.map((d) => {
                       const celula = linha.celulas[d.data];
-                      if (!celula) return <td key={d.data} className="text-center">—</td>;
+                      if (!celula) {
+                        return (
+                          <td
+                            key={d.data}
+                            className={`text-center ${
+                              d.isHoje ? "bg-blue-50/25 border-x border-blue-100/70" : ""
+                            }`}
+                          >
+                            —
+                          </td>
+                        );
+                      }
 
                       const meta = METADADOS_STATUS[celula.status];
                       return (
-                        <td key={d.data} className="py-1 px-1 text-center">
+                        <td
+                          key={d.data}
+                          className={`py-1 px-1 text-center ${
+                            d.isHoje ? "bg-blue-50/25 border-x border-blue-100/70" : ""
+                          }`}
+                        >
                           <button
                             type="button"
                             onClick={() => setCelulaInspecionada(celula)}
