@@ -251,116 +251,149 @@ export function prepararEntradaCalculo(
     criadoPor: a.criadoPor,
   }));
 
-  // 5. Geração de Batidas de Ponto Realistas (RHID) do dia 01/09 ao dia 16/09
+  // 5. Geração de Batidas de Ponto Realistas (RHID/RM) ou integração com marcações reais
   const pontos: PontoEntrada[] = [];
-  const datasPonto: string[] = [];
-  for (let d = 1; d <= 16; d++) {
-    const diaStr = d < 10 ? `0${d}` : `${d}`;
-    datasPonto.push(`2026-09-${diaStr}`);
-  }
 
-  // Pontos de titulares das outras bases
-  POSTOS_OUTRAS_BASES.forEach((p) => {
-    if (p.titularMatricula) {
-      datasPonto.forEach((dt) => {
-        pontos.push({
-          matricula: p.titularMatricula!,
-          data: dt,
-          situacaoPonto: "PRESENTE",
-          horaEntrada: p.horarioInicio,
-          horaSaida: p.horarioFim,
-          horasTrabalhadas: 8.8,
-          codigoPosto: p.codigoPosto,
-        });
+  // Se houver marcações de ponto reais importadas (Momento 4), usa-as para compor os pontos
+  const marcacoesReais = estado.marcacoesPonto || [];
+  if (marcacoesReais.length > 0) {
+    // Agrupa marcações por chapa e data
+    const marcacoesPorChapaData = new Map<string, { chapa: string; data: string; batidas: string[] }>();
+    for (const m of marcacoesReais) {
+      const chave = `${m.chapa}_${m.dataLocal}`;
+      const reg = marcacoesPorChapaData.get(chave) || { chapa: m.chapa, data: m.dataLocal, batidas: [] };
+      reg.batidas.push(m.horaLocal);
+      marcacoesPorChapaData.set(chave, reg);
+    }
+
+    // Gera PontoEntrada a partir das marcações reais
+    for (const [_, reg] of marcacoesPorChapaData) {
+      reg.batidas.sort();
+      const horaEntrada = reg.batidas[0];
+      const horaSaida = reg.batidas[reg.batidas.length - 1];
+      const horasTrab = reg.batidas.length >= 2 ? 8.8 : 0;
+
+      pontos.push({
+        matricula: reg.chapa,
+        data: reg.data,
+        situacaoPonto: reg.batidas.length >= 2 ? "PRESENTE" : "AUSENTE",
+        horaEntrada,
+        horaSaida: reg.batidas.length >= 2 ? horaSaida : undefined,
+        horasTrabalhadas: horasTrab,
       });
     }
-  });
+  } else {
+    // Fallback para simulação sintética de Setembro/2026
+    const datasPonto: string[] = [];
+    for (let d = 1; d <= 16; d++) {
+      const diaStr = d < 10 ? `0${d}` : `${d}`;
+      datasPonto.push(`2026-09-${diaStr}`);
+    }
 
-  // Pontos dos titulares e substitutos de UFN-III
-  postosUfn3.forEach((posto) => {
-    const mat = posto.titularMatricula;
-    if (!mat) return; // Posto sem titular não tem ponto de titular
+    // Pontos de titulares das outras bases
+    POSTOS_OUTRAS_BASES.forEach((p) => {
+      if (p.titularMatricula) {
+        datasPonto.forEach((dt) => {
+          pontos.push({
+            matricula: p.titularMatricula!,
+            data: dt,
+            situacaoPonto: "PRESENTE",
+            horaEntrada: p.horarioInicio,
+            horaSaida: p.horarioFim,
+            horasTrabalhadas: 8.8,
+            codigoPosto: p.codigoPosto,
+          });
+        });
+      }
+    });
 
-    datasPonto.forEach((dt) => {
-      // 07/09 é feriado nacional
-      if (dt === "2026-09-07" && posto.escala === "5x2") {
+    // Pontos dos titulares e substitutos de UFN-III
+    postosUfn3.forEach((posto) => {
+      const mat = posto.titularMatricula;
+      if (!mat) return; // Posto sem titular não tem ponto de titular
+
+      datasPonto.forEach((dt) => {
+        // 07/09 é feriado nacional
+        if (dt === "2026-09-07" && posto.escala === "5x2") {
+          pontos.push({
+            matricula: mat,
+            data: dt,
+            situacaoPonto: "FOLGA",
+            codigoPosto: posto.codigoPosto,
+          });
+          return;
+        }
+
+        // Ocorrência 1: Thiago Barbosa (PRM-00114) no PST-ALM-014 (03/09 a 05/09)
+        if (mat === "PRM-00114" && dt >= "2026-09-03" && dt <= "2026-09-05") {
+          pontos.push({
+            matricula: mat,
+            data: dt,
+            situacaoPonto: "AFASTADO",
+            codigoPosto: posto.codigoPosto,
+          });
+          return;
+        }
+
+        // Ocorrência 2: Beatriz Santos Cruz (PRM-00113) no PST-ALM-015 (08/09)
+        if (mat === "PRM-00113" && dt === "2026-09-08") {
+          pontos.push({
+            matricula: mat,
+            data: dt,
+            situacaoPonto: "AUSENTE",
+            codigoPosto: posto.codigoPosto,
+          });
+          return;
+        }
+
+        // Ocorrência 3: Mariana Souza Lima (PRM-00102) no PST-ALM-002 (11/09)
+        if (mat === "PRM-00102" && dt === "2026-09-11") {
+          pontos.push({
+            matricula: mat,
+            data: dt,
+            situacaoPonto: "AUSENTE",
+            codigoPosto: posto.codigoPosto,
+          });
+          return;
+        }
+
+        // Presença normal
         pontos.push({
           matricula: mat,
           data: dt,
-          situacaoPonto: "FOLGA",
+          situacaoPonto: "PRESENTE",
+          horaEntrada: posto.horarioInicio,
+          horaSaida: posto.horarioFim,
+          horasTrabalhadas: posto.jornadaSemanalHoras === 44 ? 8.8 : 12.0,
           codigoPosto: posto.codigoPosto,
         });
-        return;
-      }
-
-      // Ocorrência 1: Thiago Barbosa (PRM-00114) no PST-ALM-014 (03/09 a 05/09)
-      if (mat === "PRM-00114" && dt >= "2026-09-03" && dt <= "2026-09-05") {
-        pontos.push({
-          matricula: mat,
-          data: dt,
-          situacaoPonto: "AFASTADO",
-          codigoPosto: posto.codigoPosto,
-        });
-        return;
-      }
-
-      // Ocorrência 2: Beatriz Santos Cruz (PRM-00113) no PST-ALM-015 (08/09)
-      if (mat === "PRM-00113" && dt === "2026-09-08") {
-        pontos.push({
-          matricula: mat,
-          data: dt,
-          situacaoPonto: "AUSENTE",
-          codigoPosto: posto.codigoPosto,
-        });
-        return;
-      }
-
-      // Ocorrência 3: Mariana Souza Lima (PRM-00102) no PST-ALM-002 (11/09)
-      if (mat === "PRM-00102" && dt === "2026-09-11") {
-        pontos.push({
-          matricula: mat,
-          data: dt,
-          situacaoPonto: "AUSENTE",
-          codigoPosto: posto.codigoPosto,
-        });
-        return;
-      }
-
-      // Presença normal
-      pontos.push({
-        matricula: mat,
-        data: dt,
-        situacaoPonto: "PRESENTE",
-        horaEntrada: posto.horarioInicio,
-        horaSaida: posto.horarioFim,
-        horasTrabalhadas: posto.jornadaSemanalHoras === 44 ? 8.8 : 12.0,
-        codigoPosto: posto.codigoPosto,
       });
     });
-  });
 
-  // Pontos de substitutos alocados nas coberturas
-  ["2026-09-03", "2026-09-04", "2026-09-05"].forEach((dt) => {
+    // Pontos de substitutos alocados nas coberturas
+    ["2026-09-03", "2026-09-04", "2026-09-05"].forEach((dt) => {
+      pontos.push({
+        matricula: "PRM-00115",
+        data: dt,
+        situacaoPonto: "PRESENTE",
+        horaEntrada: "07:00",
+        horaSaida: "16:48",
+        horasTrabalhadas: 8.8,
+        codigoPosto: "PST-ALM-014",
+      });
+    });
+
     pontos.push({
-      matricula: "PRM-00115",
-      data: dt,
+      matricula: "PRM-00116",
+      data: "2026-09-11",
       situacaoPonto: "PRESENTE",
       horaEntrada: "07:00",
       horaSaida: "16:48",
       horasTrabalhadas: 8.8,
-      codigoPosto: "PST-ALM-014",
+      codigoPosto: "PST-ALM-002",
     });
-  });
+  }
 
-  pontos.push({
-    matricula: "PRM-00116",
-    data: "2026-09-11",
-    situacaoPonto: "PRESENTE",
-    horaEntrada: "07:00",
-    horaSaida: "16:48",
-    horasTrabalhadas: 8.8,
-    codigoPosto: "PST-ALM-002",
-  });
 
   // 6. Logs de Importação
   const logsImportacao: ImportacaoLogEntrada[] = [

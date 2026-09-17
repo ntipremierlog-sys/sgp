@@ -50,11 +50,19 @@ import {
   LoteImportacaoOperacional,
 } from "@/lib/dados/estado-operacional";
 import { UsuarioSessao } from "@/lib/auth/tipos";
+import {
+  simularImportacaoPonto,
+  confirmarImportacaoPonto,
+  gerarRelatorioValidacaoPontoXlsx,
+  gerarModeloPontoXlsx,
+  ResultadoSimulacaoPonto,
+} from "@/lib/importadores/planilha-ponto";
 
 type ResultadoSimulacaoQualquer =
   | ResultadoSimulacaoRm
   | ResultadoSimulacaoSifac
-  | ResultadoSimulacaoAbono;
+  | ResultadoSimulacaoAbono
+  | ResultadoSimulacaoPonto;
 
 export default function ImportacoesPage() {
   const [sessao, setSessao] = useState<UsuarioSessao | null>(null);
@@ -123,13 +131,18 @@ export default function ImportacoesPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
-      setErroUpload("Formato inválido. Selecione apenas planilhas Excel (.xlsx ou .xls).");
+    if (
+      !file.name.endsWith(".xlsx") &&
+      !file.name.endsWith(".xls") &&
+      !file.name.endsWith(".csv") &&
+      !file.name.endsWith(".txt")
+    ) {
+      setErroUpload("Formato inválido. Selecione planilhas Excel (.xlsx/.xls), CSV ou arquivo AFD (.txt).");
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setErroUpload("Arquivo excede o tamanho máximo permitido de 10 MB.");
+    if (file.size > 20 * 1024 * 1024) {
+      setErroUpload("Arquivo excede o tamanho máximo permitido de 20 MB.");
       return;
     }
 
@@ -140,6 +153,25 @@ export default function ImportacoesPage() {
 
     try {
       const buffer = await file.arrayBuffer();
+
+      // Caso seja arquivo AFD (.txt)
+      if (file.name.toLowerCase().endsWith(".txt")) {
+        const resultadoId: ResultadoIdentificacaoRm = {
+          reconhecido: true,
+          tipo: "REGISTROS_PONTO_RM",
+          colunasEncontradas: ["Linhas AFD - Portaria MTP 671/2021 Anexo V"],
+          colunasObrigatoriasFaltando: [],
+        };
+        setIdentificacao(resultadoId);
+
+        const resultadoSim = await simularImportacaoPonto(buffer, file.name, dataReferencia);
+        setSimulacao(resultadoSim);
+        setEtapa(3);
+        setProcessando(false);
+        return;
+      }
+
+      // Caso seja planilha Excel / CSV
       const wb = XLSX.read(buffer, { type: "array" });
       const abaAlvo = wb.SheetNames.find((s) => s.trim().toLowerCase() === "modelo") || wb.SheetNames[0];
       const sheet = wb.Sheets[abaAlvo];
@@ -158,29 +190,19 @@ export default function ImportacoesPage() {
       // ETAPA 3: Pré-visualização / Simulação
       let resultadoSim: any;
       if (resultadoId.tipo === "ALOCADOS_SIFAC") {
-        resultadoSim = await simularImportacaoSifac(
-          buffer,
-          file.name,
-          dataReferencia
-        );
+        resultadoSim = await simularImportacaoSifac(buffer, file.name, dataReferencia);
       } else if (resultadoId.tipo === "ABONO_RM") {
-        resultadoSim = await simularImportacaoAbono(
-          buffer,
-          file.name,
-          dataReferencia
-        );
+        resultadoSim = await simularImportacaoAbono(buffer, file.name, dataReferencia);
+      } else if (resultadoId.tipo === "REGISTROS_PONTO_RM") {
+        resultadoSim = await simularImportacaoPonto(buffer, file.name, dataReferencia);
       } else {
-        resultadoSim = await simularImportacaoFuncionariosRm(
-          buffer,
-          file.name,
-          dataReferencia
-        );
+        resultadoSim = await simularImportacaoFuncionariosRm(buffer, file.name, dataReferencia);
       }
 
       setSimulacao(resultadoSim);
       setEtapa(3);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Falha ao processar a planilha Excel.";
+      const msg = err instanceof Error ? err.message : "Falha ao processar o arquivo selecionado.";
       setErroUpload(msg);
       setEtapa(1);
     } finally {
@@ -200,8 +222,10 @@ export default function ImportacoesPage() {
         res = confirmarImportacaoSifac(simulacao, usuarioLogado);
       } else if (simulacao.tipo === "ABONO_RM") {
         res = confirmarImportacaoAbono(simulacao, usuarioLogado);
+      } else if (simulacao.tipo === "REGISTROS_PONTO_RM" || (simulacao as any).tipo === "AFD_PONTO") {
+        res = confirmarImportacaoPonto(simulacao as any, usuarioLogado);
       } else {
-        res = confirmarImportacaoFuncionariosRm(simulacao, usuarioLogado);
+        res = confirmarImportacaoFuncionariosRm(simulacao as any, usuarioLogado);
       }
 
       setLoteConfirmadoId(res.loteId);
@@ -218,21 +242,23 @@ export default function ImportacoesPage() {
 
   const handleBaixarRelatorioValidacao = () => {
     if (!simulacao) return;
-    const relatorioBytes =
-      simulacao.tipo === "FUNCIONARIOS_RM"
-        ? gerarRelatorioValidacaoXlsx(simulacao)
-        : simulacao.tipo === "ABONO_RM"
-        ? gerarRelatorioValidacaoAbonoXlsx(simulacao)
-        : (() => {
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.json_to_sheet(
-              simulacao.inconsistencias && simulacao.inconsistencias.length > 0
-                ? simulacao.inconsistencias
-                : [{ Mensagem: "Nenhum erro ou alerta." }]
-            );
-            XLSX.utils.book_append_sheet(wb, ws, "Validação");
-            return new Uint8Array(XLSX.write(wb, { bookType: "xlsx", type: "array" }));
-          })();
+    let relatorioBytes: Uint8Array;
+    if (simulacao.tipo === "FUNCIONARIOS_RM") {
+      relatorioBytes = gerarRelatorioValidacaoXlsx(simulacao as any);
+    } else if (simulacao.tipo === "ABONO_RM") {
+      relatorioBytes = gerarRelatorioValidacaoAbonoXlsx(simulacao as any);
+    } else if (simulacao.tipo === "REGISTROS_PONTO_RM" || (simulacao as any).tipo === "AFD_PONTO") {
+      relatorioBytes = gerarRelatorioValidacaoPontoXlsx((simulacao as any).resultadoPontoCompleto);
+    } else {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(
+        simulacao.inconsistencias && simulacao.inconsistencias.length > 0
+          ? simulacao.inconsistencias
+          : [{ Mensagem: "Nenhum erro ou alerta." }]
+      );
+      XLSX.utils.book_append_sheet(wb, ws, "Validação");
+      relatorioBytes = new Uint8Array(XLSX.write(wb, { bookType: "xlsx", type: "array" }));
+    }
     const blob = new Blob([relatorioBytes as BlobPart], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
@@ -240,6 +266,21 @@ export default function ImportacoesPage() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `relatorio_validacao_${simulacao.tipo}_${simulacao.dataReferencia}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleBaixarModeloPonto = () => {
+    const bytes = gerarModeloPontoXlsx();
+    const blob = new Blob([bytes as BlobPart], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "modelo_cubo_registros_ponto.xlsx";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -441,6 +482,14 @@ export default function ImportacoesPage() {
           >
             <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>Modelo Cubo de Abono</span>
+          </button>
+          <button
+            onClick={handleBaixarModeloPonto}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
+            title="Baixar planilha modelo de Cubo de Registros / Ponto"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-500" />
+            <span>Modelo Ponto / Registros</span>
           </button>
         </div>
       </div>
@@ -993,6 +1042,8 @@ export default function ImportacoesPage() {
               <option value="FUNCIONARIOS_RM">Funcionários (RM/TOTVS)</option>
               <option value="ALOCADOS_SIFAC">Alocados SIFAC (Momento 2)</option>
               <option value="ABONO_RM">Cubo de Abono (Momento 3)</option>
+              <option value="REGISTROS_PONTO_RM">Ponto RM / Cubo de Registros</option>
+              <option value="AFD_PONTO">AFD Ponto (Portaria 671)</option>
             </select>
           </div>
         </div>
@@ -1021,7 +1072,7 @@ export default function ImportacoesPage() {
                   </td>
                 </tr>
               ) : (
-                lotesFiltrados.map((lote, index) => {
+                lotesFiltrados.map((lote) => {
                   const ehUltimoConcluido =
                     lote.status === "CONCLUIDO" &&
                     lotes.find((l) => l.tipo === lote.tipo && l.status === "CONCLUIDO")?.id === lote.id;
@@ -1035,7 +1086,13 @@ export default function ImportacoesPage() {
                             ? "Funcionários RM"
                             : lote.tipo === "ALOCADOS_SIFAC"
                             ? "Alocados SIFAC"
-                            : "Cubo Abono"}
+                            : lote.tipo === "ABONO_RM"
+                            ? "Cubo Abono"
+                            : lote.tipo === "REGISTROS_PONTO_RM"
+                            ? "Ponto RM"
+                            : lote.tipo === "AFD_PONTO"
+                            ? "AFD Ponto"
+                            : lote.tipo}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 font-medium text-slate-800 truncate max-w-[160px]" title={lote.arquivoNome}>
@@ -1067,9 +1124,20 @@ export default function ImportacoesPage() {
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
                         {ehUltimoConcluido ? (
                           <button
-                            onClick={() => setModalDesfazerAberto(true)}
+                            onClick={() => {
+                              const res = desfazerUltimoLote(
+                                lote.tipo,
+                                sessao ? `${sessao.nome} (${sessao.perfil})` : "Administrador Premier"
+                              );
+                              if (res.sucesso) {
+                                setMensagemFeedback({ tipo: "sucesso", texto: res.mensagem });
+                                carregarDados();
+                              } else {
+                                setMensagemFeedback({ tipo: "erro", texto: res.mensagem });
+                              }
+                            }}
                             className="inline-flex items-center gap-1 text-rose-700 hover:text-rose-900 font-bold text-[11px] bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded transition-colors"
-                            title="Desfaz as alterações deste lote restaurando o estado anterior"
+                            title={`Desfaz as alterações do lote ${lote.id} restaurando o estado anterior`}
                           >
                             <RotateCcw className="w-3 h-3 text-rose-600" />
                             <span>Desfazer Lote</span>
@@ -1086,39 +1154,7 @@ export default function ImportacoesPage() {
           </table>
         </div>
       </div>
-
-      {/* Modal de Confirmação para Desfazer Lote */}
-      {modalDesfazerAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 p-6 space-y-4 animate-scaleIn">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
-                <RotateCcw className="w-5 h-5" />
-              </div>
-              <h3 className="font-bold text-base text-slate-900">Desfazer Último Lote de Importação?</h3>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Esta ação reverterá o estado operacional do sistema para o momento imediatamente anterior à confirmação do lote selecionado. O cancelamento será registrado permanentemente na trilha de auditoria.
-            </p>
-
-            <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2 text-xs">
-              <button
-                onClick={() => setModalDesfazerAberto(false)}
-                className="px-3.5 py-2 border border-slate-300 rounded-lg font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => handleDesfazerUltimoLote("FUNCIONARIOS_RM")}
-                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition-colors"
-              >
-                Confirmar e Desfazer Lote
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+

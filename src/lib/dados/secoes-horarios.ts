@@ -21,30 +21,101 @@ export interface HorarioRmItem {
   primeiraOcorrenciaEm: string;
 }
 
-export const BASES_SGP_SISTEMA = [
-  { id: "UFN-III", nome: "UFN III – Três Lagoas/MS", tags: ["ufn", "tres lagoas", "três lagoas", "ufn-iii", "ufn3"] },
-  { id: "MACAE", nome: "Macaé / Parque de Tubos", tags: ["macae", "macaé", "parque de tubos", "imbetiba", "cabiunas", "cabiúnas", "imboassica", "tubos"] },
-  { id: "SANTOS", nome: "Terminal Santos/SP", tags: ["santos", "terminal santos", "porto", "edisa", "rpbc", "cubatao", "cubatão", "utg-ca", "caraguatatuba"] },
-  { id: "PAULINIA", nome: "Refinaria Paulínia (Replan)", tags: ["paulinia", "paulínia", "replan", "campinas"] },
-  { id: "RIO_DE_JANEIRO", nome: "Rio de Janeiro / Sede (EDIHB/CENPES)", tags: ["edihb", "rio de janeiro", "cenpes", "edisen", "fronape"] },
-  { id: "REDUC", nome: "Refinaria Duque de Caxias (REDUC)", tags: ["reduc", "duque de caxias"] },
-  { id: "BOAVENTURA", nome: "Complexo Boaventura (Itaboraí/RJ)", tags: ["boaventura", "itaborai", "itaboraí"] },
-  { id: "RNEST", nome: "Refinaria Abreu e Lima (RNEST/PE)", tags: ["rnest", "ipojuca"] },
-  { id: "EDIBRA", nome: "Edifício Brasília (EDIBRA/DF)", tags: ["edibra", "brasilia", "brasília"] },
-  { id: "REVAP", nome: "Refinaria Henrique Lage (REVAP/SP)", tags: ["revap", "sao jose dos campos", "são josé dos campos"] },
-  { id: "REGAP", nome: "Refinaria Gabriel Passos (REGAP/MG)", tags: ["regap", "betim"] },
-  { id: "RECAP", nome: "Refinaria de Capuava (RECAP/SP)", tags: ["recap", "maua", "mauá"] },
-  { id: "PITUBA", nome: "Salvador / Pituba / Taquipe (BA)", tags: ["pituba", "salvador", "taquipe", "sao sebastiao do passe"] },
-  { id: "REPAR", nome: "Refinaria Pres. Getúlio Vargas (REPAR/PR)", tags: ["repar", "araucaria", "araucária"] },
-  { id: "REFAP", nome: "Refinaria Alberto Pasqualini (REFAP/RS)", tags: ["refap", "canoas"] },
-  { id: "FAROL_SAO_TOME", nome: "Farol de São Tomé (Campos/RJ)", tags: ["farol", "sao tome", "campos", "campos dos goytacazes"] },
-  { id: "NORDESTE", nome: "Bases Regionais Nordeste (CE/RN/SE)", tags: ["lubnor", "fortaleza", "edirn", "natal", "ediser", "aracaju"] },
-  { id: "EDIVIT", nome: "Edifício Vitória (EDIVIT/ES)", tags: ["edivit", "vitoria", "vitória"] },
-  { id: "REMAN", nome: "Refinaria Isaac Sabbá (REMAN/AM)", tags: ["reman", "manaus"] },
+export interface BaseOperacionalItem {
+  id: string;
+  nome: string;
+  tags: string[];
+  fusoHorario: "America/Sao_Paulo" | "America/Campo_Grande" | "America/Manaus";
+  diferencaUtcHoras: number;
+}
+
+export const BASES_SGP_SISTEMA: BaseOperacionalItem[] = [
+  { id: "UFN-III", nome: "UFN III – Três Lagoas/MS", tags: ["ufn", "tres lagoas", "três lagoas", "ufn-iii", "ufn3"], fusoHorario: "America/Campo_Grande", diferencaUtcHoras: -4 },
+  { id: "MACAE", nome: "Macaé / Parque de Tubos", tags: ["macae", "macaé", "parque de tubos", "imbetiba", "cabiunas", "cabiúnas", "imboassica", "tubos"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "SANTOS", nome: "Terminal Santos/SP", tags: ["santos", "terminal santos", "porto", "edisa", "rpbc", "cubatao", "cubatão", "utg-ca", "caraguatatuba"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "PAULINIA", nome: "Refinaria Paulínia (Replan)", tags: ["paulinia", "paulínia", "replan", "campinas"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "RIO_DE_JANEIRO", nome: "Rio de Janeiro / Sede (EDIHB/CENPES)", tags: ["edihb", "rio de janeiro", "cenpes", "edisen", "fronape"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "REDUC", nome: "Refinaria Duque de Caxias (REDUC)", tags: ["reduc", "duque de caxias"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "BOAVENTURA", nome: "Complexo Boaventura (Itaboraí/RJ)", tags: ["boaventura", "itaborai", "itaboraí"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "RNEST", nome: "Refinaria Abreu e Lima (RNEST/PE)", tags: ["rnest", "ipojuca"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "EDIBRA", nome: "Edifício Brasília (EDIBRA/DF)", tags: ["edibra", "brasilia", "brasília"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "REVAP", nome: "Refinaria Henrique Lage (REVAP/SP)", tags: ["revap", "sao jose dos campos", "são josé dos campos"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "REGAP", nome: "Refinaria Gabriel Passos (REGAP/MG)", tags: ["regap", "betim"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "RECAP", nome: "Refinaria de Capuava (RECAP/SP)", tags: ["recap", "maua", "mauá"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "PITUBA", nome: "Salvador / Pituba / Taquipe (BA)", tags: ["pituba", "salvador", "taquipe", "sao sebastiao do passe"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "REPAR", nome: "Refinaria Pres. Getúlio Vargas (REPAR/PR)", tags: ["repar", "araucaria", "araucária"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "REFAP", nome: "Refinaria Alberto Pasqualini (REFAP/RS)", tags: ["refap", "canoas"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "FAROL_SAO_TOME", nome: "Farol de São Tomé (Campos/RJ)", tags: ["farol", "sao tome", "campos", "campos dos goytacazes"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "NORDESTE", nome: "Bases Regionais Nordeste (CE/RN/SE)", tags: ["lubnor", "fortaleza", "edirn", "natal", "ediser", "aracaju"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "EDIVIT", nome: "Edifício Vitória (EDIVIT/ES)", tags: ["edivit", "vitoria", "vitória"], fusoHorario: "America/Sao_Paulo", diferencaUtcHoras: -3 },
+  { id: "REMAN", nome: "Refinaria Isaac Sabbá (REMAN/AM)", tags: ["reman", "manaus"], fusoHorario: "America/Manaus", diferencaUtcHoras: -4 },
 ];
+
+/**
+ * Retorna o fuso horário da base operacional (padrão America/Sao_Paulo).
+ */
+export function obterFusoHorarioBase(unidadeId?: string): "America/Sao_Paulo" | "America/Campo_Grande" | "America/Manaus" {
+  if (!unidadeId) return "America/Sao_Paulo";
+  const base = BASES_SGP_SISTEMA.find((b) => b.id === unidadeId);
+  return base?.fusoHorario || "America/Sao_Paulo";
+}
+
+/**
+ * Retorna o offset em horas em relação a UTC (-3 para Brasília, -4 para MS e AM).
+ */
+export function obterDiferencaUtcHoras(fuso: string): number {
+  if (fuso === "America/Campo_Grande" || fuso === "America/Manaus") {
+    return -4;
+  }
+  return -3;
+}
+
+/**
+ * Converte data e hora locais da base para ISO UTC.
+ * Exemplo: 2026-08-31 07:00 em America/Campo_Grande (-4) -> 2026-08-31T11:00:00.000Z
+ */
+export function converterLocalParaUtc(dataLocal: string, horaLocal: string, fuso: string = "America/Sao_Paulo"): string {
+  const [ano, mes, dia] = dataLocal.split("-").map(Number);
+  const partesHora = horaLocal.split(":").map(Number);
+  const hora = partesHora[0] || 0;
+  const minuto = partesHora[1] || 0;
+  const segundo = partesHora[2] || 0;
+
+  const diffHoras = obterDiferencaUtcHoras(fuso);
+  // Para converter de local para UTC, subtraímos o offset negativo (ou seja, somamos |offset|):
+  // Ex: local = 07:00, diff = -4 => UTC = 07 - (-4) = 11:00
+  const dataMs = Date.UTC(ano, mes - 1, dia, hora - diffHoras, minuto, segundo);
+  return new Date(dataMs).toISOString();
+}
+
+/**
+ * Converte data e hora UTC ISO para data e hora locais da base.
+ */
+export function converterUtcParaLocal(
+  dataHoraUtcIso: string,
+  fuso: string = "America/Sao_Paulo"
+): { dataLocal: string; horaLocal: string } {
+  const d = new Date(dataHoraUtcIso);
+  const diffHoras = obterDiferencaUtcHoras(fuso);
+  // UTC para local: somamos o offset negativo
+  const localMs = d.getTime() + diffHoras * 3600 * 1000;
+  const localDate = new Date(localMs);
+
+  const ano = localDate.getUTCFullYear();
+  const mes = String(localDate.getUTCMonth() + 1).padStart(2, "0");
+  const dia = String(localDate.getUTCDate()).padStart(2, "0");
+  const hora = String(localDate.getUTCHours()).padStart(2, "0");
+  const minuto = String(localDate.getUTCMinutes()).padStart(2, "0");
+
+  return {
+    dataLocal: `${ano}-${mes}-${dia}`,
+    horaLocal: `${hora}:${minuto}`,
+  };
+}
 
 const CHAVE_STORAGE_SECOES = "sgp_mapeamento_secoes_v1";
 const CHAVE_STORAGE_HORARIOS = "sgp_catalogo_horarios_v1";
+
 
 let secoesMemoria: MapeamentoSecao[] = [
   { codigoSecao: "1.01.080.023", descricaoSecao: "UFN-III (Três Lagoas - MS)", unidadeId: "UFN-III", unidadeNome: "UFN III – Três Lagoas/MS", sugeridoAutomaticamente: false, confirmado: true, atualizadoEm: "2026-09-17 10:00", atualizadoPor: "Administrador Premier" },

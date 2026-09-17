@@ -17,6 +17,10 @@ import {
   ConfiguracaoEquivalencias,
   EQUIVALENCIAS_PADRAO,
 } from "./conciliacao-sifac";
+import {
+  MarcacaoPontoOriginal,
+  PendenciaPontoItem,
+} from "./ponto-tipos";
 
 export interface PostoOperacional {
   id: string;
@@ -193,7 +197,7 @@ export interface OcupacaoDiaDetalhada {
 
 export interface LoteImportacaoOperacional {
   id: string; // Ex: "LOTE-RM-20260917-103000"
-  tipo: "FUNCIONARIOS_RM" | "ALOCADOS_SIFAC" | "ABONO_RM";
+  tipo: "FUNCIONARIOS_RM" | "ALOCADOS_SIFAC" | "ABONO_RM" | "REGISTROS_PONTO_RM" | "AFD_PONTO";
   arquivoNome: string;
   hashSha256: string;
   dataReferencia: string;
@@ -223,6 +227,9 @@ export interface EstadoOperacionalCompleto {
   alocadosSifac?: ItemAlocadoSifac[];
   divergenciasConciliacao?: Record<string, DivergenciaConciliacao[]>;
   equivalenciasConciliacao?: ConfiguracaoEquivalencias;
+  marcacoesPonto?: MarcacaoPontoOriginal[];
+  pendenciasPonto?: PendenciaPontoItem[];
+  dataReferenciaPonto?: string;
   perfilAtivo: string;
   unidadeSelecionada: string;
 }
@@ -1256,4 +1263,133 @@ export function salvarAlocadosSifac(
   salvarEstado({ alocadosSifac: listaFinal });
   return { substituiuAnterior: jaExistia, totalGravados: novosAlocados.length };
 }
+
+/**
+ * Salva lote de ponto com gravação em tabela SOMENTE DE INCLUSÃO (sem exclusão de marcações prévias).
+ */
+export function salvarLotePonto(
+  lote: LoteImportacaoOperacional,
+  novasMarcacoes: MarcacaoPontoOriginal[],
+  novasPendencias: PendenciaPontoItem[] = []
+): void {
+  const estado = carregarEstado();
+  const lotesAtuais = estado.lotesImportacao || [];
+  const marcacoesAtuais = estado.marcacoesPonto || [];
+  const pendenciasAtuais = estado.pendenciasPonto || [];
+
+  // Tabela somente de inclusão: adiciona as novas marcações
+  const marcacoesFinal = [...marcacoesAtuais, ...novasMarcacoes];
+
+  // Atualiza pendências (evita duplicar IDs)
+  const idsPendenciasNovas = new Set(novasPendencias.map((p) => p.id));
+  const pendenciasFinal = [
+    ...pendenciasAtuais.filter((p) => !idsPendenciasNovas.has(p.id)),
+    ...novasPendencias,
+  ];
+
+  // Adiciona lote com snapshot do estado anterior para permitir "Desfazer lote"
+  const loteComSnapshot: LoteImportacaoOperacional = {
+    ...lote,
+    snapshotAnterior: { ...estado },
+  };
+
+  const lotesFinal = [...lotesAtuais, loteComSnapshot];
+
+  salvarEstado({
+    lotesImportacao: lotesFinal,
+    marcacoesPonto: marcacoesFinal,
+    pendenciasPonto: pendenciasFinal,
+    dataReferenciaPonto: lote.dataReferencia,
+  });
+}
+
+/**
+ * Retorna as marcações de ponto salvas
+ */
+export function obterMarcacoesPonto(): MarcacaoPontoOriginal[] {
+  const estado = carregarEstado();
+  return estado.marcacoesPonto || [];
+}
+
+/**
+ * Retorna a data de referência mais recente de ponto para o cabeçalho dos painéis
+ */
+export function obterDataReferenciaPonto(): string {
+  const estado = carregarEstado();
+  if (estado.dataReferenciaPonto) return estado.dataReferenciaPonto;
+
+  const lotes = estado.lotesImportacao || [];
+  const lotePonto = lotes
+    .slice()
+    .reverse()
+    .find((l) => (l.tipo === "REGISTROS_PONTO_RM" || l.tipo === "AFD_PONTO") && l.status === "CONCLUIDO");
+
+  return lotePonto ? lotePonto.dataReferencia : "2026-09-15 23:59";
+}
+
+/**
+ * Retorna pendências de ponto
+ */
+export function obterPendenciasPonto(): PendenciaPontoItem[] {
+  const estado = carregarEstado();
+  return estado.pendenciasPonto || [];
+}
+
+/**
+ * Atualiza o status de uma pendência de ponto
+ */
+export function atualizarStatusPendenciaPonto(
+  id: string,
+  novoStatus: "ABERTA" | "VERIFICADA" | "CORRIGIDA_ORIGEM",
+  observacao?: string,
+  usuario: string = "Administrador Premier"
+): boolean {
+  const estado = carregarEstado();
+  const pendencias = estado.pendenciasPonto || [];
+  const index = pendencias.findIndex((p) => p.id === id);
+  if (index === -1) return false;
+
+  const pendenciasAtualizadas = pendencias.map((p, idx) => {
+    if (idx === index) {
+      return {
+        ...p,
+        status: novoStatus,
+        observacao: observacao !== undefined ? observacao : p.observacao,
+        atualizadoPor: usuario,
+        atualizadoEm: new Date().toISOString().replace("T", " ").substring(0, 16),
+      };
+    }
+    return p;
+  });
+
+  salvarEstado({ pendenciasPonto: pendenciasAtualizadas });
+  return true;
+}
+
+/**
+ * Registra uma entrada na trilha de auditoria operacional
+ */
+export function registrarLogAuditoria(
+  acao: string,
+  entidade: string,
+  detalhes: string,
+  usuario: string = "Administrador Premier",
+  perfil: string = "PREMIER_ADMIN"
+): void {
+  const estado = carregarEstado();
+  const novoLog: LogAuditoriaOperacional = {
+    id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    timestamp: new Date().toISOString().replace("T", " ").substring(0, 19),
+    usuario,
+    perfil,
+    acao,
+    entidade,
+    detalhes,
+    ip: "189.120.45.12",
+  };
+  salvarEstado({
+    logsAuditoria: [novoLog, ...(estado.logsAuditoria || [])],
+  });
+}
+
 

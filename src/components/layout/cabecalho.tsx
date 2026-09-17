@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { FileText, Shield, LogOut } from "lucide-react";
+import { FileText, Shield, LogOut, Clock } from "lucide-react";
 import { NOMES_PERFIS } from "@/lib/auth/permissoes";
 import { PerfilUsuario, UsuarioSessao } from "@/lib/auth/tipos";
+import { obterDataReferenciaPonto } from "@/lib/dados/estado-operacional";
 
 interface CabecalhoProps {
   perfilAtivo?: string;
@@ -16,6 +17,7 @@ export function Cabecalho({
   nomeUsuario: propNome,
 }: CabecalhoProps) {
   const [sessao, setSessao] = useState<UsuarioSessao | null>(null);
+  const [dataRefPonto, setDataRefPonto] = useState<string>("2026-09-15 23:59");
 
   useEffect(() => {
     const carregarSessao = async () => {
@@ -34,8 +36,25 @@ export function Cabecalho({
     };
 
     carregarSessao();
-    window.addEventListener("sgp-sessao-alterada", carregarSessao);
-    return () => window.removeEventListener("sgp-sessao-alterada", carregarSessao);
+    try {
+      setDataRefPonto(obterDataReferenciaPonto());
+    } catch {
+      // fallback
+    }
+
+    const handleAtualizacao = () => {
+      carregarSessao();
+      try {
+        setDataRefPonto(obterDataReferenciaPonto());
+      } catch {}
+    };
+
+    window.addEventListener("sgp-sessao-alterada", handleAtualizacao);
+    window.addEventListener("sgp-dados-atualizados", handleAtualizacao);
+    return () => {
+      window.removeEventListener("sgp-sessao-alterada", handleAtualizacao);
+      window.removeEventListener("sgp-dados-atualizados", handleAtualizacao);
+    };
   }, []);
 
   const perfil = (sessao?.perfil || propPerfil || "PREMIER_ADMIN") as PerfilUsuario;
@@ -64,7 +83,7 @@ export function Cabecalho({
   return (
     <header className="sticky top-0 z-50 w-full h-16 bg-white border-b border-[#E3E6EB] shadow-xs select-none">
       <div className="h-full px-4 sm:px-6 flex items-center justify-between gap-4">
-        {/* Esquerda: Ícone de documento + Contrato Petrobras + Número em fonte mono */}
+        {/* Esquerda: Ícone de documento + Contrato Petrobras + Número em fonte mono + Ponto até */}
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-[#F1F3F5] flex items-center justify-center text-[#5B6474]">
             <FileText className="w-4 h-4 text-[#1F4FD1]" />
@@ -75,6 +94,14 @@ export function Cabecalho({
             </span>
             <span className="font-mono font-bold text-xs sm:text-sm text-[#1A2230] tracking-tight mt-0.5 block">
               5900.0129796.25.2
+            </span>
+          </div>
+
+          <div className="hidden md:flex items-center gap-1.5 ml-4 pl-4 border-l border-slate-200 text-xs">
+            <Clock className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-500">Ponto até:</span>
+            <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+              {dataRefPonto}
             </span>
           </div>
         </div>

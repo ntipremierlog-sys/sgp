@@ -75,7 +75,7 @@ export interface LinhaFuncionarioRmProcessada {
 
 export interface ResultadoIdentificacaoRm {
   reconhecido: boolean;
-  tipo: "FUNCIONARIOS_RM" | "ALOCADOS_SIFAC" | "ABONO_RM" | "DESCONHECIDO";
+  tipo: "FUNCIONARIOS_RM" | "ALOCADOS_SIFAC" | "ABONO_RM" | "REGISTROS_PONTO_RM" | "DESCONHECIDO";
   colunasEncontradas: string[];
   colunasObrigatoriasFaltando: string[];
 }
@@ -318,6 +318,22 @@ export function identificarTipoArquivo(cabecalhosBrutos: string[]): ResultadoIde
     return {
       reconhecido: true,
       tipo: "ABONO_RM",
+      colunasEncontradas: cabecalhosBrutos,
+      colunasObrigatoriasFaltando: [],
+    };
+  }
+
+  // 4. Identificar Ponto / Cubo de Registros RM ou RHID
+  const temChapaOuCpf = normalizados.some((c) => c.includes("chapa") || c.includes("cpf"));
+  const temData = normalizados.some((c) => c.includes("data"));
+  const temEnt1OuHora = normalizados.some(
+    (c) => c.includes("ent1") || c.includes("hora") || c.includes("marcacao") || c.includes("batida")
+  );
+
+  if (temChapaOuCpf && temData && temEnt1OuHora) {
+    return {
+      reconhecido: true,
+      tipo: "REGISTROS_PONTO_RM",
       colunasEncontradas: cabecalhosBrutos,
       colunasObrigatoriasFaltando: [],
     };

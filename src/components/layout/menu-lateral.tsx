@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Settings,
   FileCheck,
+  Clock,
 } from "lucide-react";
 import { carregarEstado } from "@/lib/dados/estado-operacional";
 import { can } from "@/lib/auth/permissoes";
@@ -43,6 +44,7 @@ const gruposMenuConfig: GrupoMenu[] = [
     itens: [
       { rotulo: "Painel geral", href: "/painel", icone: LayoutDashboard, recurso: "PAINEL" },
       { rotulo: "Mapa de ocupação", href: "/mapa-ocupacao", icone: CalendarCheck, recurso: "MAPA_OCUPACAO" },
+      { rotulo: "Presença diária", href: "/presenca-diaria", icone: Clock, recurso: "PROFISSIONAIS" },
       { rotulo: "Postos do Anexo 1-A", href: "/postos", icone: Briefcase, recurso: "POSTOS" },
       { rotulo: "Profissionais", href: "/profissionais", icone: Users, recurso: "PROFISSIONAIS" },
       { rotulo: "Ocorrências", href: "/ocorrencias", icone: AlertTriangle, recurso: "OCORRENCIAS" },
@@ -63,10 +65,13 @@ const gruposMenuConfig: GrupoMenu[] = [
     itens: [
       { rotulo: "Importações de dados", href: "/importacoes", icone: UploadCloud, recurso: "IMPORTACOES" },
       { rotulo: "Conciliação SIFAC", href: "/conciliacao-sifac", icone: FileCheck, recurso: "CONCILIACAO_SIFAC" },
+      { rotulo: "Pendências de ponto", href: "/admin/pendencias-ponto", icone: AlertTriangle, recurso: "ADMINISTRACAO" },
+      { rotulo: "Modelos de ponto", href: "/admin/modelos-ponto", icone: Settings, recurso: "ADMINISTRACAO" },
       { rotulo: "Administração", href: "/admin", icone: Settings, recurso: "ADMINISTRACAO", alertaPonto: true },
     ],
   },
 ];
+
 
 export function MenuLateral() {
   const pathname = usePathname();
