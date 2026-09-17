@@ -35,3 +35,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# planilhas de dados locais e sensíveis
+*.xlsx
+*.XLSX
+*.xls
+
+# backups e scratch
+/backups/
+/scratch/

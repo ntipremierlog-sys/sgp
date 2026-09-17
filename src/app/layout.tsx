@@ -44,7 +44,7 @@ export default function RootLayout({
         {/* Corpo Principal com Menu Lateral (240px) e Área de Trabalho (Padding 28px 32px) */}
         <div className="flex-1 flex overflow-hidden">
           <MenuLateral />
-          <main className="flex-1 overflow-y-auto bg-[#F4F5F7] px-6 py-6 md:px-8 md:py-7">
+          <main className="flex-1 overflow-y-auto bg-[#F4F5F7] p-6 md:p-8">
             {children}
           </main>
         </div>

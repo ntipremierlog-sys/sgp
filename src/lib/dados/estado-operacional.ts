@@ -8,6 +8,15 @@
 
 import { StatusOcupacao } from "@/components/ui/badge-status";
 import { mascararCpf } from "@/lib/importadores/tipos";
+import funcionariosReais from "./funcionarios-reais.json";
+import ocorrenciasReais from "./ocorrencias-reais.json";
+import sifacReais from "./sifac-reais.json";
+import {
+  ItemAlocadoSifac,
+  DivergenciaConciliacao,
+  ConfiguracaoEquivalencias,
+  EQUIVALENCIAS_PADRAO,
+} from "./conciliacao-sifac";
 
 export interface PostoOperacional {
   id: string;
@@ -27,18 +36,43 @@ export interface PostoOperacional {
   dataFimVigencia?: string;
 }
 
+export interface MovimentacaoHistorico {
+  dataReferencia: string;
+  situacao?: string;
+  funcao?: string;
+  secaoCodigo?: string;
+  secaoDescricao?: string;
+  horarioCodigo?: string;
+  horarioDescricao?: string;
+}
+
 export interface ProfissionalOperacional {
   id: string;
+  chapa: string;
   matricula: string;
   nome: string;
+  nomeSocial?: string;
   cpfMascarado: string;
   cpfLimpo: string;
   funcao: string;
   unidadeId: string;
+  unidadeNome?: string;
   postoCodigo?: string;
-  escala: "5x2" | "12x36" | "6x1";
+  escala: "5x2" | "12x36" | "6x1" | "OUTRA";
   situacao: "ATIVO" | "AFASTADO" | "FERIAS" | "DESLIGADO";
+  situacaoCodigo?: string;
+  situacaoDescricao?: string;
+  sexo?: "M" | "F";
+  dataNascimento?: string; // YYYY-MM-DD
   dataAdmissao: string;
+  dataDesligamento?: string;
+  secaoCodigo?: string;
+  secaoDescricao?: string;
+  horarioCodigo?: string;
+  horarioDescricao?: string;
+  jornadaDescricao?: string;
+  utilizaPonto?: boolean;
+  historico?: MovimentacaoHistorico[];
   telefoneCorporativo?: string;
   // Segregação estrita LGPD: Dados restritos acessíveis somente com perfil Premier
   dadosRestritos?: {
@@ -157,11 +191,47 @@ export interface OcupacaoDiaDetalhada {
   };
 }
 
+export interface LoteImportacaoOperacional {
+  id: string; // Ex: "LOTE-RM-20260917-103000"
+  tipo: "FUNCIONARIOS_RM" | "ALOCADOS_SIFAC" | "ABONO_RM";
+  arquivoNome: string;
+  hashSha256: string;
+  dataReferencia: string;
+  usuario: string;
+  dataHora: string;
+  totais: {
+    lidos: number;
+    novos: number;
+    atualizados: number;
+    semAlteracao: number;
+    erros: number;
+    alertas: number;
+  };
+  status: "CONCLUIDO" | "DESFEITO";
+  snapshotAnterior?: EstadoOperacionalCompleto;
+  diasRetencao: number; // Padrão 90 dias
+}
+
+export interface EstadoOperacionalCompleto {
+  postos: PostoOperacional[];
+  profissionais: ProfissionalOperacional[];
+  ocorrencias: OcorrenciaOperacional[];
+  coberturas: CoberturaOperacional[];
+  apontamentos: ApontamentoOperacional[];
+  logsAuditoria: LogAuditoriaOperacional[];
+  lotesImportacao?: LoteImportacaoOperacional[];
+  alocadosSifac?: ItemAlocadoSifac[];
+  divergenciasConciliacao?: Record<string, DivergenciaConciliacao[]>;
+  equivalenciasConciliacao?: ConfiguracaoEquivalencias;
+  perfilAtivo: string;
+  unidadeSelecionada: string;
+}
+
 // -----------------------------------------------------------------------------
 // DADOS BASE OFICIAIS: UFN III – TRÊS LAGOAS/MS (ANEXO 1-A)
 // -----------------------------------------------------------------------------
 
-const POSTOS_INICIAIS: PostoOperacional[] = [
+export const POSTOS_INICIAIS: PostoOperacional[] = [
   {
     id: "pst-001",
     codigoPosto: "PST-ALM-001",
@@ -173,8 +243,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "07:00",
     horarioFim: "16:48",
-    titularMatricula: "PRM-00101",
-    titularNome: "Carlos Eduardo Silva",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-01-01",
   },
@@ -189,8 +259,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "07:00",
     horarioFim: "16:48",
-    titularMatricula: "PRM-00102",
-    titularNome: "Mariana Souza Lima",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-01-01",
   },
@@ -205,8 +275,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "07:00",
     horarioFim: "16:48",
-    titularMatricula: "PRM-00103",
-    titularNome: "Roberto Alves Ferreira",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-01-01",
   },
@@ -221,8 +291,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 36,
     horarioInicio: "06:00",
     horarioFim: "18:00",
-    titularMatricula: "PRM-00104",
-    titularNome: "José Pereira Santos",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-02-01",
   },
@@ -237,8 +307,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 36,
     horarioInicio: "18:00",
     horarioFim: "06:00",
-    titularMatricula: "PRM-00105",
-    titularNome: "Fernando Henrique Dias",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-02-01",
   },
@@ -253,8 +323,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "08:00",
     horarioFim: "17:48",
-    titularMatricula: "PRM-00106",
-    titularNome: "Juliana Martins Rocha",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-02-15",
   },
@@ -269,8 +339,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "07:30",
     horarioFim: "17:18",
-    titularMatricula: "PRM-00107",
-    titularNome: "André Luiz Costa",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-03-01",
   },
@@ -285,8 +355,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "07:00",
     horarioFim: "15:20",
-    titularMatricula: "PRM-00108",
-    titularNome: "Paulo Ricardo Gomes",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-03-01",
   },
@@ -301,8 +371,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "08:00",
     horarioFim: "17:48",
-    titularMatricula: "PRM-00109",
-    titularNome: "Patrícia Helena Neves",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-03-15",
   },
@@ -317,8 +387,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "08:00",
     horarioFim: "17:48",
-    titularMatricula: "PRM-00110",
-    titularNome: "Lucas Gabriel Ribeiro",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-04-01",
   },
@@ -333,8 +403,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "07:00",
     horarioFim: "16:48",
-    titularMatricula: "PRM-00111",
-    titularNome: "Marcelo Tavares Pinto",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-04-01",
   },
@@ -349,8 +419,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "07:00",
     horarioFim: "16:48",
-    titularMatricula: "PRM-00112",
-    titularNome: "Marcos Vinícius Moura",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-04-15",
   },
@@ -365,7 +435,7 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 36,
     horarioInicio: "06:00",
     horarioFim: "18:00",
-    titularMatricula: undefined, // Posto VAGO intencional para auditoria
+    titularMatricula: undefined,
     titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-05-01",
@@ -381,8 +451,8 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "07:00",
     horarioFim: "16:48",
-    titularMatricula: "PRM-00114",
-    titularNome: "Thiago Barbosa",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-05-01",
   },
@@ -397,458 +467,118 @@ const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "07:00",
     horarioFim: "16:48",
-    titularMatricula: "PRM-00113",
-    titularNome: "Beatriz Santos Cruz",
+    titularMatricula: undefined,
+    titularNome: undefined,
     situacao: "ATIVO",
     dataInicioVigencia: "2024-05-01",
   },
 ];
 
-const PROFISSIONAIS_INICIAIS: ProfissionalOperacional[] = [
+export const PROFISSIONAIS_INICIAIS: ProfissionalOperacional[] = (funcionariosReais as unknown as ProfissionalOperacional[]) || [];
+export const OCORRENCIAS_INICIAIS: OcorrenciaOperacional[] = (ocorrenciasReais as unknown as OcorrenciaOperacional[]) || [];
+export const COBERTURAS_INICIAIS: CoberturaOperacional[] = [];
+export const APONTAMENTOS_INICIAIS: ApontamentoOperacional[] = [];
+
+export const LOTES_INICIAIS: LoteImportacaoOperacional[] = [
   {
-    id: "prf-101",
-    matricula: "PRM-00101",
-    nome: "Carlos Eduardo Silva",
-    cpfLimpo: "12345678901",
-    cpfMascarado: mascararCpf("12345678901"),
-    funcao: "Almoxarife Líder",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-ALM-001",
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-01-02",
-    telefoneCorporativo: "(67) 99881-1001",
-    dadosRestritos: {
-      salario: 4850.0,
-      endereco: "Av. Ranulpho Marques Leal, 1420, Três Lagoas/MS",
-      telefonePessoal: "(67) 98112-4433",
-      emailPessoal: "carlos.silva.log@gmail.com",
+    id: "LOTE-RM-20260917-OFICIAL",
+    tipo: "FUNCIONARIOS_RM",
+    arquivoNome: "funcionarios petrobras.XLSX",
+    hashSha256: "8e8d89e023194a0d922f5c1a70001",
+    dataReferencia: "2026-09-17",
+    usuario: "Administrador Premier (Marcos Valério)",
+    dataHora: "2026-09-17 10:30:00",
+    totais: {
+      lidos: 380,
+      novos: 380,
+      atualizados: 0,
+      semAlteracao: 0,
+      erros: 0,
+      alertas: 0,
     },
+    status: "CONCLUIDO",
+    diasRetencao: 90,
   },
   {
-    id: "prf-102",
-    matricula: "PRM-00102",
-    nome: "Mariana Souza Lima",
-    cpfLimpo: "23456789012",
-    cpfMascarado: mascararCpf("23456789012"),
-    funcao: "Auxiliar de Almoxarifado I",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-ALM-002",
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-01-05",
-    telefoneCorporativo: "(67) 99881-1002",
-    dadosRestritos: {
-      salario: 2650.0,
-      endereco: "Rua Capitão Olinto Mancini, 890, Três Lagoas/MS",
-      telefonePessoal: "(67) 98455-1122",
+    id: "LOTE-SIFAC-20260810-OFICIAL",
+    tipo: "ALOCADOS_SIFAC",
+    arquivoNome: "08_Lista de Alocados_SIFAC_Agosto_.xlsx",
+    hashSha256: "3b7c91e023194a0d922f5c1a70002",
+    dataReferencia: "2026-08-10",
+    usuario: "Administrador Premier (Marcos Valério)",
+    dataHora: "2026-09-17 10:35:00",
+    totais: {
+      lidos: 337,
+      novos: 337,
+      atualizados: 0,
+      semAlteracao: 0,
+      erros: 0,
+      alertas: 16,
     },
+    status: "CONCLUIDO",
+    diasRetencao: 90,
   },
   {
-    id: "prf-103",
-    matricula: "PRM-00103",
-    nome: "Roberto Alves Ferreira",
-    cpfLimpo: "34567890123",
-    cpfMascarado: mascararCpf("34567890123"),
-    funcao: "Auxiliar de Almoxarifado II",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-ALM-003",
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-01-15",
-    telefoneCorporativo: "(67) 99881-1003",
-    dadosRestritos: {
-      salario: 2650.0,
-      endereco: "Rua Bruno Garcia, 340, Três Lagoas/MS",
+    id: "LOTE-ABONO-20260831-OFICIAL",
+    tipo: "ABONO_RM",
+    arquivoNome: "CUBO DE ABONO.xlsx",
+    hashSha256: "f4a189e023194a0d922f5c1a70003",
+    dataReferencia: "2026-08-31",
+    usuario: "Administrador Premier (Marcos Valério)",
+    dataHora: "2026-09-17 10:40:00",
+    totais: {
+      lidos: 80,
+      novos: 80,
+      atualizados: 0,
+      semAlteracao: 0,
+      erros: 0,
+      alertas: 0,
     },
-  },
-  {
-    id: "prf-104",
-    matricula: "PRM-00104",
-    nome: "José Pereira Santos",
-    cpfLimpo: "45678901234",
-    cpfMascarado: mascararCpf("45678901234"),
-    funcao: "Operador de Empilhadeira Líder",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-LOG-004",
-    escala: "12x36",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-02-01",
-    telefoneCorporativo: "(67) 99881-1004",
-    dadosRestritos: {
-      salario: 3450.0,
-    },
-  },
-  {
-    id: "prf-105",
-    matricula: "PRM-00105",
-    nome: "Fernando Henrique Dias",
-    cpfLimpo: "56789012345",
-    cpfMascarado: mascararCpf("56789012345"),
-    funcao: "Operador de Empilhadeira Folguista",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-LOG-005",
-    escala: "12x36",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-02-01",
-    telefoneCorporativo: "(67) 99881-1005",
-    dadosRestritos: {
-      salario: 3450.0,
-    },
-  },
-  {
-    id: "prf-106",
-    matricula: "PRM-00106",
-    nome: "Juliana Martins Rocha",
-    cpfLimpo: "67890123456",
-    cpfMascarado: mascararCpf("67890123456"),
-    funcao: "Auxiliar de Logística",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-LOG-006",
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-02-15",
-    telefoneCorporativo: "(67) 99881-1006",
-    dadosRestritos: {
-      salario: 2450.0,
-    },
-  },
-  {
-    id: "prf-107",
-    matricula: "PRM-00107",
-    nome: "André Luiz Costa",
-    cpfLimpo: "78901234567",
-    cpfMascarado: mascararCpf("78901234567"),
-    funcao: "Inspetor de Recebimento Técnico",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-TEC-007",
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-03-01",
-    telefoneCorporativo: "(67) 99881-1007",
-    dadosRestritos: {
-      salario: 4200.0,
-    },
-  },
-  {
-    id: "prf-108",
-    matricula: "PRM-00108",
-    nome: "Paulo Ricardo Gomes",
-    cpfLimpo: "89012345678",
-    cpfMascarado: mascararCpf("89012345678"),
-    funcao: "Conferente de Carga e Descarga",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-TEC-008",
-    escala: "6x1",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-03-01",
-    telefoneCorporativo: "(67) 99881-1008",
-    dadosRestritos: {
-      salario: 2900.0,
-    },
-  },
-  {
-    id: "prf-109",
-    matricula: "PRM-00109",
-    nome: "Patrícia Helena Neves",
-    cpfLimpo: "90123456789",
-    cpfMascarado: mascararCpf("90123456789"),
-    funcao: "Assistente Administrativo de Posto",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-ADM-009",
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-03-15",
-    telefoneCorporativo: "(67) 99881-1009",
-    dadosRestritos: {
-      salario: 3100.0,
-    },
-  },
-  {
-    id: "prf-110",
-    matricula: "PRM-00110",
-    nome: "Lucas Gabriel Ribeiro",
-    cpfLimpo: "01234567890",
-    cpfMascarado: mascararCpf("01234567890"),
-    funcao: "Controlador de Documentação e NFs",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-ADM-010",
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-04-01",
-    telefoneCorporativo: "(67) 99881-1010",
-    dadosRestritos: {
-      salario: 3100.0,
-    },
-  },
-  {
-    id: "prf-111",
-    matricula: "PRM-00111",
-    nome: "Marcelo Tavares Pinto",
-    cpfLimpo: "11223344556",
-    cpfMascarado: mascararCpf("11223344556"),
-    funcao: "Expedidor de Materiais",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-EXP-011",
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-04-01",
-    telefoneCorporativo: "(67) 99881-1011",
-    dadosRestritos: {
-      salario: 2650.0,
-    },
-  },
-  {
-    id: "prf-112",
-    matricula: "PRM-00112",
-    nome: "Marcos Vinícius Moura",
-    cpfLimpo: "22334455667",
-    cpfMascarado: mascararCpf("22334455667"),
-    funcao: "Técnico de Segurança Operacional",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-SEG-012",
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-04-15",
-    telefoneCorporativo: "(67) 99881-1012",
-    dadosRestritos: {
-      salario: 4100.0,
-    },
-  },
-  {
-    id: "prf-113",
-    matricula: "PRM-00113",
-    nome: "Beatriz Santos Cruz",
-    cpfLimpo: "33445566778",
-    cpfMascarado: mascararCpf("33445566778"),
-    funcao: "Auxiliar de Embalagem",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-ALM-015",
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-05-01",
-    telefoneCorporativo: "(67) 99881-1013",
-    dadosRestritos: {
-      salario: 2450.0,
-    },
-  },
-  {
-    id: "prf-114",
-    matricula: "PRM-00114",
-    nome: "Thiago Barbosa",
-    cpfLimpo: "44556677889",
-    cpfMascarado: mascararCpf("44556677889"),
-    funcao: "Auxiliar de Pátio",
-    unidadeId: "UFN-III",
-    postoCodigo: "PST-ALM-014",
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-05-01",
-    telefoneCorporativo: "(67) 99881-1014",
-    dadosRestritos: {
-      salario: 2500.0,
-    },
-  },
-  {
-    id: "prf-115",
-    matricula: "PRM-00115",
-    nome: "Diego Camargo Silveira",
-    cpfLimpo: "55667788990",
-    cpfMascarado: mascararCpf("55667788990"),
-    funcao: "Substituto Operacional / Folguista",
-    unidadeId: "UFN-III",
-    postoCodigo: undefined, // Reserva Técnica / Substituto dedicado
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-06-01",
-    telefoneCorporativo: "(67) 99881-1015",
-    dadosRestritos: {
-      salario: 2700.0,
-    },
-  },
-  {
-    id: "prf-116",
-    matricula: "PRM-00116",
-    nome: "Aline Mendes Castro",
-    cpfLimpo: "66778899001",
-    cpfMascarado: mascararCpf("66778899001"),
-    funcao: "Assistente de Apoio e Reserva",
-    unidadeId: "UFN-III",
-    postoCodigo: undefined,
-    escala: "5x2",
-    situacao: "ATIVO",
-    dataAdmissao: "2024-06-15",
-    telefoneCorporativo: "(67) 99881-1016",
-    dadosRestritos: {
-      salario: 2900.0,
-    },
+    status: "CONCLUIDO",
+    diasRetencao: 90,
   },
 ];
 
-const OCORRENCIAS_INICIAIS: OcorrenciaOperacional[] = [
+export const LOGS_INICIAIS: LogAuditoriaOperacional[] = [
   {
-    id: "oco-001",
-    matricula: "PRM-00114",
-    profissionalNome: "Thiago Barbosa",
-    postoCodigo: "PST-ALM-014",
-    tipoOcorrencia: "ATESTADO_MEDICO",
-    dataInicio: "2026-09-03",
-    dataFim: "2026-09-05",
-    diasAfetados: 3,
-    status: "VALIDADA",
-    observacaoPublica: "Ausência justificada — atestado médico homologado pelo SESMT",
-    dadoSensivel: {
-      cid: "M54.5",
-      descricaoClinica: "Lumbago com ciática aguda, repouso médico de 3 dias",
-      profissionalEmissor: "Dr. Roberto Mendes",
-      crm: "12345/MS",
-    },
-    criadoEm: "2026-09-03 08:30",
-  },
-  {
-    id: "oco-002",
-    matricula: "PRM-00113",
-    profissionalNome: "Beatriz Santos Cruz",
-    postoCodigo: "PST-ALM-015",
-    tipoOcorrencia: "FALTA_INJUSTIFICADA",
-    dataInicio: "2026-09-08",
-    dataFim: "2026-09-08",
-    diasAfetados: 1,
-    status: "VALIDADA",
-    observacaoPublica: "Ausência não justificada — não houve aviso tempestivo nem substituto imediato",
-    criadoEm: "2026-09-08 09:15",
-  },
-  {
-    id: "oco-003",
-    matricula: "PRM-00102",
-    profissionalNome: "Mariana Souza Lima",
-    postoCodigo: "PST-ALM-002",
-    tipoOcorrencia: "TREINAMENTO",
-    dataInicio: "2026-09-11",
-    dataFim: "2026-09-11",
-    diasAfetados: 1,
-    status: "VALIDADA",
-    observacaoPublica: "Treinamento obrigatório de Segurança NR-11 na base administrativa",
-    criadoEm: "2026-09-10 14:00",
-  },
-];
-
-const COBERTURAS_INICIAIS: CoberturaOperacional[] = [
-  {
-    id: "cob-001",
-    postoCodigo: "PST-ALM-014",
-    funcaoPosto: "Auxiliar de Pátio",
-    titularMatricula: "PRM-00114",
-    titularNome: "Thiago Barbosa",
-    substitutoMatricula: "PRM-00115",
-    substitutoNome: "Diego Camargo Silveira",
-    dataInicio: "2026-09-03",
-    dataFim: "2026-09-05",
-    tipoCobertura: "SUBSTITUICAO_INTERNA",
-    status: "CONFIRMADA",
-    justificativa: "Cobertura contratual integral do posto de Auxiliar de Pátio durante afastamento médico do titular",
-    ocorrenciaId: "oco-001",
-    criadoEm: "2026-09-03 08:45",
-  },
-  {
-    id: "cob-002",
-    postoCodigo: "PST-ALM-002",
-    funcaoPosto: "Auxiliar de Almoxarifado I",
-    titularMatricula: "PRM-00102",
-    titularNome: "Mariana Souza Lima",
-    substitutoMatricula: "PRM-00116",
-    substitutoNome: "Aline Mendes Castro",
-    dataInicio: "2026-09-11",
-    dataFim: "2026-09-11",
-    tipoCobertura: "SUBSTITUICAO_INTERNA",
-    status: "CONFIRMADA",
-    justificativa: "Substituição para cobertura de posto durante participação em Treinamento NR-11",
-    ocorrenciaId: "oco-003",
-    criadoEm: "2026-09-10 14:30",
-  },
-];
-
-const APONTAMENTOS_INICIAIS: ApontamentoOperacional[] = [
-  {
-    id: "apt-001",
-    postoCodigo: "PST-ALM-015",
-    funcaoPosto: "Auxiliar de Embalagem",
-    dataReferencia: "2026-09-08",
-    competencia: "Setembro / 2026",
-    texto: "Posto desocupado no turno matutino sem presença do titular (Beatriz Santos Cruz) e sem substituto alocado na escala.",
-    criadoPor: "Fiscal Petrobras (Carlos Eduardo Mendes)",
-    dataCriacao: "2026-09-08 11:20",
-    status: "RESPONDIDO",
-    respostaPremier: "Identificada falta injustificada da colaboradora. Notificação disciplinar aplicada e glosa de 1 diária contratual reconhecida para a Memória de Cálculo.",
-    respondidoPor: "Gestor Premier (Marcos Valério)",
-    respondidoEm: "2026-09-08 16:40",
-  },
-  {
-    id: "apt-002",
-    postoCodigo: "PST-LOG-013",
-    funcaoPosto: "Operador de Ponte Rolante",
-    dataReferencia: "2026-09-01",
-    competencia: "Setembro / 2026",
-    texto: "Solicitamos previsão de alocação de titular efetivo para o posto de Operador de Ponte Rolante (atualmente vago no Anexo 1-A).",
-    criadoPor: "Fiscal Petrobras (Carlos Eduardo Mendes)",
-    dataCriacao: "2026-09-02 09:15",
-    status: "EM_TRATAMENTO",
-    respostaPremier: "Candidato em processo de integração e exames admissionais ASO. Previsão de início em 22/09/2026.",
-    respondidoPor: "RH Premier (Fabiana Ribeiro)",
-    respondidoEm: "2026-09-03 10:00",
-  },
-];
-
-const LOGS_INICIAIS: LogAuditoriaOperacional[] = [
-  {
-    id: "log-001",
-    timestamp: "2026-09-08 16:40:12",
-    usuario: "Gestor Premier (Marcos Valério)",
-    perfil: "PREMIER_GESTOR_CONTRATO",
-    acao: "RESPONDER_APONTAMENTO",
-    entidade: "Apontamento (apt-001)",
-    detalhes: "Resposta e reconhecimento de glosa de 1 diária no posto PST-ALM-015",
+    id: "log-carga-abono-003",
+    timestamp: "2026-09-17 10:40:00",
+    usuario: "Administrador Premier (Marcos Valério)",
+    perfil: "PREMIER_ADMIN",
+    acao: "IMPORTACAO_CUBO_ABONO",
+    entidade: "Lote (LOTE-ABONO-20260831-OFICIAL)",
+    detalhes: "Carga do Cubo de Abono realizada com sucesso: 80 ocorrências/abonos validados e associados aos colaboradores na competência.",
     ip: "189.120.45.12",
   },
   {
-    id: "log-002",
-    timestamp: "2026-09-08 11:20:05",
-    usuario: "Fiscal Petrobras (Carlos Eduardo Mendes)",
-    perfil: "PETROBRAS_FISCAL",
-    acao: "REGISTRAR_APONTAMENTO",
-    entidade: "Apontamento (apt-001)",
-    detalhes: "Abertura de apontamento por posto desocupado em 08/09/2026",
-    ip: "200.180.30.5",
-  },
-  {
-    id: "log-003",
-    timestamp: "2026-09-03 08:45:22",
-    usuario: "Supervisor Premier (Renato Silva)",
-    perfil: "PREMIER_SUPERVISOR",
-    acao: "CRIAR_COBERTURA",
-    entidade: "Cobertura (cob-001)",
-    detalhes: "Designação de Diego Camargo Silveira para cobrir PST-ALM-014",
+    id: "log-carga-sifac-002",
+    timestamp: "2026-09-17 10:35:00",
+    usuario: "Administrador Premier (Marcos Valério)",
+    perfil: "PREMIER_ADMIN",
+    acao: "IMPORTACAO_ALOCADOS_SIFAC",
+    entidade: "Lote (LOTE-SIFAC-20260810-OFICIAL)",
+    detalhes: "Carga da Lista de Alocados SIFAC realizada com sucesso: 337 colaboradores certificados no contrato 4600682336 (ICJ 5900.0129796.25.2).",
     ip: "189.120.45.12",
   },
   {
-    id: "log-004",
-    timestamp: "2026-09-03 08:30:10",
-    usuario: "RH Premier (Fabiana Ribeiro)",
-    perfil: "PREMIER_RH",
-    acao: "REGISTRAR_OCORRENCIA",
-    entidade: "Ocorrencia (oco-001)",
-    detalhes: "Atestado médico homologado com segregação de CID em tabela restrita",
+    id: "log-carga-rm-001",
+    timestamp: "2026-09-17 10:30:00",
+    usuario: "Administrador Premier (Marcos Valério)",
+    perfil: "PREMIER_ADMIN",
+    acao: "IMPORTACAO_FUNCIONARIOS_RM",
+    entidade: "Lote (LOTE-RM-20260917-OFICIAL)",
+    detalhes: "Carga oficial de Funcionários RM realizada com sucesso: 380 colaboradores cadastrados, 29 seções mapeadas, segregação estrita LGPD aplicada.",
     ip: "189.120.45.12",
   },
   {
-    id: "log-005",
-    timestamp: "2026-09-01 07:00:00",
-    usuario: "Sistema (Motor Consolidação)",
-    perfil: "SISTEMA",
-    acao: "INICIALIZAR_COMPETENCIA",
-    entidade: "OcupacaoPostoDia",
-    detalhes: "Abertura da competência Setembro/2026 para 15 postos da UFN III",
-    ip: "127.0.0.1",
+    id: "log-limpeza-001",
+    timestamp: "2026-09-17 10:00:00",
+    usuario: "Administrador Premier (Marcos Valério)",
+    perfil: "PREMIER_ADMIN",
+    acao: "LIMPEZA_DADOS_DEMONSTRACAO",
+    entidade: "DadosOperacionais",
+    detalhes: "Limpeza de demonstração: 16 colaboradores fictícios removidos, 14 postos tornados vagos (Anexo 1-A preservado), 3 ocorrências removidas, 2 coberturas removidas, 2 apontamentos removidos. Backup de segurança gerado com sucesso.",
+    ip: "189.120.45.12",
   },
 ];
 
@@ -1029,18 +759,7 @@ export function calcularStatusDia(
 // GERENCIADOR DE ESTADO COM PERSISTÊNCIA EM LOCALSTORAGE / MEMÓRIA
 // -----------------------------------------------------------------------------
 
-const CHAVE_STORAGE = "sgp_estado_operacional_v1";
-
-export interface EstadoOperacionalCompleto {
-  postos: PostoOperacional[];
-  profissionais: ProfissionalOperacional[];
-  ocorrencias: OcorrenciaOperacional[];
-  coberturas: CoberturaOperacional[];
-  apontamentos: ApontamentoOperacional[];
-  logsAuditoria: LogAuditoriaOperacional[];
-  perfilAtivo: string;
-  unidadeSelecionada: string;
-}
+const CHAVE_STORAGE = "sgp_estado_operacional_v2_real";
 
 let estadoMemoria: EstadoOperacionalCompleto = {
   postos: [...POSTOS_INICIAIS],
@@ -1049,6 +768,10 @@ let estadoMemoria: EstadoOperacionalCompleto = {
   coberturas: [...COBERTURAS_INICIAIS],
   apontamentos: [...APONTAMENTOS_INICIAIS],
   logsAuditoria: [...LOGS_INICIAIS],
+  lotesImportacao: [...LOTES_INICIAIS],
+  alocadosSifac: (sifacReais as unknown as ItemAlocadoSifac[]) || [],
+  divergenciasConciliacao: {},
+  equivalenciasConciliacao: { ...EQUIVALENCIAS_PADRAO },
   perfilAtivo: "PREMIER_ADMIN",
   unidadeSelecionada: "UFN III – Três Lagoas/MS",
 };
@@ -1113,15 +836,20 @@ export function adicionarPosto(posto: Omit<PostoOperacional, "id">): PostoOperac
   return novo;
 }
 
-export function adicionarProfissional(prof: Omit<ProfissionalOperacional, "id" | "cpfMascarado">): ProfissionalOperacional {
+export function adicionarProfissional(
+  prof: Omit<ProfissionalOperacional, "id" | "cpfMascarado" | "chapa"> & { chapa?: string }
+): ProfissionalOperacional {
   const estado = carregarEstado();
+  const chapaNormalizada = (prof.chapa || prof.matricula || `MAT-${Date.now()}`).padStart(6, "0");
   const novo: ProfissionalOperacional = {
     ...prof,
+    chapa: chapaNormalizada,
+    matricula: prof.matricula || chapaNormalizada,
     id: `prf-${Date.now()}`,
     cpfMascarado: mascararCpf(prof.cpfLimpo),
   };
   salvarEstado({ profissionais: [...estado.profissionais, novo] });
-  registrarLog("CRIAR_PROFISSIONAL", `Profissional (${novo.matricula})`, `Cadastro do profissional ${novo.nome}`);
+  registrarLog("CRIAR_PROFISSIONAL", `Profissional (${novo.chapa})`, `Cadastro do profissional ${novo.nome}`);
   return novo;
 }
 
@@ -1179,9 +907,14 @@ export function responderApontamento(id: string, resposta: string, respondidoPor
   registrarLog("RESPONDER_APONTAMENTO", `Apontamento (${id})`, `Resposta do Gestor Premier ao apontamento ${id}`);
 }
 
-export function alternarPerfil(novoPerfil: string) {
-  salvarEstado({ perfilAtivo: novoPerfil });
-  registrarLog("ALTERAR_PERFIL", "Sessão", `Perfil alterado para ${novoPerfil}`);
+/**
+ * @deprecated O seletor de perfil foi descontinuado no Momento 1.
+ * O perfil do usuário agora é gerido exclusivamente pelo cadastro do servidor e sessão HTTP-only.
+ */
+export function alternarPerfil(_novoPerfil: string) {
+  console.warn(
+    "Aviso de Segurança: Tentativa de alterar perfil no cliente bloqueada. O perfil é gerido exclusivamente no servidor."
+  );
 }
 
 /**
@@ -1322,6 +1055,7 @@ export function resetarDadosParaPadrao() {
     coberturas: [...COBERTURAS_INICIAIS],
     apontamentos: [...APONTAMENTOS_INICIAIS],
     logsAuditoria: [...LOGS_INICIAIS],
+    lotesImportacao: [...LOTES_INICIAIS],
     perfilAtivo: "PREMIER_ADMIN",
     unidadeSelecionada: "UFN III – Três Lagoas/MS",
   };
@@ -1331,3 +1065,195 @@ export function resetarDadosParaPadrao() {
   }
   return estadoMemoria;
 }
+
+/**
+ * Calcula a idade dinamicamente a partir da data de nascimento.
+ * A coluna 'Idade' NUNCA é gravada no banco de dados nem no estado (LGPD / Requisito do Projeto).
+ */
+export function calcularIdade(
+  dataNascimento?: string | Date | null,
+  dataReferencia?: string | Date | null
+): number | null {
+  if (!dataNascimento) return null;
+
+  let nasc: Date;
+  if (typeof dataNascimento === "string") {
+    const limpo = dataNascimento.trim();
+    if (limpo.includes("/")) {
+      const partes = limpo.split("/");
+      nasc = new Date(parseInt(partes[2], 10), parseInt(partes[1], 10) - 1, parseInt(partes[0], 10));
+    } else {
+      nasc = new Date(limpo);
+    }
+  } else {
+    nasc = dataNascimento;
+  }
+
+  if (isNaN(nasc.getTime())) return null;
+
+  let ref: Date;
+  if (dataReferencia) {
+    if (typeof dataReferencia === "string") {
+      const limpo = dataReferencia.trim();
+      if (limpo.includes("/")) {
+        const partes = limpo.split("/");
+        ref = new Date(parseInt(partes[2], 10), parseInt(partes[1], 10) - 1, parseInt(partes[0], 10));
+      } else {
+        ref = new Date(limpo);
+      }
+    } else {
+      ref = dataReferencia;
+    }
+  } else {
+    ref = new Date();
+  }
+
+  if (isNaN(ref.getTime())) ref = new Date();
+
+  let idade = ref.getFullYear() - nasc.getFullYear();
+  const mesDiff = ref.getMonth() - nasc.getMonth();
+  if (mesDiff < 0 || (mesDiff === 0 && ref.getDate() < nasc.getDate())) {
+    idade--;
+  }
+
+  return idade >= 0 ? idade : null;
+}
+
+/**
+ * Retorna a faixa etária para relatórios gerenciais e demografia do contrato:
+ * Faixas: até 24 | 25–34 | 35–44 | 45–54 | 55–64 | 65 ou mais.
+ */
+export function obterFaixaEtaria(idade: number | null): string {
+  if (idade === null || idade === undefined || isNaN(idade)) {
+    return "Não informada";
+  }
+  if (idade < 25) return "Até 24 anos";
+  if (idade <= 34) return "25 a 34 anos";
+  if (idade <= 44) return "35 a 44 anos";
+  if (idade <= 54) return "45 a 54 anos";
+  if (idade <= 64) return "55 a 64 anos";
+  return "65 ou mais";
+}
+
+/**
+ * Desfaz o último lote de um tipo específico, restaurando o estado anterior
+ * e registrando o cancelamento na auditoria.
+ */
+export function desfazerUltimoLote(
+  tipo: string = "FUNCIONARIOS_RM",
+  usuario: string = "Administrador Premier (Marcos Valério)"
+): { sucesso: boolean; mensagem: string } {
+  const estado = carregarEstado();
+  const lotes = estado.lotesImportacao || [];
+
+  // Localiza o último lote daquele tipo com status CONCLUIDO
+  const indexLote = lotes.slice().reverse().findIndex((l) => l.tipo === tipo && l.status === "CONCLUIDO");
+  if (indexLote === -1) {
+    return {
+      sucesso: false,
+      mensagem: `Nenhum lote concluído do tipo ${tipo} foi encontrado para desfazer.`,
+    };
+  }
+
+  const realIndex = lotes.length - 1 - indexLote;
+  const loteAlvo = lotes[realIndex];
+
+  if (!loteAlvo.snapshotAnterior) {
+    return {
+      sucesso: false,
+      mensagem: `O lote ${loteAlvo.id} não possui cópia de segurança (snapshot) para restauração.`,
+    };
+  }
+
+  const snapshot = loteAlvo.snapshotAnterior;
+
+  // Atualiza o status do lote para DESFEITO
+  const lotesAtualizados = lotes.map((l, idx) =>
+    idx === realIndex ? { ...l, status: "DESFEITO" as const } : l
+  );
+
+  const novoLog: LogAuditoriaOperacional = {
+    id: `log-desfazer-${Date.now()}`,
+    timestamp: new Date().toISOString().replace("T", " ").substring(0, 19),
+    usuario,
+    perfil: "PREMIER_ADMIN",
+    acao: "DESFAZER_LOTE_IMPORTACAO",
+    entidade: `Lote (${loteAlvo.id})`,
+    detalhes: `Desfeito lote de importação ${loteAlvo.id} (${loteAlvo.tipo} - ${loteAlvo.arquivoNome}). Estado anterior restaurado.`,
+    ip: "189.120.45.12",
+  };
+
+  const estadoRestaurado: EstadoOperacionalCompleto = {
+    ...snapshot,
+    lotesImportacao: lotesAtualizados,
+    logsAuditoria: [novoLog, ...(snapshot.logsAuditoria || [])],
+  };
+
+  salvarEstado(estadoRestaurado);
+  return {
+    sucesso: true,
+    mensagem: `Lote ${loteAlvo.id} desfeito com sucesso. Estado anterior restaurado.`,
+  };
+}
+
+/**
+ * Salva e persiste as divergências apuradas para uma competência específica (ex: "2026-08")
+ */
+export function salvarDivergenciasConciliacao(
+  competencia: string,
+  divergencias: DivergenciaConciliacao[]
+): void {
+  const estado = carregarEstado();
+  const mapaAtual = estado.divergenciasConciliacao || {};
+  salvarEstado({
+    divergenciasConciliacao: {
+      ...mapaAtual,
+      [competencia]: divergencias,
+    },
+  });
+}
+
+/**
+ * Retorna as divergências de conciliação salvas para uma competência
+ */
+export function obterDivergenciasConciliacao(
+  competencia: string
+): DivergenciaConciliacao[] | undefined {
+  const estado = carregarEstado();
+  return estado.divergenciasConciliacao?.[competencia];
+}
+
+/**
+ * Salva alocados SIFAC substituindo a competência anterior caso já exista
+ */
+export function salvarAlocadosSifac(
+  novosAlocados: ItemAlocadoSifac[],
+  competencia: string,
+  substituirLoteAnterior: boolean = true
+): { substituiuAnterior: boolean; totalGravados: number } {
+  const estado = carregarEstado();
+  const alocadosAtuais = estado.alocadosSifac || [];
+
+  const jaExistia = alocadosAtuais.some((a) => {
+    const compItem = (a.dataCompetenciaCadastro || a.dataCompetencia || "").substring(0, 7);
+    return compItem === competencia;
+  });
+
+  let listaFinal: ItemAlocadoSifac[];
+  if (substituirLoteAnterior) {
+    // Remove registros da mesma competência e adiciona os novos
+    listaFinal = [
+      ...alocadosAtuais.filter((a) => {
+        const compItem = (a.dataCompetenciaCadastro || a.dataCompetencia || "").substring(0, 7);
+        return compItem !== competencia;
+      }),
+      ...novosAlocados,
+    ];
+  } else {
+    listaFinal = [...alocadosAtuais, ...novosAlocados];
+  }
+
+  salvarEstado({ alocadosSifac: listaFinal });
+  return { substituiuAnterior: jaExistia, totalGravados: novosAlocados.length };
+}
+

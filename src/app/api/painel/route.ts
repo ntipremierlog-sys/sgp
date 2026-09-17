@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { obterOcupacaoConsolidada } from "@/lib/servicos/adaptador-painel";
 import { registrarLog } from "@/lib/dados/estado-operacional";
+import { obterSessaoServidor } from "@/lib/auth/sessao";
+import { usuarioTemAcessoBase } from "@/lib/auth/permissoes";
 
 export const dynamic = "force-dynamic";
 
@@ -12,14 +14,24 @@ export async function GET(request: NextRequest) {
     const dataHoje = searchParams.get("dataHoje") || "2026-09-16";
     const parametroAusente = searchParams.get("parametroAusente") === "true";
 
-    // Perfil via Header, Query ou Cookie
-    const perfilHeader = request.headers.get("x-perfil-usuario");
-    const perfilParam = searchParams.get("perfil");
-    const perfil = (perfilHeader || perfilParam || "PREMIER_GESTOR").toUpperCase();
+    // Perfil obtido EXCLUSIVAMENTE da sessão autenticada no servidor
+    const usuarioSessao = await obterSessaoServidor();
+    const perfil = usuarioSessao ? usuarioSessao.perfil : "PREMIER_GESTOR";
+
+    // Vínculo territorial de bases: se o usuário tiver restrição de base, aplica o escopo
+    let baseEfetiva = baseId === "TODAS" ? undefined : baseId;
+    if (usuarioSessao && !usuarioSessao.basesVinculadas.includes("TODAS")) {
+      // Se solicitou uma base para a qual não tem acesso, limita à primeira base autorizada
+      if (baseEfetiva && !usuarioTemAcessoBase(usuarioSessao, baseEfetiva)) {
+        baseEfetiva = usuarioSessao.basesVinculadas[0];
+      } else if (!baseEfetiva) {
+        baseEfetiva = usuarioSessao.basesVinculadas[0];
+      }
+    }
 
     // Executa o cálculo centralizado
     const resultado = obterOcupacaoConsolidada(undefined, {
-      baseId: baseId === "TODAS" ? undefined : baseId,
+      baseId: baseEfetiva,
       competencia,
       dataHoje,
       perfilUsuario: perfil,
@@ -33,7 +45,9 @@ export async function GET(request: NextRequest) {
       // 1. Omissão estrita de Glosa Estimada no backend (não trafega para o client)
       resultado.glosaEstimada = {
         valorTotal: null,
+        valorTotalFormatado: "—",
         status: "OMITIDO_LGPD",
+        statusPostoVago: "DEFINIDO",
         fatorGlosa: null,
         textoApoio: "Omitido para o perfil de fiscalização Petrobras",
         formulaExplicativa:

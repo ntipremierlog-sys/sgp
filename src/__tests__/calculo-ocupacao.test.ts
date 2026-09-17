@@ -241,7 +241,9 @@ describe("Suíte de Testes Obrigatórios do Motor de Ocupação e Painel Geral (
   });
 
   // 6. Cenário de regressão: 15 postos em UFN-III, 1 posto vago (PST-LOG-013), conciliação exata
-  it("Cenário 6 (Regressão): 15 postos de UFN-III, 1 posto vago hoje -> Coerência 100% entre cards, selo e barra", () => {
+  it("Cenário 6 (Regressão): 15 postos de UFN-III, 1 posto vago hoje -> Coerência 100% entre cards, selo e barra", async () => {
+    const { semearDadosDemoParaTeste } = await import("../lib/dados/limpeza-dados-demo");
+    semearDadosDemoParaTeste();
     const resultado = obterOcupacaoConsolidada(undefined, {
       baseId: "UFN-III",
       dataHoje: "2026-09-16",

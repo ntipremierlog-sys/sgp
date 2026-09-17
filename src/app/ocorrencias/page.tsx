@@ -62,6 +62,12 @@ function formatTipoTexto(tipo: string): { label: string; dotClass: string; avata
         dotClass: "bg-purple-500",
         avatarClass: "bg-purple-100 text-purple-800",
       };
+    case "ABONO_LEGAL":
+      return {
+        label: "Abono Legal / Justificado",
+        dotClass: "bg-indigo-500",
+        avatarClass: "bg-indigo-100 text-indigo-800",
+      };
     default:
       return {
         label: tipo,
@@ -76,7 +82,8 @@ export default function OcorrenciasPage() {
   const [profissionais, setProfissionais] = useState<ProfissionalOperacional[]>([]);
   const [perfilAtivo, setPerfilAtivo] = useState("PREMIER_ADMIN");
   const [busca, setBusca] = useState("");
-  const [filtroTipo, setFiltroTipo] = useState<"TODOS" | "ATESTADO" | "FALTA" | "OUTROS">("TODOS");
+  const [filtroTipo, setFiltroTipo] = useState<"TODOS" | "ATESTADO" | "FALTA" | "ABONO" | "OUTROS">("TODOS");
+  const [filtroCompetencia, setFiltroCompetencia] = useState<string>("TODAS");
   const [modoVisualizacao, setModoVisualizacao] = useState<"CARDS" | "TABELA">("CARDS");
 
   // Modais
@@ -126,17 +133,27 @@ export default function OcorrenciasPage() {
         matchTipo = oc.tipoOcorrencia === "ATESTADO_MEDICO";
       } else if (filtroTipo === "FALTA") {
         matchTipo = oc.tipoOcorrencia.startsWith("FALTA");
+      } else if (filtroTipo === "ABONO") {
+        matchTipo = oc.tipoOcorrencia === "ABONO_LEGAL";
       } else if (filtroTipo === "OUTROS") {
-        matchTipo = oc.tipoOcorrencia === "TREINAMENTO" || oc.tipoOcorrencia === "FERIAS";
+        matchTipo =
+          oc.tipoOcorrencia === "TREINAMENTO" ||
+          oc.tipoOcorrencia === "FERIAS" ||
+          oc.tipoOcorrencia === "FOLGA_ESCALA" ||
+          oc.tipoOcorrencia === "OUTROS";
       }
 
-      return matchBusca && matchTipo;
+      const matchComp =
+        filtroCompetencia === "TODAS" || oc.dataInicio.startsWith(filtroCompetencia);
+
+      return matchBusca && matchTipo && matchComp;
     });
-  }, [ocorrencias, busca, filtroTipo]);
+  }, [ocorrencias, busca, filtroTipo, filtroCompetencia]);
 
   // Indicadores
   const totalOcorrencias = ocorrencias.length;
   const atestados = ocorrencias.filter((o) => o.tipoOcorrencia === "ATESTADO_MEDICO").length;
+  const abonosLegais = ocorrencias.filter((o) => o.tipoOcorrencia === "ABONO_LEGAL").length;
   const faltasInjustificadas = ocorrencias.filter((o) => o.tipoOcorrencia === "FALTA_INJUSTIFICADA").length;
   const validadas = ocorrencias.filter((o) => o.status === "VALIDADA").length;
 
@@ -299,14 +316,14 @@ export default function OcorrenciasPage() {
         <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-              Status de Auditoria
+              Abonos Legais / Gestão
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-emerald-700">{validadas}</span>
-              <span className="text-xs text-emerald-600 font-medium">Validadas</span>
+              <span className="text-2xl font-bold text-indigo-700">{abonosLegais}</span>
+              <span className="text-xs text-indigo-600 font-medium">Cubo de Abono RM</span>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+          <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
             <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
@@ -335,7 +352,21 @@ export default function OcorrenciasPage() {
         </div>
 
         {/* Abas Rápidas e Alternador */}
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+          {/* Seletor de Competência */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-400 font-semibold uppercase">Mês:</span>
+            <select
+              value={filtroCompetencia}
+              onChange={(e) => setFiltroCompetencia(e.target.value)}
+              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="TODAS">Todos os Meses</option>
+              <option value="2026-08">Agosto/2026 (Cubo Abono)</option>
+              <option value="2026-09">Setembro/2026 (Vigente)</option>
+            </select>
+          </div>
+
           <div className="inline-flex bg-slate-100 p-0.5 rounded-lg text-xs font-medium text-slate-600">
             <button
               onClick={() => setFiltroTipo("TODOS")}
@@ -358,6 +389,16 @@ export default function OcorrenciasPage() {
               Atestados ({atestados})
             </button>
             <button
+              onClick={() => setFiltroTipo("ABONO")}
+              className={`px-3 py-1 rounded-md transition-all ${
+                filtroTipo === "ABONO"
+                  ? "bg-white text-indigo-800 shadow-sm font-semibold"
+                  : "hover:text-slate-900"
+              }`}
+            >
+              Abonos ({abonosLegais})
+            </button>
+            <button
               onClick={() => setFiltroTipo("FALTA")}
               className={`px-3 py-1 rounded-md transition-all ${
                 filtroTipo === "FALTA"
@@ -375,7 +416,7 @@ export default function OcorrenciasPage() {
                   : "hover:text-slate-900"
               }`}
             >
-              Treinamentos / Férias
+              Outras
             </button>
           </div>
 

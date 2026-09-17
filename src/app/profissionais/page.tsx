@@ -23,20 +23,26 @@ import {
   carregarEstado,
   adicionarProfissional,
   transferirColaboradorPosto,
+  calcularIdade,
+  obterFaixaEtaria,
   ProfissionalOperacional,
   PostoOperacional,
 } from "@/lib/dados/estado-operacional";
+import { UsuarioSessao } from "@/lib/auth/tipos";
+import { registrarLogAuditoriaAdmin } from "@/lib/auth/usuarios";
 
 export default function ProfissionaisPage() {
   const [profissionais, setProfissionais] = useState<ProfissionalOperacional[]>([]);
   const [postos, setPostos] = useState<PostoOperacional[]>([]);
   const [perfilAtivo, setPerfilAtivo] = useState("PREMIER_ADMIN");
+  const [sessao, setSessao] = useState<UsuarioSessao | null>(null);
   const [busca, setBusca] = useState("");
   const [filtroSituacao, setFiltroSituacao] = useState("TODAS");
   const [filtroPosto, setFiltroPosto] = useState("TODOS");
   const [modalAberto, setModalAberto] = useState(false);
   const [profissionalSelecionado, setProfissionalSelecionado] = useState<ProfissionalOperacional | null>(null);
   const [exibirDadosRestritos, setExibirDadosRestritos] = useState(false);
+  const [exibirCpfCompleto, setExibirCpfCompleto] = useState(false);
   const [modalTransferenciaAberto, setModalTransferenciaAberto] = useState(false);
   const [colaboradorParaTransferir, setColaboradorParaTransferir] = useState<ProfissionalOperacional | null>(null);
   const [destinoPostoCodigo, setDestinoPostoCodigo] = useState("");
@@ -90,18 +96,90 @@ export default function ProfissionaisPage() {
 
   useEffect(() => {
     carregarDados();
+
+    const carregarSessao = async () => {
+      try {
+        const res = await fetch("/api/auth");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.autenticado && data.usuario) {
+            setSessao(data.usuario);
+          }
+        }
+      } catch {
+        // fallback
+      }
+    };
+    carregarSessao();
+
     const handleAtualizacao = () => carregarDados();
     window.addEventListener("sgp-dados-atualizados", handleAtualizacao);
     return () => window.removeEventListener("sgp-dados-atualizados", handleAtualizacao);
   }, []);
 
-  const ehPerfilPetrobras = perfilAtivo.startsWith("PETROBRAS");
+  const perfilEfetivo = sessao?.perfil || perfilAtivo;
+  const ehAdmin = perfilEfetivo === "PREMIER_ADMIN";
+  const ehGestor = perfilEfetivo === "PREMIER_GESTOR" || perfilEfetivo === "PREMIER_GESTOR_CONTRATO";
+  const ehPerfilPetrobras = perfilEfetivo.startsWith("PETROBRAS");
+
+  const basesPermitidas = sessao?.basesVinculadas || ["TODAS"];
+  const podeAcessarBase = (unidadeId: string) => {
+    if (basesPermitidas.includes("TODAS")) return true;
+    return basesPermitidas.includes(unidadeId);
+  };
+
+  const handleAbrirFicha = (prof: ProfissionalOperacional) => {
+    setProfissionalSelecionado(prof);
+    setExibirDadosRestritos(false);
+    setExibirCpfCompleto(false);
+
+    if (sessao) {
+      try {
+        registrarLogAuditoriaAdmin(
+          sessao,
+          "CONSULTAR_CADASTRO_INDIVIDUAL",
+          "PROFISSIONAL",
+          prof.chapa || prof.matricula,
+          `Usuário ${sessao.nome} (${sessao.perfil}) visualizou cadastro individual de ${prof.nomeSocial || prof.nome} (Chapa: ${prof.chapa || prof.matricula})`,
+          null,
+          `Base: ${prof.unidadeId}`
+        );
+      } catch {
+        // fallback
+      }
+    }
+  };
+
+  const handleAlternarCpfCompleto = () => {
+    if (ehPerfilPetrobras) return; // Fiscal Petrobras não pode desmascarar CPF por LGPD
+    const novoEstado = !exibirCpfCompleto;
+    setExibirCpfCompleto(novoEstado);
+
+    if (novoEstado && sessao && profissionalSelecionado) {
+      try {
+        registrarLogAuditoriaAdmin(
+          sessao,
+          "DESMASCARAR_CPF",
+          "PROFISSIONAL",
+          profissionalSelecionado.chapa || profissionalSelecionado.matricula,
+          `Usuário ${sessao.nome} (${sessao.perfil}) desmascarou o CPF de ${profissionalSelecionado.nomeSocial || profissionalSelecionado.nome}`,
+          profissionalSelecionado.cpfMascarado,
+          "CPF COMPLETO EXIBIDO SOB AUDITORIA"
+        );
+      } catch {
+        // fallback
+      }
+    }
+  };
 
   const profissionaisFiltrados = profissionais.filter((pr) => {
     const matchTexto =
       pr.nome.toLowerCase().includes(busca.toLowerCase()) ||
+      (pr.nomeSocial && pr.nomeSocial.toLowerCase().includes(busca.toLowerCase())) ||
+      (pr.chapa && pr.chapa.toLowerCase().includes(busca.toLowerCase())) ||
       pr.matricula.toLowerCase().includes(busca.toLowerCase()) ||
       pr.funcao.toLowerCase().includes(busca.toLowerCase()) ||
+      (pr.secaoCodigo && pr.secaoCodigo.toLowerCase().includes(busca.toLowerCase())) ||
       (pr.postoCodigo && pr.postoCodigo.toLowerCase().includes(busca.toLowerCase())) ||
       pr.cpfLimpo.includes(busca.replace(/\D/g, ""));
 
@@ -115,7 +193,9 @@ export default function ProfissionaisPage() {
         ? !pr.postoCodigo
         : pr.postoCodigo === filtroPosto;
 
-    return matchTexto && matchSituacao && matchPosto;
+    const matchBase = podeAcessarBase(pr.unidadeId);
+
+    return matchTexto && matchSituacao && matchPosto && matchBase;
   });
 
   const totalColaboradores = profissionais.length;
@@ -331,8 +411,8 @@ export default function ProfissionaisPage() {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-700">
-                <th className="py-2.5 px-3 font-bold">Matrícula</th>
-                <th className="py-2.5 px-3 font-bold">Nome do Colaborador</th>
+                <th className="py-2.5 px-3 font-bold">Chapa / Matrícula</th>
+                <th className="py-2.5 px-3 font-bold">Colaborador (Nome Social / Civil)</th>
                 <th className="py-2.5 px-3 font-bold">CPF (LGPD)</th>
                 <th className="py-2.5 px-3 font-bold">Função Contratual</th>
                 <th className="py-2.5 px-3 font-bold">Posto Titular</th>
@@ -349,80 +429,98 @@ export default function ProfissionaisPage() {
                   </td>
                 </tr>
               ) : (
-                profissionaisFiltrados.map((prof) => (
-                  <tr key={prof.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-3 px-3 font-mono font-bold text-premier-900">
-                      {prof.matricula}
-                    </td>
-                    <td className="py-3 px-3 font-medium text-slate-900">
-                      <div>{prof.nome}</div>
-                      {prof.telefoneCorporativo && (
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                          <Phone className="w-3 h-3 text-slate-400" />
-                          <span>{prof.telefoneCorporativo}</span>
+                profissionaisFiltrados.map((prof) => {
+                  const chapaFormatada = prof.chapa || prof.matricula;
+                  const temNomeSocial = !!prof.nomeSocial;
+                  const nomeExibicao = prof.nomeSocial || prof.nome;
+
+                  return (
+                    <tr key={prof.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-3 font-mono font-bold text-premier-900">
+                        {chapaFormatada}
+                      </td>
+                      <td className="py-3 px-3 font-medium text-slate-900">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-slate-900">{nomeExibicao}</span>
+                          {temNomeSocial && (
+                            <span className="text-[10px] bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.2 rounded font-bold">
+                              Nome Social
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-slate-600">
-                      <span className="inline-flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[11px]">
-                        <Lock className="w-3 h-3 text-slate-400" />
-                        {prof.cpfMascarado}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-slate-800 font-medium">
-                      {prof.funcao}
-                    </td>
-                    <td className="py-3 px-3">
-                      {prof.postoCodigo ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          <Briefcase className="w-3 h-3" />
-                          {prof.postoCodigo}
+                        {temNomeSocial && ehAdmin && (
+                          <div className="text-[11px] text-slate-500 font-normal">
+                            Civil: {prof.nome}
+                          </div>
+                        )}
+                        <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                          Seção: {prof.secaoCodigo || "N/D"} • Base: {prof.unidadeId}
+                        </div>
+                        {prof.telefoneCorporativo && (
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                            <Phone className="w-3 h-3 text-slate-400" />
+                            <span>{prof.telefoneCorporativo}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-slate-600">
+                        <span className="inline-flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[11px]">
+                          <Lock className="w-3 h-3 text-slate-400" />
+                          {prof.cpfMascarado}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                          Reserva Técnica
+                      </td>
+                      <td className="py-3 px-3 text-slate-800 font-medium">
+                        {prof.funcao}
+                      </td>
+                      <td className="py-3 px-3">
+                        {prof.postoCodigo ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <Briefcase className="w-3 h-3" />
+                            {prof.postoCodigo}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                            Reserva Técnica
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          {prof.escala}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                        {prof.escala}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                          prof.situacao === "ATIVO"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : prof.situacao === "FERIAS"
-                            ? "bg-blue-50 text-blue-700 border-blue-200"
-                            : "bg-amber-50 text-amber-700 border-amber-200"
-                        }`}
-                      >
-                        {prof.situacao}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-center space-x-2 whitespace-nowrap">
-                      <button
-                        onClick={() => {
-                          setProfissionalSelecionado(prof);
-                          setExibirDadosRestritos(false);
-                        }}
-                        className="text-slate-600 hover:text-slate-900 font-semibold text-[11px] underline"
-                      >
-                        Ficha
-                      </button>
-                      <button
-                        onClick={() => abrirModalTransferencia(prof)}
-                        className="inline-flex items-center gap-1 text-premier-900 hover:text-premier-700 font-bold text-[11px] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded transition-colors"
-                        title="Trocar ou transferir posto deste colaborador"
-                      >
-                        <RefreshCw className="w-3 h-3 text-blue-600" />
-                        <span>Trocar Posto</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                            prof.situacao === "ATIVO"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : prof.situacao === "FERIAS"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : "bg-amber-50 text-amber-700 border-amber-200"
+                          }`}
+                        >
+                          {prof.situacao}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-center space-x-2 whitespace-nowrap">
+                        <button
+                          onClick={() => handleAbrirFicha(prof)}
+                          className="text-slate-600 hover:text-slate-900 font-semibold text-[11px] underline"
+                        >
+                          Ficha
+                        </button>
+                        <button
+                          onClick={() => abrirModalTransferencia(prof)}
+                          className="inline-flex items-center gap-1 text-premier-900 hover:text-premier-700 font-bold text-[11px] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded transition-colors"
+                          title="Trocar ou transferir posto deste colaborador"
+                        >
+                          <RefreshCw className="w-3 h-3 text-blue-600" />
+                          <span>Trocar Posto</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -430,151 +528,280 @@ export default function ProfissionaisPage() {
       </div>
 
       {/* Modal Ficha do Colaborador (Com Segregação LGPD) */}
-      {profissionalSelecionado && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden animate-scaleIn">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-blue-400" />
-                <h3 className="font-bold text-sm">
-                  Ficha do Profissional: {profissionalSelecionado.matricula}
-                </h3>
-              </div>
-              <button
-                onClick={() => setProfissionalSelecionado(null)}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {profissionalSelecionado && (() => {
+        const idadeCalculada = profissionalSelecionado.dataNascimento
+          ? calcularIdade(profissionalSelecionado.dataNascimento)
+          : null;
+        const faixaEtaria = idadeCalculada !== null ? obterFaixaEtaria(idadeCalculada) : null;
+        const cpfFormatado = profissionalSelecionado.cpfLimpo.replace(
+          /(\d{3})(\d{3})(\d{3})(\d{2})/,
+          "$1.$2.$3-$4"
+        );
+        const temNomeSocial = !!profissionalSelecionado.nomeSocial;
+        const nomePrincipal = profissionalSelecionado.nomeSocial || profissionalSelecionado.nome;
+        const chapaCodigo = profissionalSelecionado.chapa || profissionalSelecionado.matricula;
 
-            <div className="p-5 space-y-4 text-xs">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div>
-                  <h4 className="font-bold text-base text-slate-900">{profissionalSelecionado.nome}</h4>
-                  <div className="text-slate-500 text-[11px]">Função: {profissionalSelecionado.funcao}</div>
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden animate-scaleIn max-h-[90vh] flex flex-col">
+              <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-blue-400" />
+                  <h3 className="font-bold text-sm">
+                    Ficha do Profissional: Chapa {chapaCodigo}
+                  </h3>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  {profissionalSelecionado.situacao}
-                </span>
-              </div>
-
-              {/* Dados Operacionais e Contratuais */}
-              <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded border border-slate-200">
-                <div>
-                  <span className="text-slate-500 font-bold uppercase text-[10px]">CPF (Auditável Petrobras)</span>
-                  <div className="font-mono font-bold text-slate-800 mt-0.5 flex items-center gap-1">
-                    <Lock className="w-3 h-3 text-slate-400" />
-                    <span>{profissionalSelecionado.cpfMascarado}</span>
-                  </div>
-                </div>
-                <div>
-                  <span className="text-slate-500 font-bold uppercase text-[10px]">Data de Admissão</span>
-                  <div className="font-semibold text-slate-800 mt-0.5">{profissionalSelecionado.dataAdmissao}</div>
-                </div>
-                <div>
-                  <span className="text-slate-500 font-bold uppercase text-[10px]">Posto Alocado</span>
-                  <div className="font-bold text-premier-900 mt-0.5 font-mono">
-                    {profissionalSelecionado.postoCodigo || "Reserva Técnica (Sem posto fixo)"}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-slate-500 font-bold uppercase text-[10px]">Escala Contratual</span>
-                  <div className="font-bold text-slate-800 mt-0.5">{profissionalSelecionado.escala}</div>
-                </div>
-              </div>
-
-              {/* Seção LGPD: Dados Restritos */}
-              <div className="border border-slate-200 rounded-lg p-3.5 space-y-2 bg-slate-50/50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                    <Lock className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Dados Pessoais Restritos (Estrito Premier)</span>
-                  </div>
-                  {!ehPerfilPetrobras && (
-                    <button
-                      onClick={() => setExibirDadosRestritos(!exibirDadosRestritos)}
-                      className="text-blue-700 hover:text-blue-900 text-[11px] font-semibold flex items-center gap-1 underline"
-                    >
-                      {exibirDadosRestritos ? (
-                        <>
-                          <EyeOff className="w-3 h-3" /> Ocultar
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="w-3 h-3" /> Exibir (Premier Admin)
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-
-                {ehPerfilPetrobras ? (
-                  <div className="p-2.5 rounded bg-rose-50 border border-rose-200 text-[11px] text-rose-800 flex items-center gap-2">
-                    <Lock className="w-4 h-4 text-rose-600 shrink-0" />
-                    <span>
-                      <strong>Acesso Bloqueado (HTTP 403):</strong> Perfis da fiscalização Petrobras não possuem permissão de acesso a salário, endereço ou dados bancários em conformidade com o princípio de Minimização de Dados da LGPD (Art. 6º, III).
-                    </span>
-                  </div>
-                ) : exibirDadosRestritos ? (
-                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-200 animate-fadeIn">
-                    <div>
-                      <span className="text-slate-500 font-medium">Remuneração Base:</span>
-                      <div className="font-bold text-slate-800">
-                        {profissionalSelecionado.dadosRestritos?.salario
-                          ? `R$ ${profissionalSelecionado.dadosRestritos.salario.toFixed(2)}`
-                          : "Não informado"}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 font-medium">Telefone Pessoal:</span>
-                      <div className="font-semibold text-slate-800">
-                        {profissionalSelecionado.dadosRestritos?.telefonePessoal || "Não informado"}
-                      </div>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-slate-500 font-medium">Endereço Residencial:</span>
-                      <div className="text-slate-800">
-                        {profissionalSelecionado.dadosRestritos?.endereco || "Não informado"}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-slate-500">
-                    Dados protegidos por criptografia em repouso. Clique em &quot;Exibir&quot; para auditar.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-2">
-              <button
-                onClick={() => abrirModalTransferencia(profissionalSelecionado)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-900 font-bold rounded border border-blue-200 text-xs transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
-                <span>Trocar Posto do Colaborador</span>
-              </button>
-              <div className="flex items-center gap-2">
                 <button
                   onClick={() => setProfissionalSelecionado(null)}
-                  className="px-3 py-1.5 bg-white hover:bg-slate-200 text-slate-700 font-semibold rounded border border-slate-300 text-xs transition-colors"
+                  className="text-slate-400 hover:text-white transition-colors"
                 >
-                  Fechar
+                  <X className="w-4 h-4" />
                 </button>
-                {profissionalSelecionado.postoCodigo && (
-                  <Link
-                    href="/postos"
-                    className="px-3 py-1.5 bg-premier-900 hover:bg-premier-800 text-white font-semibold rounded text-xs transition-colors"
-                  >
-                    Ver no Anexo 1-A
-                  </Link>
+              </div>
+
+              <div className="p-5 space-y-4 text-xs overflow-y-auto">
+                <div className="flex items-start justify-between border-b border-slate-200 pb-3 gap-2">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-bold text-base text-slate-900">{nomePrincipal}</h4>
+                      {temNomeSocial && (
+                        <span className="text-[10px] bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.2 rounded font-bold">
+                          Nome Social
+                        </span>
+                      )}
+                    </div>
+                    {temNomeSocial && ehAdmin && (
+                      <div className="text-slate-500 text-[11px] mt-0.5">
+                        Nome Civil: <strong>{profissionalSelecionado.nome}</strong>
+                      </div>
+                    )}
+                    <div className="text-slate-500 text-[11px] mt-0.5">
+                      Função: <strong>{profissionalSelecionado.funcao}</strong>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                    {profissionalSelecionado.situacao}
+                  </span>
+                </div>
+
+                {/* Dados Operacionais e Contratuais */}
+                <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded border border-slate-200">
+                  <div>
+                    <span className="text-slate-500 font-bold uppercase text-[10px] block">
+                      CPF ({ehPerfilPetrobras ? "LGPD Petrobras" : "Auditável"})
+                    </span>
+                    <div className="font-mono font-bold text-slate-800 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                      <Lock className="w-3 h-3 text-slate-400" />
+                      <span>{exibirCpfCompleto && !ehPerfilPetrobras ? cpfFormatado : profissionalSelecionado.cpfMascarado}</span>
+                      {!ehPerfilPetrobras && (
+                        <button
+                          type="button"
+                          onClick={handleAlternarCpfCompleto}
+                          className="text-[10px] text-blue-700 hover:text-blue-900 underline font-semibold ml-1"
+                        >
+                          {exibirCpfCompleto ? "Ocultar" : "Desmascarar (Auditado)"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500 font-bold uppercase text-[10px] block">Data de Admissão</span>
+                    <div className="font-semibold text-slate-800 mt-0.5">{profissionalSelecionado.dataAdmissao || "—"}</div>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500 font-bold uppercase text-[10px] block">Base / Unidade</span>
+                    <div className="font-bold text-slate-800 mt-0.5">{profissionalSelecionado.unidadeId}</div>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-500 font-bold uppercase text-[10px] block">Posto Alocado</span>
+                    <div className="font-bold text-premier-900 mt-0.5 font-mono">
+                      {profissionalSelecionado.postoCodigo || "Reserva Técnica (Sem posto fixo)"}
+                    </div>
+                  </div>
+
+                  <div className="col-span-2">
+                    <span className="text-slate-500 font-bold uppercase text-[10px] block">Seção Organizacional (RM)</span>
+                    <div className="font-mono text-slate-800 mt-0.5">
+                      {profissionalSelecionado.secaoCodigo ? (
+                        <span>{profissionalSelecionado.secaoCodigo} — {profissionalSelecionado.secaoDescricao || "Sem descrição"}</span>
+                      ) : (
+                        <span className="text-amber-600 font-bold">⚠️ Seção não informada</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="col-span-2">
+                    <span className="text-slate-500 font-bold uppercase text-[10px] block">Escala Contratual / Horário RM</span>
+                    <div className="font-bold text-slate-800 mt-0.5">
+                      {profissionalSelecionado.horarioCodigo ? (
+                        <span>Horário {profissionalSelecionado.horarioCodigo} ({profissionalSelecionado.escala})</span>
+                      ) : (
+                        profissionalSelecionado.escala
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Seção LGPD: Dados Demográficos (Sexo, Nascimento, Idade Dinâmica) */}
+                {ehPerfilPetrobras ? (
+                  <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-rose-900">
+                      <Lock className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>Dados Demográficos Protegidos (LGPD - Art. 6º, III)</span>
+                    </div>
+                    <p className="text-[11px] text-rose-700">
+                      Sexo, data de nascimento e idade calculada são informações de custódia restrita da Premier Logistics e não são compartilhadas com a fiscalização Petrobras em estrita observância ao princípio da minimização.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="border border-blue-200 bg-blue-50/40 rounded-lg p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                        <Users className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Dados Demográficos & Etários (Cálculo Dinâmico LGPD)</span>
+                      </div>
+                      <span className="text-[10px] font-semibold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                        Gestão Premier
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-1 border-t border-blue-200/60">
+                      <div>
+                        <span className="text-slate-500 font-medium block">Sexo:</span>
+                        <span className="font-bold text-slate-800">
+                          {profissionalSelecionado.sexo === "M"
+                            ? "Masculino"
+                            : profissionalSelecionado.sexo === "F"
+                            ? "Feminino"
+                            : profissionalSelecionado.sexo || "Não informado"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 font-medium block">Data de Nascimento:</span>
+                        <span className="font-bold text-slate-800">
+                          {profissionalSelecionado.dataNascimento
+                            ? new Date(profissionalSelecionado.dataNascimento + "T00:00:00").toLocaleDateString("pt-BR")
+                            : "Não informada"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 font-medium block">Idade Atual (Dinâmica):</span>
+                        <span className="font-bold text-slate-800">
+                          {idadeCalculada !== null ? `${idadeCalculada} anos` : "—"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 font-medium block">Faixa Etária Contratual:</span>
+                        <span className="inline-block px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[10px]">
+                          {faixaEtaria || "Não classificada"}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-500 italic">
+                      * A idade é calculada dinamicamente pelo sistema e não é armazenada em coluna de banco de dados (LGPD).
+                    </p>
+                  </div>
                 )}
+
+                {/* Seção LGPD: Dados Restritos de Remuneração e Endereço */}
+                <div className="border border-slate-200 rounded-lg p-3.5 space-y-2 bg-slate-50/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                      <Lock className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Remuneração e Domicílio (Estrito Premier Admin)</span>
+                    </div>
+                    {ehAdmin && (
+                      <button
+                        onClick={() => setExibirDadosRestritos(!exibirDadosRestritos)}
+                        className="text-blue-700 hover:text-blue-900 text-[11px] font-semibold flex items-center gap-1 underline"
+                      >
+                        {exibirDadosRestritos ? (
+                          <>
+                            <EyeOff className="w-3 h-3" /> Ocultar
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-3 h-3" /> Exibir (Premier Admin)
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {ehPerfilPetrobras ? (
+                    <div className="p-2.5 rounded bg-rose-50 border border-rose-200 text-[11px] text-rose-800 flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>
+                        <strong>Acesso Bloqueado (HTTP 403):</strong> Perfis da fiscalização Petrobras não possuem permissão de acesso a salário ou endereço em conformidade com o Art. 6º, III da LGPD.
+                      </span>
+                    </div>
+                  ) : !ehAdmin ? (
+                    <p className="text-[11px] text-slate-500">
+                      Disponível exclusivamente para Administrador Premier sob auditoria.
+                    </p>
+                  ) : exibirDadosRestritos ? (
+                    <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-200 animate-fadeIn">
+                      <div>
+                        <span className="text-slate-500 font-medium">Remuneração Base:</span>
+                        <div className="font-bold text-slate-800">
+                          {profissionalSelecionado.dadosRestritos?.salario
+                            ? `R$ ${profissionalSelecionado.dadosRestritos.salario.toFixed(2)}`
+                            : "Não informado"}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 font-medium">Telefone Pessoal:</span>
+                        <div className="font-semibold text-slate-800">
+                          {profissionalSelecionado.dadosRestritos?.telefonePessoal || "Não informado"}
+                        </div>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-500 font-medium">Endereço Residencial:</span>
+                        <div className="text-slate-800">
+                          {profissionalSelecionado.dadosRestritos?.endereco || "Não informado"}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-500">
+                      Dados protegidos por criptografia em repouso. Clique em &quot;Exibir&quot; para auditar.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+                <button
+                  onClick={() => abrirModalTransferencia(profissionalSelecionado)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-900 font-bold rounded border border-blue-200 text-xs transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Trocar Posto do Colaborador</span>
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setProfissionalSelecionado(null)}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-200 text-slate-700 font-semibold rounded border border-slate-300 text-xs transition-colors"
+                  >
+                    Fechar
+                  </button>
+                  {profissionalSelecionado.postoCodigo && (
+                    <Link
+                      href="/postos"
+                      className="px-3 py-1.5 bg-premier-900 hover:bg-premier-800 text-white font-semibold rounded text-xs transition-colors"
+                    >
+                      Ver no Anexo 1-A
+                    </Link>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Modal Admissão de Novo Colaborador */}
       {modalAberto && (

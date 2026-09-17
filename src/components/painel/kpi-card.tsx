@@ -51,7 +51,7 @@ export function KpiCard({
   if (naoConfigurado) {
     return (
       <div
-        className={`bg-[#FAFBFC] p-5 rounded-[12px] border border-dashed border-[#CBD5E1] shadow-xs flex flex-col justify-between h-full min-h-[178px] ${className}`}
+        className={`bg-[#FAFBFC] p-5 rounded-[12px] border border-dashed border-[#CBD5E1] shadow-xs flex flex-col justify-between h-full min-h-[188px] ${className}`}
       >
         <div>
           <div className="flex items-center justify-between gap-2">
@@ -68,13 +68,12 @@ export function KpiCard({
           </div>
         </div>
 
-        <div className="pt-3 border-t border-[#E3E6EB]/50">
+        <div className="pt-3 border-t border-[#E3E6EB]/50 mt-auto">
           <Link
             href={naoConfigurado.linkHref}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1F4FD1] hover:text-[#163A9E] hover:underline"
+            className="inline-flex items-center text-xs font-semibold text-[#1F4FD1] hover:text-[#163A9E] hover:underline"
           >
             <span>{naoConfigurado.linkTexto}</span>
-            <ExternalLink className="w-3.5 h-3.5" />
           </Link>
         </div>
       </div>
@@ -109,7 +108,7 @@ export function KpiCard({
 
   return (
     <div
-      className={`bg-white p-5 rounded-[12px] border border-[#E3E6EB] shadow-xs flex flex-col justify-between h-full min-h-[178px] ${className}`}
+      className={`bg-white p-5 rounded-[12px] border border-[#E3E6EB] shadow-xs flex flex-col justify-between h-full min-h-[188px] ${className}`}
     >
       <div>
         {/* Linha 1: Rótulo (14px) + Badge de Status */}
@@ -159,27 +158,25 @@ export function KpiCard({
         )}
       </div>
 
-      {/* Linha 4: Linha de Contexto (13px) ou Link de Ação */}
-      <div className="mt-3.5 pt-2.5 border-t border-[#F1F3F5] flex items-center justify-between text-[13px] text-[#5B6474]">
-        <div className="leading-snug truncate">{linhaContexto}</div>
+      {/* Linha 4: Linha de Contexto (permite até 2 linhas) ou Link de Ação com seta única */}
+      <div className="mt-auto pt-3 border-t border-[#F1F3F5] flex items-center justify-between text-xs text-[#5B6474] gap-2">
+        <div className="leading-snug line-clamp-2 text-[#5B6474]">{linhaContexto}</div>
         {linkAcao && (
-          <div className="shrink-0 ml-2">
+          <div className="shrink-0 ml-auto">
             {linkAcao.isScroll ? (
               <button
                 type="button"
                 onClick={linkAcao.onClick}
-                className="inline-flex items-center gap-1 font-semibold text-xs text-[#1F4FD1] hover:text-[#163A9E] hover:underline cursor-pointer"
+                className="inline-flex items-center font-semibold text-xs text-[#1F4FD1] hover:text-[#163A9E] hover:underline cursor-pointer"
               >
                 <span>{linkAcao.texto}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             ) : (
               <Link
                 href={linkAcao.href}
-                className="inline-flex items-center gap-1 font-semibold text-xs text-[#1F4FD1] hover:text-[#163A9E] hover:underline"
+                className="inline-flex items-center font-semibold text-xs text-[#1F4FD1] hover:text-[#163A9E] hover:underline"
               >
                 <span>{linkAcao.texto}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             )}
           </div>

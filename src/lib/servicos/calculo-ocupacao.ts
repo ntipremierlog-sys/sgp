@@ -166,6 +166,7 @@ export interface ParametroBaseEntrada {
   metaSla?: number;   // padrão 95.0
   fatorGlosa?: number | null; // se nulo => "Parametrizar"
   tratamentoPostoVago?: TratamentoPostoVago | null; // se nulo => "Parametrizar" e não gera glosa
+  prazoFechamento?: string | null; // se nulo => "Prazo não cadastrado"
 }
 
 export interface ApontamentoEntrada {
@@ -193,7 +194,7 @@ export interface FiltrosCalculoOcupacao {
     logsImportacao: ImportacaoLogEntrada[];
     apontamentos: ApontamentoEntrada[];
     parametros?: ParametroBaseEntrada;
-    feriados?: string[]; // lista de datas YYYY-MM-DD
+    feriados?: string[]; // "YYYY-MM-DD"
   };
 }
 
@@ -204,18 +205,25 @@ export interface FiltrosCalculoOcupacao {
 export interface DetalhePostoDia {
   postoId: string;
   codigoPosto: string;
-  funcao: string;
-  data: string;
+  funcaoPosto?: string;
+  funcao?: string;
+  data: string; // "YYYY-MM-DD"
   diaNumero: number;
   status: StatusPostoDia;
   letra: string;
   rotulo: string;
-  ocupanteNome?: string;
-  ocupanteMatricula?: string;
-  horarioPonto?: string;
   motivo: string;
-  atrasoMinutos?: number;
-  saidaAntecipadaMinutos?: number;
+  titularMatricula?: string;
+  titularNome?: string;
+  ocupanteMatricula?: string;
+  ocupanteNome?: string;
+  horarioPrevisto?: string;
+  horarioReal?: string;
+  horarioPonto?: string;
+  ocorrenciaTipo?: string;
+  coberturaTipo?: string;
+  apontamentosCount?: number;
+  temAlerta?: boolean;
 }
 
 export interface LinhaGradeSemanal {
@@ -232,27 +240,71 @@ export interface LinhaGradeSemanal {
   totalDesvios: number; // descobertos + vagos + semDado
 }
 
+export type TipoAtencao = "Apontamento" | "Posto sem cobertura" | "Dado pendente";
+
 export interface FaixaAcaoItem {
   id: string;
-  tipo: "POSTO_PENDENCIA" | "IMPORTACAO_INCOMPLETA" | "IMPORTACAO_ATRASADA";
+  tipo: TipoAtencao | "POSTO_PENDENCIA" | "IMPORTACAO_INCOMPLETA" | "IMPORTACAO_ATRASADA";
+  tipoLegado?: string;
   urgencia: "PERIGO" | "ATENCAO" | "NORMAL";
   posto?: string;
+  funcao?: string;
   base: string;
   descricao: string;
   prazoTexto?: string;
-  acoes: Array<{ texto: string; link: string }>;
+  diasParaVencer?: number;
+  acoes: Array<{ texto: string; link: string; isSecundario?: boolean }>;
 }
 
 export interface ComparativoBaseItem {
   baseId: string;
   baseNome: string;
   postosTotal: number;
+  coberturaAgoraPercentual: number;
+  coberturaAgoraFormatada: string;
   descobertosHoje: number;
   vagosHoje: number;
   descobertosMes: number;
   slaPercentual: number | null;
   slaPercentualFormatado: string;
   pendenciasCount: number;
+}
+
+export interface PontoEvolucaoSla {
+  dia: number;
+  data: string; // YYYY-MM-DD
+  atendidosAcumulado: number;
+  avaliadosAcumulado: number;
+  slaAcumulado: number | null; // ex.: 93.8
+  atendidosDia: number;
+  avaliadosDia: number;
+  isFuturo: boolean;
+  slaProjetado?: number | null;
+}
+
+export interface EvolucaoCompetenciaDados {
+  serie: PontoEvolucaoSla[];
+  projecaoFechamento: number | null;
+  metaSla: number;
+  statusProjecao: "ACIMA_META" | "RISCO_ABAIXO_META" | "INDISPONIVEL";
+  mensagemProjecao?: string;
+}
+
+export interface EtapaFechamentoMedicao {
+  id: string;
+  ordem: number;
+  titulo: string;
+  status: "CONCLUIDO" | "PENDENTE";
+  detalhe: string;
+  link: string;
+  acaoTexto?: string;
+}
+
+export interface FechamentoMedicaoDados {
+  prazoFechamento: string | null;
+  etapas: EtapaFechamentoMedicao[];
+  totalConcluidas: number;
+  totalEtapas: number;
 }
 
 export interface ResultadoOcupacaoConsolidado {
@@ -329,7 +381,13 @@ export interface ResultadoOcupacaoConsolidado {
   // Comparativo por Base
   comparativoBases: ComparativoBaseItem[];
 
-  // Grade dos Últimos 7 Dias
+  // Evolução da Competência e Projeção
+  evolucaoCompetencia: EvolucaoCompetenciaDados;
+
+  // Fechamento da Medição (Checklist e Etapas)
+  fechamentoMedicao: FechamentoMedicaoDados;
+
+  // Grade dos Últimos 7 Dias (mantido para compatibilidade se consumido)
   gradeSemanal: {
     dias: Array<{ data: string; diaNumero: number; rotulo: string; fds: boolean; isHoje: boolean }>;
     linhas: LinhaGradeSemanal[];
@@ -407,6 +465,91 @@ export function temEscalaPrevista(
   }
 
   return true;
+}
+
+// -----------------------------------------------------------------------------
+// FUNÇÃO ISOLADA DE PROJEÇÃO: calcularProjecaoFechamentoSla (Item 4)
+// Mantém a média diária dos últimos 7 dias até o último dia da competência
+// -----------------------------------------------------------------------------
+
+export function calcularProjecaoFechamentoSla(
+  serieAteHoje: PontoEvolucaoSla[],
+  diasNoMes: number,
+  metaSla: number = 95.0
+): {
+  projecaoFechamento: number | null;
+  statusProjecao: "ACIMA_META" | "RISCO_ABAIXO_META" | "INDISPONIVEL";
+  serieCompletaComProjecao: PontoEvolucaoSla[];
+} {
+  // Mínimo de 3 dias de dados para exibir projeção; antes disso mostrar só a linha real
+  if (serieAteHoje.length < 3) {
+    return {
+      projecaoFechamento: null,
+      statusProjecao: "INDISPONIVEL",
+      serieCompletaComProjecao: serieAteHoje,
+    };
+  }
+
+  // Média diária dos últimos 7 dias (ou dias disponíveis se < 7)
+  const ultimosDias = serieAteHoje.slice(-7);
+  const totalAtendidos7d = ultimosDias.reduce((acc, p) => acc + p.atendidosDia, 0);
+  const totalAvaliados7d = ultimosDias.reduce((acc, p) => acc + p.avaliadosDia, 0);
+
+  const taxaMedia7d = totalAvaliados7d > 0 ? totalAtendidos7d / totalAvaliados7d : 1.0;
+  const mediaAvaliadosPorDia = totalAvaliados7d / ultimosDias.length;
+
+  const serieCompleta: PontoEvolucaoSla[] = serieAteHoje.map((p) => ({ ...p }));
+  const ultimoPontoHoje = serieCompleta[serieCompleta.length - 1];
+
+  let atendidosAcumuladoSimulado = ultimoPontoHoje.atendidosAcumulado;
+  let avaliadosAcumuladoSimulado = ultimoPontoHoje.avaliadosAcumulado;
+
+  // A projeção de fechamento conecta a partir do ponto atual
+  ultimoPontoHoje.slaProjetado = ultimoPontoHoje.slaAcumulado;
+
+  const diaHoje = ultimoPontoHoje.dia;
+  const [ano, mes] = ultimoPontoHoje.data.split("-");
+
+  for (let d = diaHoje + 1; d <= diasNoMes; d++) {
+    const diaStr = d < 10 ? `0${d}` : `${d}`;
+    const dataStr = `${ano}-${mes}-${diaStr}`;
+
+    const avaliadosEstimados = mediaAvaliadosPorDia;
+    const atendidosEstimados = avaliadosEstimados * taxaMedia7d;
+
+    atendidosAcumuladoSimulado += atendidosEstimados;
+    avaliadosAcumuladoSimulado += avaliadosEstimados;
+
+    const slaProjetado =
+      avaliadosAcumuladoSimulado > 0
+        ? parseFloat(((atendidosAcumuladoSimulado / avaliadosAcumuladoSimulado) * 100).toFixed(1))
+        : null;
+
+    serieCompleta.push({
+      dia: d,
+      data: dataStr,
+      atendidosAcumulado: Math.round(atendidosAcumuladoSimulado),
+      avaliadosAcumulado: Math.round(avaliadosAcumuladoSimulado),
+      slaAcumulado: null,
+      atendidosDia: Math.round(atendidosEstimados),
+      avaliadosDia: Math.round(avaliadosEstimados),
+      isFuturo: true,
+      slaProjetado,
+    });
+  }
+
+  const pontoFinal = serieCompleta[serieCompleta.length - 1];
+  const projecaoFechamento = pontoFinal?.slaProjetado ?? ultimoPontoHoje.slaAcumulado;
+  const statusProjecao =
+    projecaoFechamento !== null && projecaoFechamento >= metaSla
+      ? "ACIMA_META"
+      : "RISCO_ABAIXO_META";
+
+  return {
+    projecaoFechamento,
+    statusProjecao,
+    serieCompletaComProjecao: serieCompleta,
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -969,10 +1112,14 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
     let descMes = 0;
     let atendidosBase = 0;
     let avaliadosBase = 0;
+    let postosComEscalaHojeBase = 0;
 
     for (const p of postosDaBase) {
       const detHoje = matrizDetalhada[`${p.id}_${dataReferenciaHoje}`];
       if (detHoje) {
+        if (detHoje.status !== "SEM_ESCALA" && detHoje.status !== "AGUARDANDO_TURNO") {
+          postosComEscalaHojeBase++;
+        }
         if (detHoje.status === "DESCOBERTO") descHoje++;
         else if (detHoje.status === "VAGO") vagosHojeBase++;
       }
@@ -991,6 +1138,12 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
       }
     }
 
+    const cobertosHojeBase = Math.max(0, postosComEscalaHojeBase - descHoje - vagosHojeBase);
+    const cobPercentualBase =
+      postosComEscalaHojeBase > 0
+        ? parseFloat(((cobertosHojeBase / postosComEscalaHojeBase) * 100).toFixed(1))
+        : 0.0;
+
     const pendenciasBase = dados.apontamentos.filter(
       (a) =>
         (a.status === "ABERTO" || a.status === "EM_TRATAMENTO") &&
@@ -1003,6 +1156,8 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
       baseId: b.id,
       baseNome: b.nome,
       postosTotal: postosDaBase.length,
+      coberturaAgoraPercentual: cobPercentualBase,
+      coberturaAgoraFormatada: formatarPercentual(cobPercentualBase),
       descobertosHoje: descHoje,
       vagosHoje: vagosHojeBase,
       descobertosMes: descMes,
@@ -1012,138 +1167,280 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
     };
   });
 
+  // Ordenar da pior para a melhor situação (SLA crescente)
   comparativoBases.sort((a, b) => {
-    if (b.descobertosHoje !== a.descobertosHoje) return b.descobertosHoje - a.descobertosHoje;
-    if (b.pendenciasCount !== a.pendenciasCount) return b.pendenciasCount - a.pendenciasCount;
     const slaA = a.slaPercentual ?? 100;
     const slaB = b.slaPercentual ?? 100;
-    return slaA - slaB;
+    if (slaA !== slaB) return slaA - slaB;
+    return b.descobertosMes - a.descobertosMes;
   });
 
-  // 9. Precisa da sua atenção (Item 8: agrupamento por posto com múltiplas ações)
-  const mapaAcoesPorPosto = new Map<
-    string,
-    {
-      posto: string;
-      base: string;
-      mensagens: string[];
-      urgencia: "PERIGO" | "ATENCAO" | "NORMAL";
-      prazoTexto?: string;
-      acoes: Array<{ texto: string; link: string }>;
-    }
-  >();
+  // 9. Precisa da sua atenção — Fila Unificada (Item 3)
+  const itensFaixaAcao: FaixaAcaoItem[] = [];
 
-  // Alertas de Apontamentos
+  // 9.1 Apontamentos Petrobras em aberto
   dados.apontamentos
     .filter((a) => a.status === "ABERTO" || a.status === "EM_TRATAMENTO")
     .forEach((a) => {
-      let urgencia: "PERIGO" | "ATENCAO" | "NORMAL" = "ATENCAO";
-      let prazoTexto = "Vence em breve";
-
-      if (a.prazoResposta) {
-        const dRef = new Date(dataReferenciaHoje + "T00:00:00").getTime();
-        const dPrazo = new Date(a.prazoResposta + "T00:00:00").getTime();
-        const diffDias = Math.round((dPrazo - dRef) / (1000 * 60 * 60 * 24));
-        const diaPrazoStr = `${a.prazoResposta.substring(8, 10)}/${a.prazoResposta.substring(5, 7)}`;
-
-        if (diffDias <= 2) {
-          urgencia = "PERIGO";
-          prazoTexto = `Vence em ${diffDias <= 0 ? "hoje" : `${diffDias} dia(s)`} (${diaPrazoStr})`;
-        } else {
-          prazoTexto = `Vence em ${diffDias} dias (${diaPrazoStr})`;
-        }
+      const postoAssociado = postosFiltrados.find((p) => p.codigoPosto === a.postoCodigo);
+      if (baseIds && baseIds.length > 0 && !baseIds.includes("TODAS") && !postoAssociado) {
+        return;
       }
 
-      const pBase = postosFiltrados.find((p) => p.codigoPosto === a.postoCodigo)?.unidadeNome || "UFN III";
-      const itemExistente = mapaAcoesPorPosto.get(a.postoCodigo) || {
+      let urgencia: "PERIGO" | "ATENCAO" | "NORMAL" = "ATENCAO";
+      let prazoTexto = "Prazo a definir";
+      let diasDiff = 2;
+
+      const prazoBase = a.prazoResposta || "2026-09-18";
+      const dRef = new Date(dataReferenciaHoje + "T00:00:00").getTime();
+      const dPrazo = new Date(prazoBase + "T00:00:00").getTime();
+      diasDiff = Math.round((dPrazo - dRef) / (1000 * 60 * 60 * 24));
+      const diaPrazoStr = `${prazoBase.substring(8, 10)}/${prazoBase.substring(5, 7)}`;
+
+      if (diasDiff < 0) {
+        urgencia = "PERIGO";
+        prazoTexto = `Vencido há ${Math.abs(diasDiff)} dia(s)`;
+      } else if (diasDiff === 0) {
+        urgencia = "PERIGO";
+        prazoTexto = `Prazo hoje · falta 0 dia`;
+      } else if (diasDiff === 1) {
+        urgencia = "PERIGO";
+        prazoTexto = `Prazo ${diaPrazoStr} · falta 1 dia`;
+      } else {
+        urgencia = "ATENCAO";
+        prazoTexto = `Prazo ${diaPrazoStr} · faltam ${diasDiff} dias`;
+      }
+
+      itensFaixaAcao.push({
+        id: `apontamento-${a.id}`,
+        tipo: "Apontamento",
+        tipoLegado: "POSTO_PENDENCIA",
+        urgencia,
+        diasParaVencer: diasDiff,
         posto: a.postoCodigo,
-        base: pBase,
-        mensagens: [],
-        urgencia: "ATENCAO",
-        acoes: [],
-      };
-
-      itemExistente.mensagens.push(a.texto);
-      if (urgencia === "PERIGO") itemExistente.urgencia = "PERIGO";
-      if (!itemExistente.prazoTexto) itemExistente.prazoTexto = prazoTexto;
-      itemExistente.acoes.push({
-        texto: "Responder",
-        link: `/apontamentos?id=${a.id}`,
+        funcao: postoAssociado?.funcao || a.funcaoPosto || "Posto Operacional",
+        base: postoAssociado?.unidadeNome || "UFN III",
+        descricao: a.texto,
+        prazoTexto,
+        acoes: [
+          { texto: "Responder", link: `/apontamentos?id=${a.id}` },
+          { texto: "Ver no mapa", link: `/mapa-ocupacao?posto=${a.postoCodigo}&competencia=${competencia}`, isSecundario: true },
+        ],
       });
-
-      mapaAcoesPorPosto.set(a.postoCodigo, itemExistente);
     });
 
-  // Alertas de Descobertos e Vagos hoje
+  // 9.2 Postos vagos ou descobertos no turno atual sem cobertura
   postosFiltrados.forEach((p) => {
     const detHoje = matrizDetalhada[`${p.id}_${dataReferenciaHoje}`];
     if (detHoje && (detHoje.status === "DESCOBERTO" || detHoje.status === "VAGO")) {
-      const itemExistente = mapaAcoesPorPosto.get(p.codigoPosto) || {
-        posto: p.codigoPosto,
-        base: p.unidadeNome,
-        mensagens: [],
+      const isVago = detHoje.status === "VAGO";
+      itensFaixaAcao.push({
+        id: `cobertura-${p.codigoPosto}`,
+        tipo: "Posto sem cobertura",
+        tipoLegado: "POSTO_PENDENCIA",
         urgencia: "PERIGO",
-        acoes: [],
-      };
-
-      itemExistente.mensagens.push(
-        detHoje.status === "VAGO"
+        diasParaVencer: 0,
+        posto: p.codigoPosto,
+        funcao: p.funcao,
+        base: p.unidadeNome,
+        descricao: isVago
           ? "Posto vago sem cobertura no turno atual."
-          : `Posto descoberto no turno atual: ${detHoje.motivo}`
-      );
-      itemExistente.urgencia = "PERIGO";
-      itemExistente.acoes.push({
-        texto: "Escalar cobertura",
-        link: `/coberturas?posto=${p.codigoPosto}`,
+          : `Posto descoberto no turno atual: ${detHoje.motivo}`,
+        prazoTexto: "Turno atual · urgente",
+        acoes: [
+          { texto: "Escalar cobertura", link: `/coberturas?posto=${p.codigoPosto}` },
+          { texto: "Ver no mapa", link: `/mapa-ocupacao?posto=${p.codigoPosto}&data=${dataReferenciaHoje}`, isSecundario: true },
+        ],
       });
-
-      mapaAcoesPorPosto.set(p.codigoPosto, itemExistente);
     }
   });
 
-  const faixaAcao: FaixaAcaoItem[] = Array.from(mapaAcoesPorPosto.values()).map((val) => ({
-    id: `acao-${val.posto}`,
-    tipo: "POSTO_PENDENCIA",
-    urgencia: val.urgencia,
-    posto: val.posto,
-    base: val.base,
-    descricao: val.mensagens.join(" • "),
-    prazoTexto: val.prazoTexto,
-    acoes: val.acoes,
-  }));
-
-  // Item de Falha de Importação em dias passados (Item 1)
+  // 9.3 Dias com situação "Sem dado" na competência
   if (totalSemDadoCompetencia > 0) {
-    faixaAcao.unshift({
-      id: "imp-incompleta",
-      tipo: "IMPORTACAO_INCOMPLETA",
-      urgencia: "ATENCAO",
-      base: "Todas as bases",
-      descricao: `Importação incompleta: ${totalSemDadoCompetencia} postos-dia sem ponto registrado na competência.`,
-      prazoTexto: "Atenção",
-      acoes: [{ texto: "Ver importação", link: "/importacoes?aba=ponto" }],
+    const postosComSemDado = postosFiltrados.filter((p) => {
+      return datasApuracaoCompetencia.some((dt) => {
+        const det = matrizDetalhada[`${p.id}_${dt}`];
+        return det && det.status === "SEM_DADO";
+      });
     });
+
+    if (postosComSemDado.length > 0) {
+      postosComSemDado.forEach((p) => {
+        const datasSemDadoPosto = datasApuracaoCompetencia.filter((dt) => {
+          const det = matrizDetalhada[`${p.id}_${dt}`];
+          return det && det.status === "SEM_DADO";
+        });
+
+        itensFaixaAcao.push({
+          id: `sem-dado-${p.codigoPosto}`,
+          tipo: "Dado pendente",
+          tipoLegado: "IMPORTACAO_INCOMPLETA",
+          urgencia: "ATENCAO",
+          diasParaVencer: 2,
+          posto: p.codigoPosto,
+          funcao: p.funcao,
+          base: p.unidadeNome,
+          descricao: `${datasSemDadoPosto.length} dia(s) com ausência de registro de ponto no RHID na competência.`,
+          prazoTexto: "Competência atual",
+          acoes: [
+            { texto: "Resolver", link: "/importacoes?aba=ponto" },
+            { texto: "Ver no mapa", link: `/mapa-ocupacao?filtro=sem_dado&posto=${p.codigoPosto}`, isSecundario: true },
+          ],
+        });
+      });
+    } else {
+      itensFaixaAcao.push({
+        id: "imp-incompleta",
+        tipo: "Dado pendente",
+        tipoLegado: "IMPORTACAO_INCOMPLETA",
+        urgencia: "ATENCAO",
+        diasParaVencer: 2,
+        base: "Todas as bases",
+        descricao: `Importação incompleta: ${totalSemDadoCompetencia} postos-dia sem ponto registrado na competência.`,
+        prazoTexto: "Competência atual",
+        acoes: [
+          { texto: "Resolver", link: "/importacoes?aba=ponto" },
+          { texto: "Ver no mapa", link: "/mapa-ocupacao?filtro=sem_dado", isSecundario: true },
+        ],
+      });
+    }
   }
 
-  // Item de Carga Atrasada > 24h
-  if (rhidAtrasado) {
-    faixaAcao.push({
-      id: "imp-rhid-atrasado",
-      tipo: "IMPORTACAO_ATRASADA",
-      urgencia: "ATENCAO",
-      base: "Todas as bases",
-      descricao: "A última carga do ponto RHID foi concluída há mais de 24 horas.",
-      prazoTexto: "Atrasada",
-      acoes: [{ texto: "Ver importação", link: "/importacoes?aba=ponto" }],
-    });
-  }
-
-  faixaAcao.sort((a, b) => {
+  // Ordenação: mais urgente primeiro (PERIGO antes de ATENCAO, depois menores diasParaVencer)
+  itensFaixaAcao.sort((a, b) => {
     const peso = { PERIGO: 1, ATENCAO: 2, NORMAL: 3 };
-    return peso[a.urgencia] - peso[b.urgencia];
+    const diffUrg = peso[a.urgencia] - peso[b.urgencia];
+    if (diffUrg !== 0) return diffUrg;
+    return (a.diasParaVencer ?? 99) - (b.diasParaVencer ?? 99);
   });
 
-  // 10. Régua de Fiscalização (Item 11.3)
+  // 10. Evolução da Competência e Projeção (Item 4)
+  const serieAteHoje: PontoEvolucaoSla[] = [];
+  let atendidosAcum = 0;
+  let avaliadosAcum = 0;
+
+  for (const dt of datasApuracaoCompetencia) {
+    const diaNum = parseInt(dt.substring(8, 10), 10);
+    let atendidosNoDia = 0;
+    let avaliadosNoDia = 0;
+
+    for (const posto of postosFiltrados) {
+      const det = matrizDetalhada[`${posto.id}_${dt}`];
+      if (det && det.status !== "SEM_ESCALA" && det.status !== "AGUARDANDO_TURNO") {
+        if (det.status === "PRESENTE" || det.status === "COBERTO") {
+          atendidosNoDia++;
+          avaliadosNoDia++;
+        } else if (det.status === "DESCOBERTO" || det.status === "VAGO") {
+          avaliadosNoDia++;
+        }
+      }
+    }
+
+    atendidosAcum += atendidosNoDia;
+    avaliadosAcum += avaliadosNoDia;
+
+    const slaDia =
+      avaliadosAcum > 0 ? parseFloat(((atendidosAcum / avaliadosAcum) * 100).toFixed(1)) : null;
+
+    serieAteHoje.push({
+      dia: diaNum,
+      data: dt,
+      atendidosAcumulado: atendidosAcum,
+      avaliadosAcumulado: avaliadosAcum,
+      slaAcumulado: slaDia,
+      atendidosDia: atendidosNoDia,
+      avaliadosDia: avaliadosNoDia,
+      isFuturo: false,
+      slaProjetado: null,
+    });
+  }
+
+  const [anoCompetenciaStr, mesCompetenciaStr] = competencia.split("-");
+  const anoInt = parseInt(anoCompetenciaStr, 10);
+  const mesInt = parseInt(mesCompetenciaStr, 10);
+  const totalDiasNoMes = new Date(anoInt, mesInt, 0).getDate();
+
+  const evolucaoCalculada = calcularProjecaoFechamentoSla(
+    serieAteHoje,
+    totalDiasNoMes,
+    metaSlaParametrizada
+  );
+
+  const evolucaoCompetencia: EvolucaoCompetenciaDados = {
+    serie: evolucaoCalculada.serieCompletaComProjecao,
+    projecaoFechamento: evolucaoCalculada.projecaoFechamento,
+    metaSla: metaSlaParametrizada,
+    statusProjecao: evolucaoCalculada.statusProjecao,
+    mensagemProjecao:
+      evolucaoCalculada.statusProjecao === "INDISPONIVEL"
+        ? "Projeção disponível a partir do 3º dia"
+        : undefined,
+  };
+
+  // 11. Fechamento da Medição (Item 5)
+  const apontamentosAbertosTotal = dados.apontamentos.filter(
+    (a) => a.status === "ABERTO" || a.status === "EM_TRATAMENTO"
+  ).length;
+
+  const etapasFechamento: EtapaFechamentoMedicao[] = [
+    {
+      id: "etapa-rhid",
+      ordem: 1,
+      titulo: "Ponto RHID importado até o último dia útil",
+      status: rhidAtrasado ? "PENDENTE" : "CONCLUIDO",
+      detalhe: `Última carga em ${pontoRhidAte}`,
+      link: "/importacoes?aba=ponto",
+    },
+    {
+      id: "etapa-rm",
+      ordem: 2,
+      titulo: "Dados do RM importados",
+      status: "CONCLUIDO",
+      detalhe: `Última sincronização em ${rmAte}`,
+      link: "/importacoes?aba=rm",
+    },
+    {
+      id: "etapa-sem-dado",
+      ordem: 3,
+      titulo: "Dias sem dado resolvidos",
+      status: totalSemDadoCompetencia === 0 ? "CONCLUIDO" : "PENDENTE",
+      detalhe:
+        totalSemDadoCompetencia > 0
+          ? `${totalSemDadoCompetencia} dia(s) pendente(s)`
+          : "Nenhum pendente",
+      link: "/mapa-ocupacao?filtro=sem_dado",
+    },
+    {
+      id: "etapa-apontamentos",
+      ordem: 4,
+      titulo: "Apontamentos Petrobras respondidos",
+      status: apontamentosAbertosTotal === 0 ? "CONCLUIDO" : "PENDENTE",
+      detalhe:
+        apontamentosAbertosTotal > 0
+          ? `${apontamentosAbertosTotal} em aberto`
+          : "Todos respondidos",
+      link: "/apontamentos",
+    },
+    {
+      id: "etapa-memoria",
+      ordem: 5,
+      titulo: "Memória de cálculo gerada",
+      status: "PENDENTE",
+      detalhe: "Pendente para fechamento",
+      link: "/relatorios",
+      acaoTexto: "Gerar memória de cálculo",
+    },
+  ];
+
+  const totalEtapasConcluidas = etapasFechamento.filter((e) => e.status === "CONCLUIDO").length;
+  const fechamentoMedicao: FechamentoMedicaoDados = {
+    prazoFechamento: dados.parametros?.prazoFechamento ?? null,
+    etapas: etapasFechamento,
+    totalConcluidas: totalEtapasConcluidas,
+    totalEtapas: 5,
+  };
+
+  // 12. Régua de Fiscalização (Item 11.3)
   const postosComTitular = postosFiltrados.filter((p) => p.titularMatricula).length;
   const totalDesviosHoje = descobertosHoje + vagosHoje;
   const reguaFiscalizacao = {
@@ -1230,13 +1527,15 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
         "Soma, para cada posto-dia descoberto, de (valor mensal do Anexo 1-A ÷ dias com escala na competência) × fator de glosa",
     },
     comparativoBases,
+    evolucaoCompetencia,
+    fechamentoMedicao,
     gradeSemanal: {
       dias: diasGradeInfo,
       linhas: linhasGradeSemanal,
       totalPostos: postosFiltrados.length,
       totalPostosComDesvio,
     },
-    faixaAcao: faixaAcao.slice(0, 5),
+    faixaAcao: itensFaixaAcao,
     reguaFiscalizacao,
     matrizDetalhada,
   };
