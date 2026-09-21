@@ -11,6 +11,8 @@ import {
   ArrowRight,
   X,
   Server,
+  Lock,
+  FileSpreadsheet,
 } from "lucide-react";
 import { carregarEstado, LogAuditoriaOperacional } from "@/lib/dados/estado-operacional";
 
@@ -47,6 +49,15 @@ export default function AuditoriaPage() {
   });
 
   const getAcaoBadge = (acao: string) => {
+    if (acao === "CONGELAR_COMPETENCIA") {
+      return "bg-indigo-50 text-indigo-900 border-indigo-300 font-bold";
+    }
+    if (acao === "HOMOLOGAR_MEDICAO_PETROBRAS") {
+      return "bg-emerald-100 text-emerald-900 border-emerald-400 font-bold";
+    }
+    if (acao === "REABRIR_COMPETENCIA") {
+      return "bg-rose-50 text-rose-900 border-rose-300 font-bold";
+    }
     if (acao.startsWith("CRIAR")) {
       return "bg-emerald-50 text-emerald-800 border-emerald-200";
     }
@@ -79,7 +90,21 @@ export default function AuditoriaPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/fechamento"
+            className="inline-flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-semibold px-3 py-2 rounded border border-indigo-200 transition-colors"
+          >
+            <Lock className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Fechamento Mensal</span>
+          </Link>
+          <Link
+            href="/relatorios"
+            className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold px-3 py-2 rounded border border-slate-300 transition-colors"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-slate-600" />
+            <span>Relatórios Oficiais</span>
+          </Link>
           <Link
             href="/mapa-ocupacao"
             className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold px-3 py-2 rounded border border-slate-300 transition-colors"
@@ -175,6 +200,9 @@ export default function AuditoriaPage() {
               className="border border-slate-300 rounded px-2 py-1.5 bg-white text-slate-800 text-xs font-medium outline-none"
             >
               <option value="TODAS">Todas as Ações</option>
+              <option value="CONGELAR_COMPETENCIA">CONGELAR_COMPETENCIA (Fechamento)</option>
+              <option value="HOMOLOGAR_MEDICAO_PETROBRAS">HOMOLOGAR_MEDICAO_PETROBRAS (Atesto)</option>
+              <option value="REABRIR_COMPETENCIA">REABRIR_COMPETENCIA (Emergencial)</option>
               <option value="CRIAR_POSTO">CRIAR_POSTO</option>
               <option value="CRIAR_PROFISSIONAL">CRIAR_PROFISSIONAL</option>
               <option value="REGISTRAR_OCORRENCIA">REGISTRAR_OCORRENCIA</option>

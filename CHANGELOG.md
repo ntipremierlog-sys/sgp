@@ -4,6 +4,28 @@ Todas as alterações relevantes e entregas incrementais por semana de desenvolv
 
 ---
 
+## [Entrega Oficial — Auditoria de Governança, Matriz de Conformidade e Merge em Produção] — 21/09/2026
+
+### O que ficou pronto:
+- **Trilha de Auditoria Imutável (`src/app/auditoria/page.tsx`):**
+  - Integração visual e funcional das ações de governança: `CONGELAR_COMPETENCIA`, `HOMOLOGAR_MEDICAO_PETROBRAS` e `REABRIR_COMPETENCIA`.
+  - Badges cromáticos dedicados (índigo para congelamento, esmeralda para homologação Petrobras e carmesim para reabertura emergencial).
+  - Filtro dedicado por tipo de ação atualizado com as novas operações de fechamento.
+  - Atalhos rápidos no cabeçalho para `Fechamento Mensal` (`/fechamento`) e `Relatórios Oficiais` (`/relatorios`).
+- **Matriz de Conformidade Contratual & LGPD (`src/app/conformidade/page.tsx`):**
+  - Expansão formal dos requisitos do Item 11.3 do Contrato Petrobras ICJ 5900.0129796.25.2:
+    - **R4:** Relatórios Oficiais Multi-Base, XLSX em 4 abas e autenticação por chave SHA-256.
+    - **R5:** Evidência dia a dia de presenças reais, folgas e abonos integrados ao RM.
+    - **R6:** Fechamento Mensal, congelamento imutável e atesto formal da Fiscalização Técnica.
+    - **R7:** Memória de Cálculo, apuração de glosas em 30 avos e meta de SLA ($\ge 95\%$).
+    - **R8:** Compliance trabalhista estrito ao Artigo 66 da CLT (descanso interjornada de 11h) e cálculo do adicional de 50% (Súmula 110/TST).
+- **Métricas de Qualidade & Testes Automatizados:**
+  - Nova suíte de testes de integração em `src/__tests__/auditoria-conformidade-fechamento.test.ts`.
+  - Suíte completa: **165 testes passando em 22 arquivos (100% de sucesso)**.
+  - Verificação rigorosa com `npx tsc --noEmit` sem erros.
+
+---
+
 ## [Entrega Oficial — Fluxo de Fechamento de Competência & Congelamento Mensal (Item 11.3)] — 21/09/2026
 
 ### O que ficou pronto:

@@ -1220,7 +1220,7 @@ export function congelarCompetencia(
   registrarLog(
     "CONGELAR_COMPETENCIA",
     `Competência (${competencia})`,
-    `Competência ${competencia} encerrada e congelada oficialmente por ${usuario}. Hash: ${hash.substring(0, 24)}...`
+    `Competência ${competencia} encerrada e congelada oficialmente por ${usuario}. Hash: ${hash.substring(0, 36)}...`
   );
 
   return fechamentoAtualizado;

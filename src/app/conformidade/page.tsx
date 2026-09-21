@@ -36,9 +36,9 @@ export default function ConformidadePage() {
     {
       id: "R4",
       literal:
-        "Possibilitar consultas e emissão de relatórios que otimizem a gestão e fiscalização",
+        "Possibilitar consultas e emissão de relatórios oficiais que otimizem a gestão e fiscalização em âmbito nacional",
       comoAtende:
-        "Consultas por posto, profissional, unidade e período + relatórios exportáveis em XLSX e PDF (Espelho de Ocupação e Base de Apoio à MC).",
+        "Consultas cobrindo todas as 29 bases operacionais, exportação nativa XLSX em 4 abas estruturadas, memória de cálculo analítica e carimbo digital SHA-256.",
       linkHref: "/relatorios",
       linkTexto: "Central de Relatórios",
       status: "CONFORME",
@@ -48,9 +48,39 @@ export default function ConformidadePage() {
       literal:
         "Apurar e evidenciar a alocação dos empregados na efetiva execução dos serviços previstos no Anexo 1-A",
       comoAtende:
-        "Mapa de Ocupação Diária do Posto + Espelho de Ocupação por período com rastreabilidade dia a dia.",
+        "Mapa de Ocupação Diária do Posto + Espelho de Ocupação mensal com apuração de presenças reais, abonos e folgas do sistema RM.",
       linkHref: "/mapa-ocupacao",
       linkTexto: "Mapa de Ocupação Diária",
+      status: "CONFORME",
+    },
+    {
+      id: "R6",
+      literal:
+        "Congelamento mensal da apuração operacional com snapshot imutável, carimbo SHA-256 e homologação da Fiscalização Petrobras",
+      comoAtende:
+        "Módulo de Fechamento Mensal com bloqueio de edições retroativas em competências congeladas, atesto formal com matrícula do Fiscal Técnico e reabertura emergencial auditada.",
+      linkHref: "/fechamento",
+      linkTexto: "Fechamento Mensal",
+      status: "CONFORME",
+    },
+    {
+      id: "R7",
+      literal:
+        "Memória de cálculo de faturamento e apuração de glosas contratuais com meta de SLA (>= 95,0%)",
+      comoAtende:
+        "Dedução financeira na base estrita de 30 avos por diária descoberta, comparação com a meta contratual de 95% e demonstrativo consolidado por base operacional.",
+      linkHref: "/relatorios",
+      linkTexto: "Memória de Cálculo (11.3)",
+      status: "CONFORME",
+    },
+    {
+      id: "R8",
+      literal:
+        "Conformidade trabalhista com intervalo interjornada mínimo de 11 horas consecutivas (CLT Art. 66 e Súmula 110/TST)",
+      comoAtende:
+        "Auditoria em tempo real no cadastro de coberturas com bloqueio e cálculo de adicional indenizatório de 50% em substituições emergenciais com termo de ciência.",
+      linkHref: "/coberturas",
+      linkTexto: "Módulo de Coberturas",
       status: "CONFORME",
     },
   ];
