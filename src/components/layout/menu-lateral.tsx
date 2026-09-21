@@ -18,6 +18,7 @@ import {
   Settings,
   FileCheck,
   Clock,
+  Lock,
 } from "lucide-react";
 import { carregarEstado } from "@/lib/dados/estado-operacional";
 import { can } from "@/lib/auth/permissoes";
@@ -56,6 +57,7 @@ const gruposMenuConfig: GrupoMenu[] = [
     itens: [
       { rotulo: "Apontamentos Petrobras", href: "/apontamentos", icone: MessageSquare, temBadge: true, recurso: "APONTAMENTOS" },
       { rotulo: "Relatórios e medição", href: "/relatorios", icone: FileSpreadsheet, recurso: "RELATORIOS" },
+      { rotulo: "Fechamento mensal", href: "/fechamento", icone: Lock, recurso: "ADMINISTRACAO" },
       { rotulo: "Conformidade contratual", href: "/conformidade", icone: ShieldCheck, recurso: "CONFORMIDADE" },
       { rotulo: "Trilha de auditoria", href: "/auditoria", icone: History, recurso: "AUDITORIA" },
     ],

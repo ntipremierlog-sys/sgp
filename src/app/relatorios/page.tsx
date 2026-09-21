@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
 import {
   FileSpreadsheet,
   Download,
@@ -19,6 +20,7 @@ import {
   FilterX,
   Layers,
   ChevronRight,
+  Lock,
 } from "lucide-react";
 import { BASES_SGP_SISTEMA } from "@/lib/dados/secoes-horarios";
 import {
@@ -27,6 +29,7 @@ import {
   obterTodosPostosContrato,
   obterMarcacoesPonto,
   obterDataReferenciaPonto,
+  isCompetenciaCongelada,
   PostoOperacional,
   OcorrenciaOperacional,
   CoberturaOperacional,
@@ -863,9 +866,29 @@ export default function RelatoriosPage() {
               <span className="text-xs font-bold text-slate-800 block">
                 Competência: {competencia === "2026-09" ? "Setembro / 2026" : competencia === "2026-08" ? "Agosto / 2026" : competencia}
               </span>
-              <span className="text-[11px] text-slate-600 font-medium">
+              <span className="text-[11px] text-slate-600 font-medium block">
                 Unidade: <strong>{nomeBaseSelecionada}</strong>
               </span>
+              {isCompetenciaCongelada(competencia) ? (
+                <div className="mt-1 flex items-center justify-start md:justify-end gap-1.5">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-full">
+                    <Lock className="w-3 h-3 text-emerald-700" />
+                    <span>Competência Congelada (Snapshot Imutável)</span>
+                  </span>
+                  <Link href="/fechamento" className="text-[10px] text-emerald-800 hover:underline font-semibold print:hidden">
+                    Detalhes &rarr;
+                  </Link>
+                </div>
+              ) : (
+                <div className="mt-1 flex items-center justify-start md:justify-end gap-1.5">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">
+                    <span>Em Apuração Aberta</span>
+                  </span>
+                  <Link href="/fechamento" className="text-[10px] text-amber-900 hover:underline font-semibold print:hidden">
+                    Congelar &rarr;
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
 

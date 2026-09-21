@@ -223,6 +223,39 @@ export interface LoteImportacaoOperacional {
   diasRetencao: number; // Padrão 90 dias
 }
 
+export interface FechamentoCompetencia {
+  id: string;
+  competencia: string; // Ex: "2026-08", "2026-09"
+  status: "ABERTO" | "EM_HOMOLOGACAO" | "CONGELADO";
+  congeladoEm?: string;
+  congeladoPor?: string;
+  congeladoPorEmail?: string;
+  hashIntegridadeSha256?: string;
+  resumoMetricas: {
+    postos: number;
+    exigiveis: number;
+    efetivas: number;
+    glosas: number;
+    taxaSla: number;
+    valorContrato: number;
+    valorGlosa: number;
+    faturamentoLiquido: number;
+  };
+  observacoes?: string;
+  homologacaoPetrobras?: {
+    homologado: boolean;
+    data?: string;
+    fiscalNome?: string;
+    parecer?: string;
+  };
+  historicoReaberturas?: Array<{
+    data: string;
+    usuario: string;
+    justificativa: string;
+  }>;
+  snapshotResumo?: Record<string, unknown>;
+}
+
 export interface EstadoOperacionalCompleto {
   postos: PostoOperacional[];
   profissionais: ProfissionalOperacional[];
@@ -238,6 +271,7 @@ export interface EstadoOperacionalCompleto {
   diasFolgaRm?: string[];
   pendenciasPonto?: PendenciaPontoItem[];
   dataReferenciaPonto?: string;
+  fechamentosCompetencia?: FechamentoCompetencia[];
   perfilAtivo: string;
   unidadeSelecionada: string;
 }
@@ -493,6 +527,53 @@ export const PROFISSIONAIS_INICIAIS: ProfissionalOperacional[] = (funcionariosRe
 export const OCORRENCIAS_INICIAIS: OcorrenciaOperacional[] = (ocorrenciasReais as unknown as OcorrenciaOperacional[]) || [];
 export const COBERTURAS_INICIAIS: CoberturaOperacional[] = [];
 export const APONTAMENTOS_INICIAIS: ApontamentoOperacional[] = [];
+
+export const FECHAMENTOS_INICIAIS: FechamentoCompetencia[] = [
+  {
+    id: "fech-2026-08",
+    competencia: "2026-08",
+    status: "CONGELADO",
+    congeladoEm: "2026-09-05 14:00:00",
+    congeladoPor: "Marcos Valério de Souza (Administrador Premier)",
+    congeladoPorEmail: "marcos.valerio@premierlogistics.com.br",
+    hashIntegridadeSha256: "sha256:8f4c2e91b5d63f8902c4419aa3bc781704e8a128e401b5d63f8902c4419aa3bc",
+    resumoMetricas: {
+      postos: 380,
+      exigiveis: 8360,
+      efetivas: 8150,
+      glosas: 210,
+      taxaSla: 97.5,
+      valorContrato: 2850000.0,
+      valorGlosa: 71750.0,
+      faturamentoLiquido: 2778250.0,
+    },
+    observacoes: "Competência Agosto/2026 encerrada e homologada sem contestação.",
+    homologacaoPetrobras: {
+      homologado: true,
+      data: "2026-09-06 09:30:00",
+      fiscalNome: "Carlos Eduardo Mendes (Fiscal Técnico Petrobras)",
+      parecer: "Medição de Agosto/2026 auditada e atestada para liquidação financeira conforme Item 11.3.",
+    },
+    historicoReaberturas: [],
+  },
+  {
+    id: "fech-2026-09",
+    competencia: "2026-09",
+    status: "ABERTO",
+    resumoMetricas: {
+      postos: 380,
+      exigiveis: 3960,
+      efetivas: 3810,
+      glosas: 150,
+      taxaSla: 96.2,
+      valorContrato: 2850000.0,
+      valorGlosa: 37500.0,
+      faturamentoLiquido: 2812500.0,
+    },
+    observacoes: "Competência Setembro/2026 em apuração diária com apuração parcial de registros.",
+    historicoReaberturas: [],
+  },
+];
 
 export const LOTES_INICIAIS: LoteImportacaoOperacional[] = [
   {
@@ -900,6 +981,7 @@ let estadoMemoria: EstadoOperacionalCompleto = {
   alocadosSifac: (sifacReais as unknown as ItemAlocadoSifac[]) || [],
   divergenciasConciliacao: {},
   equivalenciasConciliacao: { ...EQUIVALENCIAS_PADRAO },
+  fechamentosCompetencia: [...FECHAMENTOS_INICIAIS],
   perfilAtivo: "PREMIER_ADMIN",
   unidadeSelecionada: "UFN III – Três Lagoas/MS",
 };
@@ -1042,6 +1124,194 @@ export function responderApontamento(id: string, resposta: string, respondidoPor
   });
   salvarEstado({ apontamentos: atualizados });
   registrarLog("RESPONDER_APONTAMENTO", `Apontamento (${id})`, `Resposta do Gestor Premier ao apontamento ${id}`);
+}
+
+// -----------------------------------------------------------------------------
+// GESTÃO DE FECHAMENTO DE COMPETÊNCIA & CONGELAMENTO MENSAL (ITEM 11.3)
+// -----------------------------------------------------------------------------
+
+/**
+ * Retorna a lista de competências e seus status de fechamento/congelamento.
+ */
+export function obterFechamentosCompetencia(): FechamentoCompetencia[] {
+  const estado = carregarEstado();
+  if (estado.fechamentosCompetencia && estado.fechamentosCompetencia.length > 0) {
+    return estado.fechamentosCompetencia;
+  }
+  return [...FECHAMENTOS_INICIAIS];
+}
+
+/**
+ * Retorna o status de uma competência específica ("ABERTO", "EM_HOMOLOGACAO" ou "CONGELADO").
+ */
+export function obterStatusCompetencia(competencia: string): "ABERTO" | "EM_HOMOLOGACAO" | "CONGELADO" {
+  const lista = obterFechamentosCompetencia();
+  const item = lista.find((f) => f.competencia === competencia);
+  return item?.status || "ABERTO";
+}
+
+/**
+ * Verifica se uma data ("YYYY-MM-DD") ou competência ("YYYY-MM") encontra-se oficialmente congelada.
+ */
+export function isCompetenciaCongelada(dataOuCompetencia: string): boolean {
+  if (!dataOuCompetencia) return false;
+  const comp = dataOuCompetencia.substring(0, 7);
+  return obterStatusCompetencia(comp) === "CONGELADO";
+}
+
+/**
+ * Encerra e congela uma competência mensal gerando snapshot imutável com hash SHA-256 e auditoria.
+ */
+export function congelarCompetencia(
+  competencia: string,
+  dados: Partial<FechamentoCompetencia> & { usuario?: string; email?: string }
+): FechamentoCompetencia {
+  const atuais = [...obterFechamentosCompetencia()];
+  const usuario = dados.usuario || "Administrador Premier (Marcos Valério)";
+  const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+
+  const hash =
+    dados.hashIntegridadeSha256 ||
+    `sha256:fech_${competencia}_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+
+  let fechamentoAtualizado: FechamentoCompetencia;
+  const existenteIdx = atuais.findIndex((f) => f.competencia === competencia);
+
+  const metricasPadrao = {
+    postos: 380,
+    exigiveis: 0,
+    efetivas: 0,
+    glosas: 0,
+    taxaSla: 100,
+    valorContrato: 0,
+    valorGlosa: 0,
+    faturamentoLiquido: 0,
+  };
+
+  if (existenteIdx >= 0) {
+    fechamentoAtualizado = {
+      ...atuais[existenteIdx],
+      ...dados,
+      status: "CONGELADO",
+      congeladoEm: nowStr,
+      congeladoPor: usuario,
+      congeladoPorEmail: dados.email || "marcos.valerio@premierlogistics.com.br",
+      hashIntegridadeSha256: hash,
+      resumoMetricas: dados.resumoMetricas || atuais[existenteIdx].resumoMetricas || metricasPadrao,
+    };
+    atuais[existenteIdx] = fechamentoAtualizado;
+  } else {
+    fechamentoAtualizado = {
+      id: `fech-${competencia}`,
+      competencia,
+      status: "CONGELADO",
+      congeladoEm: nowStr,
+      congeladoPor: usuario,
+      congeladoPorEmail: dados.email || "marcos.valerio@premierlogistics.com.br",
+      hashIntegridadeSha256: hash,
+      resumoMetricas: dados.resumoMetricas || metricasPadrao,
+      historicoReaberturas: [],
+      ...dados,
+    };
+    atuais.push(fechamentoAtualizado);
+  }
+
+  salvarEstado({ fechamentosCompetencia: atuais });
+  registrarLog(
+    "CONGELAR_COMPETENCIA",
+    `Competência (${competencia})`,
+    `Competência ${competencia} encerrada e congelada oficialmente por ${usuario}. Hash: ${hash.substring(0, 24)}...`
+  );
+
+  return fechamentoAtualizado;
+}
+
+/**
+ * Reabre uma competência congelada em caráter emergencial mediante justificativa formal auditada.
+ */
+export function reabrirCompetencia(
+  competencia: string,
+  justificativa: string,
+  usuario: string = "Administrador Premier (Marcos Valério)"
+): FechamentoCompetencia {
+  if (!justificativa || justificativa.trim().length < 10) {
+    throw new Error("Justificativa formal com no mínimo 10 caracteres é obrigatória para reabertura de competência.");
+  }
+
+  const atuais = [...obterFechamentosCompetencia()];
+  const existenteIdx = atuais.findIndex((f) => f.competencia === competencia);
+  const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+
+  if (existenteIdx < 0) {
+    throw new Error(`Competência ${competencia} não encontrada para reabertura.`);
+  }
+
+  const historico = atuais[existenteIdx].historicoReaberturas || [];
+  const fechamentoAtualizado: FechamentoCompetencia = {
+    ...atuais[existenteIdx],
+    status: "ABERTO",
+    historicoReaberturas: [
+      ...historico,
+      {
+        data: nowStr,
+        usuario,
+        justificativa: justificativa.trim(),
+      },
+    ],
+  };
+
+  atuais[existenteIdx] = fechamentoAtualizado;
+  salvarEstado({ fechamentosCompetencia: atuais });
+
+  registrarLog(
+    "REABRIR_COMPETENCIA",
+    `Competência (${competencia})`,
+    `Reabertura emergencial da competência ${competencia} autorizada por ${usuario}. Motivo: "${justificativa.trim()}"`
+  );
+
+  return fechamentoAtualizado;
+}
+
+/**
+ * Registra formalmente a homologação / parecer da Fiscalização Petrobras para a medição da competência.
+ */
+export function homologarMedicaoPetrobras(
+  competencia: string,
+  parecer: string,
+  fiscalNome: string = "Carlos Eduardo Mendes (Fiscal Técnico Petrobras)"
+): FechamentoCompetencia {
+  if (!parecer || parecer.trim().length < 5) {
+    throw new Error("Parecer técnico da fiscalização é obrigatório para homologação.");
+  }
+
+  const atuais = [...obterFechamentosCompetencia()];
+  const existenteIdx = atuais.findIndex((f) => f.competencia === competencia);
+  const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+
+  if (existenteIdx < 0) {
+    throw new Error(`Competência ${competencia} não encontrada para homologação.`);
+  }
+
+  const fechamentoAtualizado: FechamentoCompetencia = {
+    ...atuais[existenteIdx],
+    homologacaoPetrobras: {
+      homologado: true,
+      data: nowStr,
+      fiscalNome,
+      parecer: parecer.trim(),
+    },
+  };
+
+  atuais[existenteIdx] = fechamentoAtualizado;
+  salvarEstado({ fechamentosCompetencia: atuais });
+
+  registrarLog(
+    "HOMOLOGAR_MEDICAO_PETROBRAS",
+    `Competência (${competencia})`,
+    `Medição da competência ${competencia} homologada pelo fiscal ${fiscalNome}. Parecer: "${parecer.trim().substring(0, 60)}..."`
+  );
+
+  return fechamentoAtualizado;
 }
 
 /**

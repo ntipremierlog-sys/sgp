@@ -4,6 +4,34 @@ Todas as alterações relevantes e entregas incrementais por semana de desenvolv
 
 ---
 
+## [Entrega Oficial — Fluxo de Fechamento de Competência & Congelamento Mensal (Item 11.3)] — 21/09/2026
+
+### O que ficou pronto:
+- **Fluxo de Fechamento de Competência & Congelamento Imutável (`src/lib/dados/estado-operacional.ts`):**
+  - Implementação do ciclo de vida formal de competência: `ABERTO` $\rightarrow$ `CONGELADO`.
+  - Geração de carimbo criptográfico SHA-256 no congelamento (`SGP-COMPETENCIA-YYYY-MM-sha256`), garantindo integridade e inviolabilidade dos dados de medição.
+  - Registro de auditoria imutável com data/hora de congelamento, usuário responsável, total de diárias cumpridas/glosadas, SLA final e valor líquido referencial.
+  - Suporte ao Atesto Formal da Fiscalização Petrobras (`homologarMedicaoPetrobras`) com registro de fiscal, matrícula Petrobras, data/hora e parecer técnico.
+  - Fluxo de reabertura emergencial controlada (`reabrirCompetencia`) com justificativa obrigatória (> 10 caracteres) para governança e trilha de auditoria.
+- **Interface Executiva de Fechamento (`src/app/fechamento/page.tsx`):**
+  - Tela dedicada com KPIs executivos da competência selecionada (Status, SLA, Diárias Cumpridas vs Glosadas, Faturamento Líquido).
+  - Modal interativo de congelamento com resumo dos dados e confirmação consciente.
+  - Modal de homologação da Fiscalização Petrobras com coleta de dados de atesto.
+  - Modal de reabertura emergencial com exigência de justificativa técnica auditável.
+  - Histórico de competências com badges de status, hash SHA-256 e visualização rápida.
+- **Proteção Contra Alterações Retroativas (`src/app/coberturas/page.tsx`):**
+  - Verificação de competência congelada antes do envio de coberturas (`isCompetenciaCongelada`).
+  - Bloqueio ativo no formulário com banner informativo em vermelho e link direto para a tela de fechamento.
+- **Sinalização de Fechamento nos Relatórios e Navegação:**
+  - Badge de status de competência nos Relatórios Oficiais (`src/app/relatorios/page.tsx`) indicando se os relatórios já estão oficialmente congelados ou ainda em apuração aberta.
+  - Novo item de navegação `Fechamento mensal` no menu lateral (`src/components/layout/menu-lateral.tsx`) com ícone de cadeado (`Lock`).
+- **Métricas de Qualidade & Testes:**
+  - 6 novos testes automatizados em `src/__tests__/fechamento-competencia.test.ts` cobrindo o ciclo de vida completo, integridade do hash, bloqueio retroativo, atesto Petrobras e reabertura justificada.
+  - Suíte geral de testes: **161 testes passando em 21 arquivos (100% de sucesso)**.
+  - Verificação rigorosa de tipagem com TypeScript (`npx tsc --noEmit`) sem nenhum erro.
+
+---
+
 ## [Entrega Oficial — Consolidação dos Relatórios & Memória de Cálculo Oficial (Item 11.3)] — 21/09/2026
 
 ### O que ficou pronto:

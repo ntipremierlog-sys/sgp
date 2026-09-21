@@ -16,12 +16,14 @@ import {
   List,
   UserX,
   AlertTriangle,
+  AlertCircle,
 } from "lucide-react";
 import {
   carregarEstado,
   adicionarCobertura,
   trocarTitularPosto,
   obterMarcacoesPonto,
+  isCompetenciaCongelada,
   CoberturaOperacional,
   PostoOperacional,
   ProfissionalOperacional,
@@ -158,6 +160,14 @@ export default function CoberturasPage() {
     e.preventDefault();
     if (!formPostoCodigo || !formSubstitutoMatricula || !formDataInicio || !formDataFim) {
       alert("Preencha todos os campos obrigatórios.");
+      return;
+    }
+
+    // Bloqueio estrito de Competência Congelada
+    if (isCompetenciaCongelada(formDataInicio) || isCompetenciaCongelada(formDataFim)) {
+      alert(
+        `BLOQUEIO DE COMPETÊNCIA CONGELADA:\n\nA data selecionada pertence a uma competência que se encontra CONGELADA (Snapshot Imutável).\n\nPara efetuar alterações retroativas, solicite a reabertura emergencial ao Administrador na tela de Fechamento Mensal.`
+      );
       return;
     }
 
@@ -934,6 +944,16 @@ export default function CoberturasPage() {
                   />
                 </div>
               </div>
+
+              {/* Alerta de Competência Congelada */}
+              {isCompetenciaCongelada(formDataInicio) && (
+                <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-start gap-2.5 text-rose-950 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="text-[11px] leading-relaxed">
+                    <strong>Competência Oficialmente Congelada:</strong> O mês de {formDataInicio.substring(0, 7)} encontra-se com snapshot imutável fechado. Para cadastrar coberturas retroativas, realize a reabertura emergencial em <Link href="/fechamento" className="underline font-bold text-rose-800">Fechamento Mensal</Link>.
+                  </div>
+                </div>
+              )}
 
               {/* Apuração em Tempo Real de Interjornada (CLT Artigo 66) */}
               {validacaoInterjornada && (
