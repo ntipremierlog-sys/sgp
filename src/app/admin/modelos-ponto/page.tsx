@@ -159,7 +159,7 @@ export default function ModelosPontoPage() {
               {mod.separadorCsv && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Separador CSV / Codificação:</span>
-                  <span className="font-mono font-medium">'{mod.separadorCsv}' / {mod.codificacao}</span>
+                  <span className="font-mono font-medium">{"'"}{mod.separadorCsv}{"'"} / {mod.codificacao}</span>
                 </div>
               )}
             </div>

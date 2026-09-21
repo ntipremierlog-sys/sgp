@@ -14,6 +14,7 @@ import {
   carregarEstado,
   obterMarcacoesPonto,
   obterDataReferenciaPonto,
+  obterDiasFolgaPonto,
   registrarLogAuditoria,
 } from "@/lib/dados/estado-operacional";
 import { apurarPresencaEPostos } from "@/lib/servicos/apuracao-presenca";
@@ -63,31 +64,58 @@ export default function EspelhoPontoColaboradorPage({ params }: PageProps) {
       estado.perfilAtivo || "PREMIER_ADMIN"
     );
 
-    const marcacoes = obterMarcacoesPonto();
-    const dataRef = obterDataReferenciaPonto();
-    setDataRefPonto(dataRef);
+    async function processarApuracaoEspelho() {
+      // O narrowing `if (!colab) return` no escopo pai garante que colab é definido aqui.
+      // A asserção abaixo satisfaz o compilador TypeScript dentro do contexto assíncrono.
+      const colaborador = colab!;
 
-    const horarios = carregarHorariosInterpretados();
-    const ciclos = carregarCiclosColaboradores();
+      let marcacoes = obterMarcacoesPonto();
+      let diasFolga = obterDiasFolgaPonto();
+      let dataRef = obterDataReferenciaPonto();
 
-    // Apuração de 25/08 a 15/09
-    const resultado = apurarPresencaEPostos(
-      [colab],
-      marcacoes,
-      estado.ocorrencias,
-      estado.coberturas,
-      estado.postos,
-      {
-        dataInicio: "2026-08-01",
-        dataFim: "2026-09-30",
-        dataReferenciaUltimoLote: dataRef,
-      },
-      horarios,
-      ciclos
-    );
+      if (!marcacoes || marcacoes.length === 0) {
+        try {
+          const res = await fetch("/api/ponto");
+          if (res.ok) {
+            const data = await res.json();
+            if (data.sucesso && Array.isArray(data.marcacoes) && data.marcacoes.length > 0) {
+              marcacoes = data.marcacoes;
+              diasFolga = data.diasFolgaRm || diasFolga;
+              dataRef = data.dataReferencia || dataRef;
+            }
+          }
+        } catch (err) {
+          console.warn("Aviso: Falha ao carregar ponto via /api/ponto:", err);
+        }
+      }
 
-    setApuracoesMes(resultado.apuracoesPorColaboradorDia);
-    setCarregando(false);
+      setDataRefPonto(dataRef);
+
+      const horarios = carregarHorariosInterpretados();
+      const ciclos = carregarCiclosColaboradores();
+
+      // Apuração de 25/08 a 15/09
+      const resultado = apurarPresencaEPostos(
+        [colaborador],
+        marcacoes,
+        estado.ocorrencias,
+        estado.coberturas,
+        estado.postos,
+        {
+          dataInicio: "2026-08-01",
+          dataFim: "2026-09-30",
+          dataReferenciaUltimoLote: dataRef,
+          diasSemJornadaRm: diasFolga,
+        },
+        horarios,
+        ciclos
+      );
+
+      setApuracoesMes(resultado.apuracoesPorColaboradorDia);
+      setCarregando(false);
+    }
+
+    processarApuracaoEspelho();
   }, [colaboradorId, router]);
 
   // Filtra por mês
@@ -110,23 +138,25 @@ export default function EspelhoPontoColaboradorPage({ params }: PageProps) {
   function getBadgeSituacao(sit: SituacaoPresencaDiaria) {
     switch (sit) {
       case "PRESENTE":
-        return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">Presente</span>;
+        return <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Presente</span>;
       case "AUSENCIA_JUSTIFICADA":
-        return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-indigo-100 text-indigo-800">Ausência Justificada</span>;
+        return <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">Ausência Justificada</span>;
       case "FALTA":
-        return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800">Falta</span>;
+        return <span className="text-xs font-semibold text-red-600 dark:text-red-400">Falta</span>;
       case "MARCACAO_INCOMPLETA":
-        return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">Marcação Incompleta</span>;
+        return <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">Marcação Incompleta</span>;
       case "FOLGA_ESCALA":
-        return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700">Folga da Escala</span>;
+        return <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Folga da Escala</span>;
       case "FERIAS_AFASTADO_LICENCA":
-        return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800">Férias / Afastado</span>;
+        return <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">Férias / Afastado</span>;
       case "ESCALA_NAO_CONFIRMADA":
-        return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-800">Escala não confirmada</span>;
+        return <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">Escala não confirmada</span>;
       case "SEM_DADO":
-        return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Sem dado</span>;
+        return <span className="text-xs font-medium text-muted-foreground">Sem dado</span>;
+      case "DESLIGADO":
+        return <span className="text-xs font-semibold text-red-600 dark:text-red-400">Desligado</span>;
       default:
-        return <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-700">{sit}</span>;
+        return <span className="text-xs font-medium text-foreground">{sit}</span>;
     }
   }
 
@@ -263,7 +293,7 @@ export default function EspelhoPontoColaboradorPage({ params }: PageProps) {
                     </td>
                     <td className="px-4 py-3">
                       {item.marcacoesDoDia.length === 0 ? (
-                        <span className="text-muted-foreground italic font-sans">Sem batida</span>
+                        <span className="text-muted-foreground font-sans">—</span>
                       ) : (
                         <div className="flex flex-wrap gap-1.5">
                           {item.marcacoesDoDia.map((m, idx) => (
@@ -293,17 +323,17 @@ export default function EspelhoPontoColaboradorPage({ params }: PageProps) {
                         "—"
                       )}
                     </td>
-                    <td className="px-4 py-3 font-sans">
+                    <td className="px-4 py-3 font-sans text-[11px] text-muted-foreground leading-snug">
                       {item.abonoVinculado ? (
-                        <span className="text-indigo-600 dark:text-indigo-400 font-medium">
-                          {item.abonoVinculado.tipoOcorrencia}: {item.abonoVinculado.observacaoPublica}
+                        <span>
+                          {item.abonoVinculado.tipoOcorrencia}: {item.abonoVinculado.observacaoPublica.replace(/^Abono\/Ocorrência:\s*/i, "")}
                         </span>
                       ) : item.observacaoGestao ? (
-                        <span className="text-muted-foreground">
+                        <span>
                           {item.observacaoGestao.texto} ({item.observacaoGestao.autor})
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span>—</span>
                       )}
                     </td>
                   </tr>

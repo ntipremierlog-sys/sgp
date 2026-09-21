@@ -161,7 +161,7 @@ export function validarCpf(cpfLimpo: string): boolean {
     soma += parseInt(cpfLimpo.charAt(i), 10) * (10 - i);
   }
   let resto = 11 - (soma % 11);
-  let dv1 = resto === 10 || resto === 11 ? 0 : resto;
+  const dv1 = resto === 10 || resto === 11 ? 0 : resto;
   if (dv1 !== parseInt(cpfLimpo.charAt(9), 10)) return false;
 
   soma = 0;
@@ -169,7 +169,7 @@ export function validarCpf(cpfLimpo: string): boolean {
     soma += parseInt(cpfLimpo.charAt(i), 10) * (11 - i);
   }
   resto = 11 - (soma % 11);
-  let dv2 = resto === 10 || resto === 11 ? 0 : resto;
+  const dv2 = resto === 10 || resto === 11 ? 0 : resto;
   return dv2 === parseInt(cpfLimpo.charAt(10), 10);
 }
 
@@ -311,19 +311,7 @@ export function identificarTipoArquivo(cabecalhosBrutos: string[]): ResultadoIde
     };
   }
 
-  // 3. Identificar Cubo de Abono
-  const colunasAbono = ["chapa", "data", "abono"];
-  const achouAbono = colunasAbono.every((c) => normalizados.some((norm) => norm.includes(c)));
-  if (achouAbono) {
-    return {
-      reconhecido: true,
-      tipo: "ABONO_RM",
-      colunasEncontradas: cabecalhosBrutos,
-      colunasObrigatoriasFaltando: [],
-    };
-  }
-
-  // 4. Identificar Ponto / Cubo de Registros RM ou RHID
+  // 3. Identificar Ponto / Cubo de Registros RM ou RHID (prioritário sobre abono caso tenha marcações/batidas/ent1)
   const temChapaOuCpf = normalizados.some((c) => c.includes("chapa") || c.includes("cpf"));
   const temData = normalizados.some((c) => c.includes("data"));
   const temEnt1OuHora = normalizados.some(
@@ -334,6 +322,18 @@ export function identificarTipoArquivo(cabecalhosBrutos: string[]): ResultadoIde
     return {
       reconhecido: true,
       tipo: "REGISTROS_PONTO_RM",
+      colunasEncontradas: cabecalhosBrutos,
+      colunasObrigatoriasFaltando: [],
+    };
+  }
+
+  // 4. Identificar Cubo de Abono (planilhas de abono não possuem colunas de batidas/ent1)
+  const colunasAbono = ["chapa", "data", "abono"];
+  const achouAbono = colunasAbono.every((c) => normalizados.some((norm) => norm.includes(c)));
+  if (achouAbono) {
+    return {
+      reconhecido: true,
+      tipo: "ABONO_RM",
       colunasEncontradas: cabecalhosBrutos,
       colunasObrigatoriasFaltando: [],
     };

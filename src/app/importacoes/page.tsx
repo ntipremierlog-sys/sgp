@@ -210,7 +210,7 @@ export default function ImportacoesPage() {
     }
   };
 
-  const handleConfirmarImportacao = () => {
+  const handleConfirmarImportacao = async () => {
     if (!simulacao) return;
 
     try {
@@ -224,6 +224,33 @@ export default function ImportacoesPage() {
         res = confirmarImportacaoAbono(simulacao, usuarioLogado);
       } else if (simulacao.tipo === "REGISTROS_PONTO_RM" || (simulacao as any).tipo === "AFD_PONTO") {
         res = confirmarImportacaoPonto(simulacao as any, usuarioLogado);
+
+        // Sincroniza também com o endpoint /api/ponto para persistência global
+        try {
+          await fetch("/api/ponto", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              lote: {
+                id: res.loteId,
+                tipo: simulacao.tipo,
+                arquivoNome: simulacao.arquivoNome,
+                hashSha256: simulacao.hashSha256,
+                dataReferencia: simulacao.dataReferencia,
+                usuario: usuarioLogado,
+                dataHora: new Date().toISOString().replace("T", " ").substring(0, 19),
+                status: "CONCLUIDO",
+              },
+              marcacoes: (simulacao as any).marcacoesExtraidas || [],
+              diasFolgaRm:
+                (simulacao as any).diasSemJornadaPrevista ||
+                (simulacao as any).resultadoPontoCompleto?.diasSemJornadaPrevista ||
+                [],
+            }),
+          });
+        } catch (errApi) {
+          console.warn("Aviso ao sincronizar ponto com API:", errApi);
+        }
       } else {
         res = confirmarImportacaoFuncionariosRm(simulacao as any, usuarioLogado);
       }
@@ -734,6 +761,8 @@ export default function ImportacoesPage() {
                       ? "Arquivo Identificado: Lista de Alocados (SIFAC)"
                       : simulacao.tipo === "ABONO_RM"
                       ? "Arquivo Identificado: Cubo de Abono e Ocorrências (RM)"
+                      : simulacao.tipo === "REGISTROS_PONTO_RM" || (simulacao as any).tipo === "AFD_PONTO"
+                      ? "Arquivo Identificado: Cubo de Registros de Ponto (RM / TOTVS)"
                       : "Arquivo Identificado: Funcionários (RM / TOTVS)"}
                   </span>
                   <span className="text-slate-400 text-xs">|</span>
@@ -1008,6 +1037,15 @@ export default function ImportacoesPage() {
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>Ir para Conciliação SIFAC</span>
+                </Link>
+              )}
+              {(simulacao?.tipo === "REGISTROS_PONTO_RM" || (simulacao as any)?.tipo === "AFD_PONTO") && (
+                <Link
+                  href="/presenca-diaria"
+                  className="px-4 py-2 bg-emerald-700 text-white font-bold rounded-lg text-xs hover:bg-emerald-600 transition-colors inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Ir para Presença Diária</span>
                 </Link>
               )}
               <Link

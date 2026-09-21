@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   Users,
@@ -18,22 +18,27 @@ import {
   CheckCircle2,
   ArrowRight,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import {
   carregarEstado,
   adicionarProfissional,
   transferirColaboradorPosto,
+  obterMarcacoesPonto,
   calcularIdade,
   obterFaixaEtaria,
   ProfissionalOperacional,
   PostoOperacional,
 } from "@/lib/dados/estado-operacional";
+import { MarcacaoPontoOriginal } from "@/lib/dados/ponto-tipos";
+import { validarInterjornadaClt } from "@/lib/servicos/validacao-interjornada";
 import { UsuarioSessao } from "@/lib/auth/tipos";
 import { registrarLogAuditoriaAdmin } from "@/lib/auth/usuarios";
 
 export default function ProfissionaisPage() {
   const [profissionais, setProfissionais] = useState<ProfissionalOperacional[]>([]);
   const [postos, setPostos] = useState<PostoOperacional[]>([]);
+  const [marcacoesPonto, setMarcacoesPonto] = useState<MarcacaoPontoOriginal[]>([]);
   const [perfilAtivo, setPerfilAtivo] = useState("PREMIER_ADMIN");
   const [sessao, setSessao] = useState<UsuarioSessao | null>(null);
   const [busca, setBusca] = useState("");
@@ -46,6 +51,7 @@ export default function ProfissionaisPage() {
   const [modalTransferenciaAberto, setModalTransferenciaAberto] = useState(false);
   const [colaboradorParaTransferir, setColaboradorParaTransferir] = useState<ProfissionalOperacional | null>(null);
   const [destinoPostoCodigo, setDestinoPostoCodigo] = useState("");
+  const [cienteInterjornadaTransferencia, setCienciaInterjornadaTransferencia] = useState(false);
 
   // Formulário novo profissional
   const [formMatricula, setFormMatricula] = useState("");
@@ -62,12 +68,33 @@ export default function ProfissionaisPage() {
   const abrirModalTransferencia = (pr: ProfissionalOperacional) => {
     setColaboradorParaTransferir(pr);
     setDestinoPostoCodigo(pr.postoCodigo || "");
+    setCienciaInterjornadaTransferencia(false);
     setModalTransferenciaAberto(true);
   };
+
+  // Apuração de interjornada na transferência de posto do colaborador
+  const alertaInterjornadaTransferencia = useMemo(() => {
+    if (!colaboradorParaTransferir || !destinoPostoCodigo) return null;
+    return validarInterjornadaClt({
+      matricula: colaboradorParaTransferir.matricula,
+      dataInicio: new Date().toISOString().substring(0, 10),
+      postoDestinoCodigo: destinoPostoCodigo,
+      postos,
+      profissionais,
+      marcacoesPonto,
+    });
+  }, [colaboradorParaTransferir, destinoPostoCodigo, postos, profissionais, marcacoesPonto]);
 
   const handleSalvarTransferencia = (e: React.FormEvent) => {
     e.preventDefault();
     if (!colaboradorParaTransferir) return;
+
+    if (alertaInterjornadaTransferencia && !alertaInterjornadaTransferencia.atende && !cienteInterjornadaTransferencia) {
+      alert(
+        `ALERTA CLT ART. 66 (Interjornada):\n\nO colaborador possui apenas ${alertaInterjornadaTransferencia.horasDescansoFormatado} de descanso entre turnos (déficit de ${alertaInterjornadaTransferencia.deficitFormatado} para as 11h mínimas).\n\nPara efetivar a troca em caráter excepcional, marque a ciência no formulário.`
+      );
+      return;
+    }
 
     const res = transferirColaboradorPosto(
       colaboradorParaTransferir.matricula,
@@ -77,6 +104,7 @@ export default function ProfissionaisPage() {
       setMensagemSucesso(res.mensagem);
       setModalTransferenciaAberto(false);
       setColaboradorParaTransferir(null);
+      setCienciaInterjornadaTransferencia(false);
       carregarDados();
       if (profissionalSelecionado && profissionalSelecionado.matricula === colaboradorParaTransferir.matricula) {
         setProfissionalSelecionado(null);
@@ -92,6 +120,7 @@ export default function ProfissionaisPage() {
     setProfissionais(estado.profissionais);
     setPostos(estado.postos);
     setPerfilAtivo(estado.perfilAtivo);
+    setMarcacoesPonto(obterMarcacoesPonto());
   };
 
   useEffect(() => {
@@ -1030,6 +1059,31 @@ export default function ProfissionaisPage() {
                   Ao transferir o colaborador para um posto, ele se tornará o novo titular oficial, sendo refletido imediatamente no Mapa de Ocupação e no Anexo 1-A.
                 </p>
               </div>
+
+              {/* Alerta de Interjornada CLT Art. 66 */}
+              {alertaInterjornadaTransferencia && !alertaInterjornadaTransferencia.atende && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg space-y-2 text-xs animate-fadeIn">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Alerta CLT Art. 66 (Interjornada &lt; 11h)</span>
+                  </div>
+                  <p className="text-[11px] text-amber-900 leading-relaxed">
+                    O descanso apurado entre o turno anterior e o posto de destino é de <strong>{alertaInterjornadaTransferencia.horasDescansoFormatado}</strong> (déficit de {alertaInterjornadaTransferencia.deficitFormatado} em relação às 11h mínimas legais).
+                  </p>
+                  <div className="p-2 bg-white rounded border border-rose-200 flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      id="checkCienciaTransferencia"
+                      checked={cienteInterjornadaTransferencia}
+                      onChange={(e) => setCienciaInterjornadaTransferencia(e.target.checked)}
+                      className="mt-0.5 w-3.5 h-3.5 text-rose-600 rounded cursor-pointer"
+                    />
+                    <label htmlFor="checkCienciaTransferencia" className="text-[10px] text-rose-950 font-semibold cursor-pointer">
+                      Declaro ciência da não observância do repouso de 11h e autorizo a troca em caráter excepcional.
+                    </label>
+                  </div>
+                </div>
+              )}
 
               <div className="p-3 bg-slate-100 border-t border-slate-200 -mx-5 -mb-5 flex items-center justify-end gap-2">
                 <button

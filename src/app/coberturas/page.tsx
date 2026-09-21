@@ -15,15 +15,22 @@ import {
   LayoutGrid,
   List,
   UserX,
+  AlertTriangle,
 } from "lucide-react";
 import {
   carregarEstado,
   adicionarCobertura,
   trocarTitularPosto,
+  obterMarcacoesPonto,
   CoberturaOperacional,
   PostoOperacional,
   ProfissionalOperacional,
 } from "@/lib/dados/estado-operacional";
+import { MarcacaoPontoOriginal } from "@/lib/dados/ponto-tipos";
+import {
+  validarInterjornadaClt,
+  ResultadoValidacaoInterjornada,
+} from "@/lib/servicos/validacao-interjornada";
 
 function obterIniciais(nome: string): string {
   const partes = (nome || "").trim().split(/\s+/);
@@ -52,8 +59,9 @@ export default function CoberturasPage() {
   const [coberturas, setCoberturas] = useState<CoberturaOperacional[]>([]);
   const [postos, setPostos] = useState<PostoOperacional[]>([]);
   const [profissionais, setProfissionais] = useState<ProfissionalOperacional[]>([]);
+  const [marcacoesPonto, setMarcacoesPonto] = useState<MarcacaoPontoOriginal[]>([]);
   const [busca, setBusca] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState<"TODAS" | "CONFIRMADA" | "PLANEJADA">("TODAS");
+  const [filtroStatus, setFiltroStatus] = useState<"TODAS" | "CONFIRMADA" | "PLANEJADA" | "ALERTA_CLT">("TODAS");
   const [modoVisualizacao, setModoVisualizacao] = useState<"CARDS" | "TABELA">("CARDS");
 
   // Modais
@@ -68,6 +76,7 @@ export default function CoberturasPage() {
   const [formTipo, setFormTipo] = useState<CoberturaOperacional["tipoCobertura"]>("SUBSTITUICAO_INTERNA");
   const [formJustificativa, setFormJustificativa] = useState("");
   const [efetivarTrocaPermanente, setEfetivarTrocaPermanente] = useState(false);
+  const [cienteInterjornada, setCienciaInterjornada] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState("");
 
   const carregarDados = () => {
@@ -75,6 +84,7 @@ export default function CoberturasPage() {
     setCoberturas(estado.coberturas);
     setPostos(estado.postos);
     setProfissionais(estado.profissionais);
+    setMarcacoesPonto(obterMarcacoesPonto());
   };
 
   useEffect(() => {
@@ -83,6 +93,30 @@ export default function CoberturasPage() {
     window.addEventListener("sgp-dados-atualizados", handleAtualizacao);
     return () => window.removeEventListener("sgp-dados-atualizados", handleAtualizacao);
   }, []);
+
+  // Validação reativa de Interjornada CLT Art. 66 no formulário
+  const validacaoInterjornada = useMemo(() => {
+    if (!formSubstitutoMatricula || !formPostoCodigo || !formDataInicio) return null;
+    return validarInterjornadaClt({
+      matricula: formSubstitutoMatricula,
+      dataInicio: formDataInicio,
+      postoDestinoCodigo: formPostoCodigo,
+      postos,
+      profissionais,
+      coberturas,
+      marcacoesPonto,
+    });
+  }, [formSubstitutoMatricula, formPostoCodigo, formDataInicio, postos, profissionais, coberturas, marcacoesPonto]);
+
+  // Limpa confirmação de ciência ao alterar parâmetros
+  useEffect(() => {
+    setCienciaInterjornada(false);
+  }, [formSubstitutoMatricula, formPostoCodigo, formDataInicio]);
+
+  // Contagem de alertas CLT
+  const totalAlertasClt = useMemo(() => {
+    return coberturas.filter((c) => c.alertaInterjornada).length;
+  }, [coberturas]);
 
   // Filtragem dinâmica
   const coberturasFiltradas = useMemo(() => {
@@ -97,7 +131,12 @@ export default function CoberturasPage() {
         (cob.titularNome && cob.titularNome.toLowerCase().includes(termo)) ||
         (cob.justificativa && cob.justificativa.toLowerCase().includes(termo));
 
-      const matchStatus = filtroStatus === "TODAS" || cob.status === filtroStatus;
+      const matchStatus =
+        filtroStatus === "TODAS"
+          ? true
+          : filtroStatus === "ALERTA_CLT"
+          ? Boolean(cob.alertaInterjornada)
+          : cob.status === filtroStatus;
 
       return matchBusca && matchStatus;
     });
@@ -132,9 +171,22 @@ export default function CoberturasPage() {
       return;
     }
 
-    const justificativaFinal =
-      formJustificativa.trim() ||
-      `Cobertura operacional do posto ${postoObj.codigoPosto} (${postoObj.funcao}) por ${substitutoObj.nome}`;
+    // Validação estrita CLT Artigo 66
+    const violouInterjornada = validacaoInterjornada ? !validacaoInterjornada.atende : false;
+    if (violouInterjornada && !cienteInterjornada) {
+      alert(
+        `ALERTA CLT ART. 66 (Interjornada):\n\nO colaborador ${substitutoObj.nome} possui apenas ${validacaoInterjornada?.horasDescansoFormatado} de descanso entre turnos (déficit de ${validacaoInterjornada?.deficitFormatado} em relação ao mínimo de 11h).\n\nPara efetivar esta cobertura em caráter excepcional/emergencial, marque a caixa de ciência no formulário.`
+      );
+      return;
+    }
+
+    let justificativaFinal = formJustificativa.trim();
+    if (violouInterjornada) {
+      const notaClt = `[ALERTA CLT ART. 66: Descanso apurado de ${validacaoInterjornada?.horasDescansoFormatado} (< 11h mínimas) - Designação autorizada em caráter excepcional/emergencial]`;
+      justificativaFinal = justificativaFinal ? `${notaClt} ${justificativaFinal}` : `${notaClt} Cobertura do posto ${postoObj.codigoPosto} (${postoObj.funcao}) por ${substitutoObj.nome}`;
+    } else if (!justificativaFinal) {
+      justificativaFinal = `Cobertura operacional do posto ${postoObj.codigoPosto} (${postoObj.funcao}) por ${substitutoObj.nome}`;
+    }
 
     adicionarCobertura({
       postoCodigo: postoObj.codigoPosto,
@@ -148,6 +200,9 @@ export default function CoberturasPage() {
       tipoCobertura: formTipo,
       status: "CONFIRMADA",
       justificativa: justificativaFinal,
+      alertaInterjornada: violouInterjornada,
+      horasDescansoApuradas: validacaoInterjornada?.horasDescanso,
+      detalhesInterjornada: validacaoInterjornada?.mensagem,
     });
 
     if (efetivarTrocaPermanente) {
@@ -156,14 +211,15 @@ export default function CoberturasPage() {
 
     setMensagemSucesso(
       `Cobertura designada com sucesso! ${substitutoObj.nome} atenderá o posto ${postoObj.codigoPosto}.${
-        efetivarTrocaPermanente ? " Titularidade do posto atualizada no contrato." : ""
-      }`
+        violouInterjornada ? " (Alerta de interjornada CLT registrado na auditoria)." : ""
+      }${efetivarTrocaPermanente ? " Titularidade do posto atualizada no contrato." : ""}`
     );
     setModalAberto(false);
     setFormPostoCodigo("");
     setFormSubstitutoMatricula("");
     setFormJustificativa("");
     setEfetivarTrocaPermanente(false);
+    setCienciaInterjornada(false);
 
     setTimeout(() => setMensagemSucesso(""), 4000);
   };
@@ -217,7 +273,7 @@ export default function CoberturasPage() {
       )}
 
       {/* Cards de Métricas Executivas (Clean & Interativos) */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
@@ -225,7 +281,7 @@ export default function CoberturasPage() {
             </span>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-slate-900">{totalCoberturas}</span>
-              <span className="text-xs text-slate-500">Mês de Setembro</span>
+              <span className="text-xs text-slate-500">Setembro</span>
             </div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
@@ -240,7 +296,7 @@ export default function CoberturasPage() {
             </span>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-emerald-700">{confirmadas}</span>
-              <span className="text-xs text-emerald-600 font-medium">Status COBERTO</span>
+              <span className="text-xs text-emerald-600 font-medium">COBERTO</span>
             </div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
@@ -251,11 +307,11 @@ export default function CoberturasPage() {
         <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-              Planejadas / Em Validação
+              Planejadas / Validação
             </span>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-amber-700">{planejadas}</span>
-              <span className="text-xs text-amber-600 font-medium">Escala Futura</span>
+              <span className="text-xs text-amber-600 font-medium">Futuras</span>
             </div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
@@ -275,6 +331,35 @@ export default function CoberturasPage() {
           </div>
           <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
             <ShieldCheck className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className={`p-4 rounded-xl border shadow-sm flex items-center justify-between transition-all ${
+          totalAlertasClt > 0
+            ? "bg-amber-50/80 border-amber-200"
+            : "bg-white border-slate-200/80"
+        }`}>
+          <div>
+            <span className={`text-[11px] font-semibold uppercase tracking-wider block mb-1 ${
+              totalAlertasClt > 0 ? "text-amber-800" : "text-slate-400"
+            }`}>
+              Alertas CLT Art. 66
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className={`text-2xl font-bold ${totalAlertasClt > 0 ? "text-amber-900" : "text-slate-900"}`}>
+                {totalAlertasClt}
+              </span>
+              <span className={`text-xs font-medium ${totalAlertasClt > 0 ? "text-amber-700" : "text-slate-500"}`}>
+                &lt; 11h repouso
+              </span>
+            </div>
+          </div>
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${
+            totalAlertasClt > 0
+              ? "bg-amber-100 border-amber-300 text-amber-700 shadow-sm"
+              : "bg-slate-50 border-slate-100 text-slate-400"
+          }`}>
+            <AlertTriangle className="w-5 h-5" />
           </div>
         </div>
       </div>
@@ -333,6 +418,17 @@ export default function CoberturasPage() {
               }`}
             >
               Planejadas ({planejadas})
+            </button>
+            <button
+              onClick={() => setFiltroStatus("ALERTA_CLT")}
+              className={`px-3 py-1 rounded-md transition-all flex items-center gap-1.5 ${
+                filtroStatus === "ALERTA_CLT"
+                  ? "bg-amber-600 text-white shadow-sm font-semibold"
+                  : "hover:text-amber-900 text-slate-600"
+              }`}
+            >
+              <AlertTriangle className="w-3 h-3" />
+              <span>Alertas CLT ({totalAlertasClt})</span>
             </button>
           </div>
 
@@ -403,6 +499,15 @@ export default function CoberturasPage() {
                     <span className="text-[10px] font-medium bg-slate-200/70 text-slate-700 px-2 py-0.5 rounded-full">
                       {MODALIDADES_NOMES[cob.tipoCobertura] || cob.tipoCobertura.replace(/_/g, " ")}
                     </span>
+                    {cob.alertaInterjornada && (
+                      <span
+                        className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full shadow-xs"
+                        title={cob.detalhesInterjornada || "Interjornada inferior a 11 horas (CLT Artigo 66)"}
+                      >
+                        <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                        <span>CLT Art. 66 ({cob.horasDescansoApuradas ? cob.horasDescansoApuradas.toFixed(1) + "h" : "< 11h"})</span>
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -560,18 +665,29 @@ export default function CoberturasPage() {
                       </div>
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1.5 text-xs font-medium ${
-                          cob.status === "CONFIRMADA" ? "text-emerald-700 font-semibold" : "text-amber-700 font-semibold"
-                        }`}
-                      >
+                      <div className="flex flex-col items-center gap-1">
                         <span
-                          className={`w-2 h-2 rounded-full ${
-                            cob.status === "CONFIRMADA" ? "bg-emerald-500" : "bg-amber-500"
+                          className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                            cob.status === "CONFIRMADA" ? "text-emerald-700 font-semibold" : "text-amber-700 font-semibold"
                           }`}
-                        />
-                        {cob.status === "CONFIRMADA" ? "Confirmada" : "Planejada"}
-                      </span>
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              cob.status === "CONFIRMADA" ? "bg-emerald-500" : "bg-amber-500"
+                            }`}
+                          />
+                          {cob.status === "CONFIRMADA" ? "Confirmada" : "Planejada"}
+                        </span>
+                        {cob.alertaInterjornada && (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded-full"
+                            title={cob.detalhesInterjornada || "Interjornada inferior a 11 horas (CLT Artigo 66)"}
+                          >
+                            <AlertTriangle className="w-2.5 h-2.5 text-amber-600" />
+                            CLT &lt; 11h
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-4 text-center">
                       <button
@@ -659,6 +775,30 @@ export default function CoberturasPage() {
                   &quot;{coberturaSelecionada.justificativa}&quot;
                 </p>
               </div>
+
+              {/* Status de Conformidade CLT Art. 66 */}
+              {coberturaSelecionada.alertaInterjornada ? (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Registro de Quebra de Interjornada — CLT Art. 66</span>
+                  </div>
+                  <p className="text-[11px] text-amber-900/90 leading-relaxed">
+                    {coberturaSelecionada.detalhesInterjornada ||
+                      `Descanso apurado de ${coberturaSelecionada.horasDescansoApuradas ? coberturaSelecionada.horasDescansoApuradas.toFixed(1) + "h" : "< 11h"} entre jornadas consecutivas (abaixo do mínimo legal de 11 horas).`}
+                  </p>
+                  <div className="text-[10px] text-amber-800 font-medium">
+                    Status: Autorizado em caráter excepcional com registro na trilha de auditoria (Passivo de horas extras Súmula 110/TST).
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-[11px] font-medium">
+                    <strong>Conformidade CLT Art. 66:</strong> Intervalo interjornada mínimo de 11 horas consecutivas cumprido integralmente.
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="p-4 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between">
@@ -794,6 +934,84 @@ export default function CoberturasPage() {
                   />
                 </div>
               </div>
+
+              {/* Apuração em Tempo Real de Interjornada (CLT Artigo 66) */}
+              {validacaoInterjornada && (
+                <div className="space-y-2">
+                  {!validacaoInterjornada.atende ? (
+                    <div className="p-3.5 bg-amber-50/95 border-2 border-amber-400 rounded-xl space-y-2.5 shadow-sm animate-fadeIn">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>Alerta CLT Art. 66 — Descanso Mínimo Não Cumprido</span>
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-300 px-2 py-0.5 rounded-full shrink-0">
+                          Déficit: -{validacaoInterjornada.deficitFormatado}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[11px] bg-white/90 p-2.5 rounded-lg border border-amber-200">
+                        <div>
+                          <span className="text-slate-400 font-semibold block text-[10px] uppercase">Descanso Apurado</span>
+                          <span className="font-bold text-rose-700 text-sm">{validacaoInterjornada.horasDescansoFormatado}</span>
+                          <span className="text-[10px] text-slate-500 block">Mínimo legal: 11h consecutivas</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-semibold block text-[10px] uppercase">Déficit a Indenizar</span>
+                          <span className="font-bold text-rose-600 text-sm">{validacaoInterjornada.deficitFormatado}</span>
+                          <span className="text-[10px] text-slate-500 block">Hora extra com 50% (Súm. 110/TST)</span>
+                        </div>
+                      </div>
+
+                      {validacaoInterjornada.ultimoTurnoFim && (
+                        <div className="text-[11px] text-slate-700 space-y-1 bg-amber-100/60 p-2 rounded-lg border border-amber-200/80">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Último término apurado:</span>
+                            <strong className="text-slate-800">{validacaoInterjornada.ultimoTurnoFim.dataHoraFormatada}</strong>
+                          </div>
+                          <div className="text-[10px] text-slate-500 italic truncate" title={validacaoInterjornada.ultimoTurnoFim.descricaoOrigem}>
+                            Origem: {validacaoInterjornada.ultimoTurnoFim.descricaoOrigem}
+                          </div>
+                          <div className="flex items-center justify-between pt-1 border-t border-amber-200">
+                            <span className="text-slate-500">Início da cobertura:</span>
+                            <strong className="text-blue-900">{validacaoInterjornada.novoTurnoInicio.dataHoraFormatada}</strong>
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-[10px] text-amber-950/80 leading-relaxed">
+                        <strong>Passivo Trabalhista & Fiscalização:</strong> Conforme o Art. 66 da CLT e Súmula 110 do TST, o descumprimento do intervalo de 11h obriga o pagamento de horas extras com adicional de 50% sobre o período suprimido e enseja apontamento em auditoria Petrobras.
+                      </p>
+
+                      <div className="p-2.5 bg-rose-50 border border-rose-300 rounded-lg flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          id="checkCienciaInterjornada"
+                          checked={cienteInterjornada}
+                          onChange={(e) => setCienciaInterjornada(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                        />
+                        <label htmlFor="checkCienciaInterjornada" className="text-[11px] font-semibold text-rose-950 cursor-pointer leading-tight">
+                          Declaro ciência da não observância do intervalo de 11h (Art. 66 da CLT) e autorizo a substituição em caráter excepcional/emergencial.
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-emerald-900">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <div className="text-[11px]">
+                          <strong className="font-semibold text-emerald-800">Interjornada Conforme (CLT Art. 66):</strong>{" "}
+                          Descanso apurado de <strong>{validacaoInterjornada.horasDescansoFormatado}</strong> entre turnos.
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded border border-emerald-300 shrink-0">
+                        ✓ 100% Legal
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Modalidade de Cobertura</label>

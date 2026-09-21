@@ -21,6 +21,7 @@ import {
   MarcacaoPontoOriginal,
   PendenciaPontoItem,
 } from "./ponto-tipos";
+export type { MarcacaoPontoOriginal } from "./ponto-tipos";
 
 export interface PostoOperacional {
   id: string;
@@ -29,6 +30,7 @@ export interface PostoOperacional {
   descricao?: string;
   unidadeId: string;
   unidadeNome: string;
+  baseOperacional?: string; // Nome amigável da base (ex: "UFN III"), derivado de unidadeNome
   escala: "5x2" | "12x36" | "6x1";
   jornadaSemanalHoras: number;
   horarioInicio: string;
@@ -136,6 +138,10 @@ export interface CoberturaOperacional {
   justificativa: string;
   ocorrenciaId?: string;
   criadoEm: string;
+  // Conformidade CLT Art. 66 (Interjornada Mínima de 11h)
+  alertaInterjornada?: boolean;
+  horasDescansoApuradas?: number;
+  detalhesInterjornada?: string;
 }
 
 export interface ApontamentoOperacional {
@@ -175,6 +181,7 @@ export interface LogAuditoriaOperacional {
 
 export interface OcupacaoDiaDetalhada {
   postoCodigo: string;
+  postoBase?: string;
   funcaoPosto: string;
   data: string; // YYYY-MM-DD
   diaNumero: number;
@@ -228,6 +235,7 @@ export interface EstadoOperacionalCompleto {
   divergenciasConciliacao?: Record<string, DivergenciaConciliacao[]>;
   equivalenciasConciliacao?: ConfiguracaoEquivalencias;
   marcacoesPonto?: MarcacaoPontoOriginal[];
+  diasFolgaRm?: string[];
   pendenciasPonto?: PendenciaPontoItem[];
   dataReferenciaPonto?: string;
   perfilAtivo: string;
@@ -266,8 +274,8 @@ export const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "07:00",
     horarioFim: "16:48",
-    titularMatricula: undefined,
-    titularNome: undefined,
+    titularMatricula: "045638",
+    titularNome: "MAYLA VITORIA DIAS DOS SANTOS",
     situacao: "ATIVO",
     dataInicioVigencia: "2024-01-01",
   },
@@ -282,8 +290,8 @@ export const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "07:00",
     horarioFim: "16:48",
-    titularMatricula: undefined,
-    titularNome: undefined,
+    titularMatricula: "046236",
+    titularNome: "TATIANE LAIZO BUONO",
     situacao: "ATIVO",
     dataInicioVigencia: "2024-01-01",
   },
@@ -330,8 +338,8 @@ export const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "08:00",
     horarioFim: "17:48",
-    titularMatricula: undefined,
-    titularNome: undefined,
+    titularMatricula: "046082",
+    titularNome: "FERNANDO RIBEIRO FERNANDES",
     situacao: "ATIVO",
     dataInicioVigencia: "2024-02-15",
   },
@@ -378,8 +386,8 @@ export const POSTOS_INICIAIS: PostoOperacional[] = [
     jornadaSemanalHoras: 44,
     horarioInicio: "08:00",
     horarioFim: "17:48",
-    titularMatricula: undefined,
-    titularNome: undefined,
+    titularMatricula: "037606",
+    titularNome: "LARISSA OLIVEIRA DA SILVA FREITAS",
     situacao: "ATIVO",
     dataInicioVigencia: "2024-03-15",
   },
@@ -544,6 +552,25 @@ export const LOTES_INICIAIS: LoteImportacaoOperacional[] = [
     status: "CONCLUIDO",
     diasRetencao: 90,
   },
+  {
+    id: "LOTE-PTO-20260831-OFICIAL",
+    tipo: "REGISTROS_PONTO_RM",
+    arquivoNome: "CUBO DE REGISTROS.xlsx",
+    hashSha256: "e7b923194a0d922f5c1a70004",
+    dataReferencia: "2026-08-31",
+    usuario: "Administrador Premier (Marcos Valério)",
+    dataHora: "2026-09-17 10:45:00",
+    totais: {
+      lidos: 7018,
+      novos: 15752,
+      atualizados: 0,
+      semAlteracao: 0,
+      erros: 0,
+      alertas: 39,
+    },
+    status: "CONCLUIDO",
+    diasRetencao: 90,
+  },
 ];
 
 export const LOGS_INICIAIS: LogAuditoriaOperacional[] = [
@@ -600,16 +627,20 @@ export function calcularStatusDia(
   mesIndex: number = 8, // 8 = Setembro (0-indexed)
   ocorrencias: OcorrenciaOperacional[] = [],
   coberturas: CoberturaOperacional[] = [],
-  apontamentos: ApontamentoOperacional[] = []
+  apontamentos: ApontamentoOperacional[] = [],
+  marcacoesSet?: Set<string>, // Chave: `${chapa}_${YYYY-MM-DD}`
+  dataMaxPonto: string = "2026-09-15"
 ): OcupacaoDiaDetalhada {
   const dataObj = new Date(ano, mesIndex, diaNumero);
   const diaDaSemana = dataObj.getDay(); // 0 = Domingo, 6 = Sábado
   const dataStr = `${ano}-${String(mesIndex + 1).padStart(2, "0")}-${String(diaNumero).padStart(2, "0")}`;
+  const basePosto = posto.baseOperacional || "UFN III";
 
   // 1. Posto sem titular alocado no Anexo 1-A
   if (!posto.titularMatricula) {
     return {
       postoCodigo: posto.codigoPosto,
+      postoBase: basePosto,
       funcaoPosto: posto.funcao,
       data: dataStr,
       diaNumero,
@@ -653,6 +684,7 @@ export function calcularStatusDia(
   if (!exigivel) {
     return {
       postoCodigo: posto.codigoPosto,
+      postoBase: basePosto,
       funcaoPosto: posto.funcao,
       data: dataStr,
       diaNumero,
@@ -686,6 +718,7 @@ export function calcularStatusDia(
     if (coberturaAtiva) {
       return {
         postoCodigo: posto.codigoPosto,
+        postoBase: basePosto,
         funcaoPosto: posto.funcao,
         data: dataStr,
         diaNumero,
@@ -712,6 +745,7 @@ export function calcularStatusDia(
 
       return {
         postoCodigo: posto.codigoPosto,
+        postoBase: basePosto,
         funcaoPosto: posto.funcao,
         data: dataStr,
         diaNumero,
@@ -726,24 +760,50 @@ export function calcularStatusDia(
     }
   }
 
-  // 5. Dias futuros da competência (ex: após o dia 16/09/2026 em diante)
-  if (diaNumero > 16) {
+  // 5. Dias futuros da competência (além da data máxima de lote de ponto importado)
+  if (dataStr > dataMaxPonto) {
     return {
       postoCodigo: posto.codigoPosto,
+      postoBase: basePosto,
       funcaoPosto: posto.funcao,
       data: dataStr,
       diaNumero,
       statusOcupacao: "PENDENTE_APURACAO",
       titularMatricula: posto.titularMatricula,
       titularNome: posto.titularNome,
-      motivoPublico: "Jornada futura projetada na escala do mês. Aguardando processamento do ponto.",
+      motivoPublico: "Jornada projetada além do lote de ponto importado. Aguardando processamento do ponto.",
       possuiEvidencia: false,
     };
   }
 
-  // 6. Dias passados normais: Titular trabalhou regularmente
+  // 6. Verificação com batidas de ponto reais (se fornecidas)
+  if (marcacoesSet && posto.titularMatricula) {
+    const chapaPad = posto.titularMatricula.padStart(6, "0");
+    const temPonto = marcacoesSet.has(`${chapaPad}_${dataStr}`);
+    if (!temPonto) {
+      const aptoRelacionado = apontamentos.find(
+        (a) => a.postoCodigo === posto.codigoPosto && a.dataReferencia === dataStr
+      );
+      return {
+        postoCodigo: posto.codigoPosto,
+        postoBase: basePosto,
+        funcaoPosto: posto.funcao,
+        data: dataStr,
+        diaNumero,
+        statusOcupacao: "DESCOBERTO",
+        titularMatricula: posto.titularMatricula,
+        titularNome: posto.titularNome,
+        motivoPublico: `Posto Descoberto: Titular ausente sem marcação de ponto e sem cobertura. Passível de glosa na medição.`,
+        possuiEvidencia: true,
+        apontamentoId: aptoRelacionado?.id,
+      };
+    }
+  }
+
+  // 7. Dias normais: Titular trabalhou regularmente
   return {
     postoCodigo: posto.codigoPosto,
+    postoBase: basePosto,
     funcaoPosto: posto.funcao,
     data: dataStr,
     diaNumero,
@@ -760,6 +820,67 @@ export function calcularStatusDia(
       horas: posto.jornadaSemanalHoras === 44 ? 8.8 : 12.0,
     },
   };
+}
+
+/**
+ * Retorna todos os postos de trabalho do contrato Petrobras.
+ * Inclui os postos cadastrados do Anexo 1-A e os postos alocados no SIFAC para as bases operacionais.
+ */
+export function obterTodosPostosContrato(postosExistentes?: PostoOperacional[]): PostoOperacional[] {
+  const basePostos = postosExistentes && postosExistentes.length > 0 ? postosExistentes : POSTOS_INICIAIS;
+  const postosMap = new Map<string, PostoOperacional>();
+
+  // 1. Postos cadastrados explicitamente (ex: Anexo 1-A UFN-III)
+  for (const p of basePostos) {
+    const inicial = POSTOS_INICIAIS.find((ini) => ini.codigoPosto === p.codigoPosto);
+    postosMap.set(p.codigoPosto, {
+      ...p,
+      titularMatricula: p.titularMatricula || inicial?.titularMatricula,
+      titularNome: p.titularNome || inicial?.titularNome,
+    });
+  }
+
+  for (const p of POSTOS_INICIAIS) {
+    if (!postosMap.has(p.codigoPosto)) {
+      postosMap.set(p.codigoPosto, p);
+    }
+  }
+
+  // 2. Postos de outras bases oriundos de SIFAC
+  const sifacLista = (sifacReais as unknown as ItemAlocadoSifac[]) || [];
+  const funcsLista = (funcionariosReais as unknown as ProfissionalOperacional[]) || [];
+  const funcsMap = new Map<string, ProfissionalOperacional>(funcsLista.map((f) => [f.chapa, f]));
+
+  const contadorPorBase = new Map<string, number>();
+  for (const s of sifacLista) {
+    if (!s.unidadeId || s.unidadeId === "UFN-III") continue;
+
+    const proximoNum = (contadorPorBase.get(s.unidadeId) || 0) + 1;
+    contadorPorBase.set(s.unidadeId, proximoNum);
+
+    const codigoPosto = `PST-${s.unidadeId}-${String(proximoNum).padStart(3, "0")}`;
+    if (!postosMap.has(codigoPosto)) {
+      const f = funcsMap.get(s.chapaRm ?? "");
+      postosMap.set(codigoPosto, {
+        id: `pst-sifac-${s.id}`,
+        codigoPosto,
+        funcao: s.cargo,
+        descricao: `Posto contratual de ${s.cargo} na base ${s.unidadeNome}`,
+        unidadeId: s.unidadeId,
+        unidadeNome: s.unidadeNome || "Base Operacional",
+        escala: (f?.escala as any) || "5x2",
+        jornadaSemanalHoras: 44,
+        horarioInicio: "07:00",
+        horarioFim: "16:48",
+        titularMatricula: s.chapaRm,
+        titularNome: s.nome,
+        situacao: "ATIVO",
+        dataInicioVigencia: s.dataAdmissao || "2024-01-01",
+      });
+    }
+  }
+
+  return Array.from(postosMap.values());
 }
 
 // -----------------------------------------------------------------------------
@@ -802,7 +923,9 @@ export function salvarEstado(novo: Partial<EstadoOperacionalCompleto>) {
   estadoMemoria = { ...estadoMemoria, ...novo };
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(estadoMemoria));
+      // Isola marcações de ponto do localStorage para nunca estourar a quota de 5MB
+      const { marcacoesPonto: _marc, ...estadoParaLocalStorage } = estadoMemoria;
+      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(estadoParaLocalStorage));
       window.dispatchEvent(new CustomEvent("sgp-dados-atualizados", { detail: estadoMemoria }));
     } catch {
       // Ignora erro de storage
@@ -881,6 +1004,13 @@ export function adicionarCobertura(cob: Omit<CoberturaOperacional, "id" | "criad
   };
   salvarEstado({ coberturas: [novo, ...estado.coberturas] });
   registrarLog("CRIAR_COBERTURA", `Cobertura (${novo.postoCodigo})`, `Designado ${novo.substitutoNome} para posto ${novo.postoCodigo}`);
+  if (novo.alertaInterjornada) {
+    registrarLog(
+      "ALERTA_INTERJORNADA_CLT",
+      `Cobertura (${novo.postoCodigo})`,
+      `Alerta CLT Art. 66: Substituto ${novo.substitutoNome} designado com descanso apurado de ${novo.horasDescansoApuradas ? novo.horasDescansoApuradas.toFixed(1) + "h" : "<11h"} (inferior a 11 horas consecutivas). Ciência excepcional registrada.`
+    );
+  }
   return novo;
 }
 
@@ -1270,15 +1400,20 @@ export function salvarAlocadosSifac(
 export function salvarLotePonto(
   lote: LoteImportacaoOperacional,
   novasMarcacoes: MarcacaoPontoOriginal[],
-  novasPendencias: PendenciaPontoItem[] = []
+  novasPendencias: PendenciaPontoItem[] = [],
+  novosDiasFolgaRm: string[] = []
 ): void {
   const estado = carregarEstado();
   const lotesAtuais = estado.lotesImportacao || [];
   const marcacoesAtuais = estado.marcacoesPonto || [];
   const pendenciasAtuais = estado.pendenciasPonto || [];
+  const diasFolgaAtuais = estado.diasFolgaRm || [];
 
   // Tabela somente de inclusão: adiciona as novas marcações
   const marcacoesFinal = [...marcacoesAtuais, ...novasMarcacoes];
+
+  // Consolida dias sem jornada do Cubo RM (base zero sem falta)
+  const setDiasFolga = new Set([...diasFolgaAtuais, ...novosDiasFolgaRm]);
 
   // Atualiza pendências (evita duplicar IDs)
   const idsPendenciasNovas = new Set(novasPendencias.map((p) => p.id));
@@ -1288,9 +1423,11 @@ export function salvarLotePonto(
   ];
 
   // Adiciona lote com snapshot do estado anterior para permitir "Desfazer lote"
+  // ATENÇÃO: Nunca guardar marcacoesPonto dentro do snapshotAnterior para não duplicar dezenas de megabytes
+  const { marcacoesPonto: _snapMarc, ...snapshotLeve } = estado;
   const loteComSnapshot: LoteImportacaoOperacional = {
     ...lote,
-    snapshotAnterior: { ...estado },
+    snapshotAnterior: snapshotLeve as any,
   };
 
   const lotesFinal = [...lotesAtuais, loteComSnapshot];
@@ -1299,8 +1436,68 @@ export function salvarLotePonto(
     lotesImportacao: lotesFinal,
     marcacoesPonto: marcacoesFinal,
     pendenciasPonto: pendenciasFinal,
+    diasFolgaRm: Array.from(setDiasFolga),
     dataReferenciaPonto: lote.dataReferencia,
   });
+}
+
+let marcacoesReaisCache: MarcacaoPontoOriginal[] | null = null;
+let diasFolgaReaisCache: string[] | null = null;
+
+function carregarMarcacoesReaisServidor(): MarcacaoPontoOriginal[] {
+  if (marcacoesReaisCache) return marcacoesReaisCache;
+  try {
+    if (typeof window === "undefined") {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fs = require("fs");
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const path = require("path");
+      const p = path.resolve(process.cwd(), "src/lib/dados/marcacoes-reais.json");
+      if (fs.existsSync(p)) {
+        marcacoesReaisCache = JSON.parse(fs.readFileSync(p, "utf-8"));
+        return marcacoesReaisCache || [];
+      }
+    }
+  } catch {
+    // Fallback
+  }
+  return [];
+}
+
+function carregarDiasFolgaServidor(): string[] {
+  if (diasFolgaReaisCache) return diasFolgaReaisCache;
+  try {
+    if (typeof window === "undefined") {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fs = require("fs");
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const path = require("path");
+      const p = path.resolve(process.cwd(), "src/lib/dados/dias-folga-reais.json");
+      if (fs.existsSync(p)) {
+        diasFolgaReaisCache = JSON.parse(fs.readFileSync(p, "utf-8"));
+        return diasFolgaReaisCache || [];
+      }
+    }
+  } catch {
+    // Fallback
+  }
+  return [];
+}
+
+/**
+ * Retorna lista de chaves de dias sem previsão no RM (${chapa}_${dataLocal})
+ */
+export function obterDiasFolgaPonto(): string[] {
+  const estado = carregarEstado();
+  if (estado.diasFolgaRm && estado.diasFolgaRm.length > 0) {
+    return estado.diasFolgaRm;
+  }
+  const servidorFolgas = carregarDiasFolgaServidor();
+  if (servidorFolgas.length > 0) {
+    estadoMemoria.diasFolgaRm = servidorFolgas;
+    return servidorFolgas;
+  }
+  return [];
 }
 
 /**
@@ -1308,7 +1505,15 @@ export function salvarLotePonto(
  */
 export function obterMarcacoesPonto(): MarcacaoPontoOriginal[] {
   const estado = carregarEstado();
-  return estado.marcacoesPonto || [];
+  if (estado.marcacoesPonto && estado.marcacoesPonto.length > 0) {
+    return estado.marcacoesPonto;
+  }
+  const servidorMarcacoes = carregarMarcacoesReaisServidor();
+  if (servidorMarcacoes.length > 0) {
+    estadoMemoria.marcacoesPonto = servidorMarcacoes;
+    return servidorMarcacoes;
+  }
+  return [];
 }
 
 /**

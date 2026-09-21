@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { FileSpreadsheet, CheckCircle2, ArrowLeft } from "lucide-react";
@@ -17,7 +17,7 @@ import { DrawerDecisao } from "@/components/painel/drawer-decisao";
 import { UsuarioSessao } from "@/lib/auth/tipos";
 import { usuarioTemAcessoBase } from "@/lib/auth/permissoes";
 
-export default function PainelBasePage() {
+function PainelBaseContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -426,5 +426,13 @@ export default function PainelBasePage() {
         competencia={competenciaSelecionada}
       />
     </div>
+  );
+}
+
+export default function PainelBasePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-500">Carregando base operacional...</div>}>
+      <PainelBaseContent />
+    </Suspense>
   );
 }

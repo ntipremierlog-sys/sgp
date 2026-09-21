@@ -65,7 +65,13 @@ export interface ItemAlocadoSifac {
   periculosidade?: string;
   codigoRegime?: number;
   regime?: string;
+  // Campos estendidos presentes nos dados reais importados do RM (sifac-reais.json)
+  chapaRm?: string;       // Chapa do colaborador no sistema RM
+  unidadeId?: string;     // Identificador da base (ex: "RNEST", "UFN-III")
+  unidadeNome?: string;   // Nome amigável da base (ex: "Refinaria Abreu e Lima (RNEST/PE)")
+  situacaoRm?: string;    // Situação no RM (ex: "ATIVO", "FERIAS")
 }
+
 
 export interface DivergenciaConciliacao {
   id: string;

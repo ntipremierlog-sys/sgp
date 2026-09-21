@@ -19,6 +19,7 @@ import {
   obterFusoHorarioBase,
   converterLocalParaUtc,
 } from "@/lib/dados/secoes-horarios";
+import { salvarLotePonto } from "@/lib/dados/estado-operacional";
 
 export interface ColaboradorReferenciaPonto {
   id: string;
@@ -399,6 +400,11 @@ export async function processarPlanilhaPonto(
     if (mb.sai3 && mapaIndices.has(mb.sai3.toUpperCase())) indicesMultiplas.push({ rotulo: "SAI3", idx: mapaIndices.get(mb.sai3.toUpperCase())! });
   }
 
+  // Índices analíticos do Cubo RM (horas previstas e falta apontada)
+  const idxHoraBase = mapaIndices.get("HORA_BASE2") ?? mapaIndices.get("HORA_BASE") ?? mapaIndices.get("HORABASE");
+  const idxFalta = mapaIndices.get("FALTA2") ?? mapaIndices.get("FALTA") ?? mapaIndices.get("FALTAS");
+  const diasSemJornadaSet = new Set<string>();
+
   let dataHoraMaisRecenteMs = 0;
   let dataHoraMaisRecenteStr = "";
 
@@ -507,6 +513,19 @@ export async function processarPlanilhaPonto(
       }
     }
 
+    // Se a linha não possui nenhuma batida preenchida (ex: folga, compensação ou falta)
+    if (horasParaProcessar.length === 0) {
+      if (idxHoraBase !== undefined) {
+        const valBase = Number(linha[idxHoraBase] || 0);
+        const valFalta = idxFalta !== undefined ? Number(linha[idxFalta] || 0) : 0;
+        // HORA_BASE2 == 0 e FALTA2 == 0: RM define expressamente que o dia não tem previsão de trabalho
+        if (valBase === 0 && valFalta === 0) {
+          diasSemJornadaSet.add(`${colaboradorEncontrado.chapa}_${dataFormatada}`);
+        }
+      }
+      continue;
+    }
+
     // Gera marcações para cada hora detectada
     for (const itemHora of horasParaProcessar) {
       const dataHoraUtcIso = converterLocalParaUtc(dataFormatada, itemHora.hora, fuso);
@@ -548,6 +567,7 @@ export async function processarPlanilhaPonto(
 
   resultado.sucesso = resultado.totais.inconsistenciasEstruturais === 0;
   resultado.dataReferenciaLote = dataHoraMaisRecenteStr;
+  resultado.diasSemJornadaPrevista = Array.from(diasSemJornadaSet);
 
   return resultado;
 }
@@ -660,6 +680,7 @@ export interface ResultadoSimulacaoPonto {
     alertas: number;
   };
   marcacoesExtraidas: MarcacaoPontoOriginal[];
+  diasSemJornadaPrevista?: string[];
   inconsistencias: ItemInconsistencia[];
   resultadoPontoCompleto: ResultadoImportacaoPonto;
 }
@@ -737,6 +758,7 @@ export async function simularImportacaoPonto(
       alertas: resPonto.totais.alertasDemitidos,
     },
     marcacoesExtraidas: resPonto.marcacoesImportadas,
+    diasSemJornadaPrevista: resPonto.diasSemJornadaPrevista,
     inconsistencias: resPonto.inconsistencias.map((inc) => ({
       linha: inc.linha,
       chapa: inc.identificador,
@@ -755,8 +777,6 @@ export function confirmarImportacaoPonto(
   simulacao: ResultadoSimulacaoPonto,
   usuarioLogado: string = "Administrador Premier"
 ): { sucesso: boolean; loteId: string; mensagem: string } {
-  const { salvarLotePonto } = require("@/lib/dados/estado-operacional");
-
   const loteId = `LOTE-PTO-${new Date().toISOString().replace(/\D/g, "").substring(0, 14)}`;
 
   const marcacoesComLote = simulacao.marcacoesExtraidas.map((m) => ({
@@ -777,7 +797,12 @@ export function confirmarImportacaoPonto(
     diasRetencao: 90,
   };
 
-  salvarLotePonto(loteObj, marcacoesComLote);
+  salvarLotePonto(
+    loteObj,
+    marcacoesComLote,
+    [],
+    simulacao.resultadoPontoCompleto?.diasSemJornadaPrevista || []
+  );
 
   return {
     sucesso: true,

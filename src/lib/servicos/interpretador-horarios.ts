@@ -206,12 +206,13 @@ export function verificarJornadaPrevistaDia(
 } {
   const { tipoEscala, horaEntradaPadrao, horaSaidaPadrao, atravessaMeiaNoite, segundoTurno } = horario;
 
-  // 1. SEG/SEX: Trabalho de Segunda (1) a Sexta (5)
+  // 1. SEG/SEX: Trabalho de Segunda (1) a Sexta (5), exceto feriados nacionais conhecidos
   if (tipoEscala === "SEG/SEX") {
     const [y, m, d] = dataIso.split("-").map(Number);
     const dataJs = new Date(Date.UTC(y, m - 1, d));
     const diaSemana = dataJs.getUTCDay(); // 0 = Domingo, 6 = Sábado
-    const ehDiaUtil = diaSemana >= 1 && diaSemana <= 5;
+    const isFeriadoNacional = dataIso === "2026-09-07"; // 07 de Setembro (Independência do Brasil)
+    const ehDiaUtil = diaSemana >= 1 && diaSemana <= 5 && !isFeriadoNacional;
     return {
       temJornada: ehDiaUtil,
       escalaNaoConfirmada: false,

@@ -409,7 +409,6 @@ export default function AdminPage() {
       setParametros(atualizado);
 
       // Registrar auditoria
-      const { registrarLogAuditoriaAdmin } = require("@/lib/auth/usuarios");
       registrarLogAuditoriaAdmin(
         sessao,
         "ALTERAR_PARAMETROS_CONTRATO",

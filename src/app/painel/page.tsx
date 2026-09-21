@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -27,7 +27,7 @@ import { DrawerDecisao } from "@/components/painel/drawer-decisao";
 import { UsuarioSessao } from "@/lib/auth/tipos";
 import { obterParametrosContrato } from "@/lib/auth/parametros";
 
-export default function VisaoContratoPage() {
+function VisaoContratoContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -560,5 +560,13 @@ export default function VisaoContratoPage() {
         competencia={competencia}
       />
     </div>
+  );
+}
+
+export default function VisaoContratoPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-500">Carregando painel contratual...</div>}>
+      <VisaoContratoContent />
+    </Suspense>
   );
 }

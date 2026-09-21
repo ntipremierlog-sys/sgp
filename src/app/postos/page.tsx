@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   Briefcase,
@@ -18,13 +18,17 @@ import {
   carregarEstado,
   adicionarPosto,
   trocarTitularPosto,
+  obterMarcacoesPonto,
   PostoOperacional,
   ProfissionalOperacional,
 } from "@/lib/dados/estado-operacional";
+import { MarcacaoPontoOriginal } from "@/lib/dados/ponto-tipos";
+import { validarInterjornadaClt } from "@/lib/servicos/validacao-interjornada";
 
 export default function PostosPage() {
   const [postos, setPostos] = useState<PostoOperacional[]>([]);
   const [profissionais, setProfissionais] = useState<ProfissionalOperacional[]>([]);
+  const [marcacoesPonto, setMarcacoesPonto] = useState<MarcacaoPontoOriginal[]>([]);
   const [busca, setBusca] = useState("");
   const [filtroEscala, setFiltroEscala] = useState("TODAS");
   const [filtroSituacao, setFiltroSituacao] = useState("TODAS");
@@ -33,6 +37,7 @@ export default function PostosPage() {
   const [modalTrocaAberto, setModalTrocaAberto] = useState(false);
   const [postoParaTroca, setPostoParaTroca] = useState<PostoOperacional | null>(null);
   const [novoTitularMatricula, setNovoTitularMatricula] = useState("");
+  const [cienteInterjornadaTroca, setCienciaInterjornadaTroca] = useState(false);
 
   // Formulário do novo posto
   const [formCodigo, setFormCodigo] = useState("");
@@ -48,6 +53,7 @@ export default function PostosPage() {
   const abrirModalTroca = (posto: PostoOperacional) => {
     setPostoParaTroca(posto);
     setNovoTitularMatricula(posto.titularMatricula || "");
+    setCienciaInterjornadaTroca(false);
     setModalTrocaAberto(true);
   };
 
@@ -55,11 +61,19 @@ export default function PostosPage() {
     e.preventDefault();
     if (!postoParaTroca) return;
 
+    if (alertaInterjornadaTroca && !alertaInterjornadaTroca.atende && !cienteInterjornadaTroca) {
+      alert(
+        `ALERTA CLT ART. 66 (Interjornada):\n\nO colaborador possui apenas ${alertaInterjornadaTroca.horasDescansoFormatado} de descanso entre turnos (abaixo de 11h).\n\nPara confirmar a troca em caráter excepcional, marque a ciência no formulário.`
+      );
+      return;
+    }
+
     const res = trocarTitularPosto(postoParaTroca.codigoPosto, novoTitularMatricula || undefined);
     if (res.sucesso) {
       setMensagemSucesso(res.mensagem);
       setModalTrocaAberto(false);
       setPostoParaTroca(null);
+      setCienciaInterjornadaTroca(false);
       carregarDados();
       if (postoSelecionado && postoSelecionado.codigoPosto === postoParaTroca.codigoPosto) {
         setPostoSelecionado(null);
@@ -74,6 +88,7 @@ export default function PostosPage() {
     const estado = carregarEstado();
     setPostos(estado.postos);
     setProfissionais(estado.profissionais);
+    setMarcacoesPonto(obterMarcacoesPonto());
   };
 
   useEffect(() => {
@@ -82,6 +97,19 @@ export default function PostosPage() {
     window.addEventListener("sgp-dados-atualizados", handleAtualizacao);
     return () => window.removeEventListener("sgp-dados-atualizados", handleAtualizacao);
   }, []);
+
+  // Alerta de interjornada reativo na troca de titular do posto
+  const alertaInterjornadaTroca = useMemo(() => {
+    if (!novoTitularMatricula || !postoParaTroca) return null;
+    return validarInterjornadaClt({
+      matricula: novoTitularMatricula,
+      dataInicio: new Date().toISOString().substring(0, 10),
+      postoDestinoCodigo: postoParaTroca.codigoPosto,
+      postos,
+      profissionais,
+      marcacoesPonto,
+    });
+  }, [novoTitularMatricula, postoParaTroca, postos, profissionais, marcacoesPonto]);
 
   const postosFiltrados = postos.filter((p) => {
     const matchTexto =
@@ -332,7 +360,7 @@ export default function PostosPage() {
                           <span className="text-[10px] font-mono text-slate-500">({posto.titularMatricula})</span>
                         </div>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-600">
                           <AlertTriangle className="w-3 h-3" />
                           POSTO VAGO
                         </span>
@@ -700,6 +728,31 @@ export default function PostosPage() {
                   Ao selecionar um novo colaborador, o sistema atualiza automaticamente o registro no cadastro de Profissionais e no Mapa de Ocupação.
                 </p>
               </div>
+
+              {/* Alerta de Interjornada CLT Art. 66 */}
+              {alertaInterjornadaTroca && !alertaInterjornadaTroca.atende && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg space-y-2 text-xs animate-fadeIn">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Alerta CLT Art. 66 (Interjornada &lt; 11h)</span>
+                  </div>
+                  <p className="text-[11px] text-amber-900 leading-relaxed">
+                    O descanso apurado entre jornadas é de <strong>{alertaInterjornadaTroca.horasDescansoFormatado}</strong> (déficit de {alertaInterjornadaTroca.deficitFormatado} em relação às 11h mínimas legais).
+                  </p>
+                  <div className="p-2 bg-white rounded border border-rose-200 flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      id="checkCienciaTroca"
+                      checked={cienteInterjornadaTroca}
+                      onChange={(e) => setCienciaInterjornadaTroca(e.target.checked)}
+                      className="mt-0.5 w-3.5 h-3.5 text-rose-600 rounded cursor-pointer"
+                    />
+                    <label htmlFor="checkCienciaTroca" className="text-[10px] text-rose-950 font-semibold cursor-pointer">
+                      Declaro ciência da não observância do repouso de 11h e autorizo a troca em caráter excepcional.
+                    </label>
+                  </div>
+                </div>
+              )}
 
               <div className="p-3 bg-slate-100 border-t border-slate-200 -mx-5 -mb-5 flex items-center justify-end gap-2">
                 <button

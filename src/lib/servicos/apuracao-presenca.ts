@@ -81,6 +81,7 @@ export interface ParametrosApuracao {
   horaHojeLocal?: string; // HH:MM
   toleranciaMinutos?: number; // Padrão 10 min
   janelaJornadaHoras?: number; // Padrão 3h antes e depois
+  diasSemJornadaRm?: Set<string> | string[]; // Chaves `${chapa}_${dataIso}` onde o Cubo RM indicou HORA_BASE2 == 0
 }
 
 export interface ResultadoApuracaoCompleta {
@@ -167,7 +168,13 @@ export function apurarPresencaEPostos(
     horaHojeLocal = "12:00",
     toleranciaMinutos = 10,
     janelaJornadaHoras = 3,
+    diasSemJornadaRm = [],
   } = parametros;
+
+  const setDiasSemJornadaRm =
+    diasSemJornadaRm instanceof Set
+      ? diasSemJornadaRm
+      : new Set(diasSemJornadaRm || []);
 
   // Extrai data máxima do último lote de ponto
   const dataMaxPonto = dataReferenciaUltimoLote.substring(0, 10);
@@ -284,8 +291,12 @@ export function apurarPresencaEPostos(
         toleranciaMinutos,
       };
 
-      // 1. DESLIGADO: após a data de demissão
-      if (colab.situacao === "DESLIGADO" && colab.dataDesligamento && dt > colab.dataDesligamento) {
+      // 1. DESLIGADO / NÃO ADMITIDO: antes da data de admissão ou após a data de demissão
+      if (colab.dataAdmissao && dt < colab.dataAdmissao) {
+        situacao = "FOLGA_ESCALA";
+        totais.folgas++;
+      }
+      else if (colab.situacao === "DESLIGADO" && colab.dataDesligamento && dt > colab.dataDesligamento) {
         situacao = "DESLIGADO";
       }
       // 2. FÉRIAS / AFASTADO / LICENÇA: vindo do RM
@@ -297,8 +308,11 @@ export function apurarPresencaEPostos(
         situacao = "FERIAS_AFASTADO_LICENCA";
         totais.feriasAfastamentos++;
       }
-      // 3. FOLGA DA ESCALA: dia sem jornada prevista
-      else if (!jornada.temJornada && !jornada.escalaNaoConfirmada) {
+      // 3. FOLGA DA ESCALA / SEM JORNADA NO RM: dia sem jornada prevista ou com HORA_BASE2 == 0 no Cubo RM
+      else if (
+        (!jornada.temJornada && !jornada.escalaNaoConfirmada) ||
+        (setDiasSemJornadaRm.has(`${chapa}_${dt}`) && marcacoesDoDia.length === 0)
+      ) {
         situacao = "FOLGA_ESCALA";
         totais.folgas++;
       }
@@ -513,6 +527,7 @@ export function apurarPresencaEPostos(
 
           if (coberturaAtiva) {
             substitutoChapa = coberturaAtiva.substitutoMatricula.padStart(6, "0");
+            substitutoNome = (coberturaAtiva as any).substitutoNome || undefined;
             const sitSubstituto = situacaoColaboradorDia.get(`${substitutoChapa}_${dt}`);
 
             if (sitSubstituto === "PRESENTE" || sitSubstituto === "MARCACAO_INCOMPLETA") {

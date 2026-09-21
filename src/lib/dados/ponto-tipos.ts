@@ -216,4 +216,5 @@ export interface ResultadoImportacaoPonto {
     gravidade: "ERRO" | "ALERTA";
   }[];
   marcacoesImportadas: MarcacaoPontoOriginal[];
+  diasSemJornadaPrevista?: string[]; // Chaves no formato `${chapa}_${dataLocal}` onde HORA_BASE2 == 0
 }

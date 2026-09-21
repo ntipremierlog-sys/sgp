@@ -4,6 +4,31 @@ Todas as alterações relevantes e entregas incrementais por semana de desenvolv
 
 ---
 
+## [Entrega Complementar — Interjornada CLT Art. 66, Dados Reais de Ponto e Redesenho Multi-Base] — 21/09/2026
+
+### O que ficou pronto:
+- **Validação de Interjornada Mínima de 11 Horas Consecutivas (`src/lib/servicos/validacao-interjornada.ts`):**
+  - Implementação estrita do Artigo 66 da CLT e Súmula 110 do TST.
+  - Verificação em tempo real no fluxo de cadastro de substituição/cobertura (`src/app/coberturas/page.tsx`).
+  - Cálculo automático de déficit de descanso a indenizar (adicional de 50%).
+  - Alertas visuais e checkbox obrigatório de declaração de ciência para coberturas emergenciais.
+  - Registro de evento de quebra de interjornada na trilha de auditoria para fins de compliance trabalhista e fiscalização.
+  - 8 testes unitários passando em `src/__tests__/validacao-interjornada.test.ts`.
+- **Integração de Dados Reais dos Relatórios Operacionais:**
+  - Extração e conciliação direta dos arquivos reais `CUBO DE REGISTROS.xlsx`, `CUBO DE ABONO.xlsx`, `08_Lista de Alocados_SIFAC_Agosto_.xlsx` e `funcionarios petrobras.XLSX`.
+  - Endpoint de API em `/api/ponto` com suporte a persistência segura sem estouro da quota de 5MB do `localStorage`.
+  - Suíte de conferência e não colisão de arquivos com 3 testes automatizados em `src/__tests__/conferencia-relatorios-momento4.test.ts`.
+- **Painel Geral, Mapa de Ocupação e Presença Diária Multi-Base:**
+  - Expansão da cobertura para as 29 bases operacionais do contrato Petrobras.
+  - Drawer lateral de inspeção detalhada de célula no Mapa de Ocupação (`src/app/mapa-ocupacao/page.tsx`).
+  - Identificação clara de Postos Vagos com badges de destaque.
+  - Tratamento aprimorado de feriados nacionais e regras de admissão na apuração diária.
+- **Métricas de Qualidade:**
+  - Suíte completa com 150 testes automatizados Vitest passando (19 arquivos de teste).
+  - 0 erros de TypeScript e compilação de produção verificada com sucesso.
+
+---
+
 ## [Entrega Oficial — MOMENTO 4: Importação de Registros de Ponto, Interpretação de Escalas e Apuração de Presença Diária] — 17/09/2026
 
 ### O que ficou pronto:

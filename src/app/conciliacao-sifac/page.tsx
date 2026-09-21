@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -45,7 +45,7 @@ import {
 import { UsuarioSessao } from "@/lib/auth/tipos";
 import { can } from "@/lib/auth/permissoes";
 
-export default function ConciliacaoSifacPage() {
+function ConciliacaoSifacConteudo() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -127,32 +127,8 @@ export default function ConciliacaoSifacPage() {
   const ehAdmin = sessao ? sessao.perfil === "PREMIER_ADMIN" : true;
   const ehFiscal = sessao ? sessao.perfil.startsWith("PETROBRAS") : false;
 
-  // Bloqueio de acesso para perfis não autorizados (Fiscal Petrobras / Outros)
-  if (!carregandoSessao && (ehFiscal || !ehAdmin)) {
-    return (
-      <div className="max-w-xl mx-auto my-16 p-8 bg-white border border-rose-200 rounded-2xl shadow-sm text-center space-y-4">
-        <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
-          <ShieldCheck className="w-8 h-8" />
-        </div>
-        <div className="space-y-2">
-          <h1 className="text-xl font-bold text-slate-900">Acesso Restrito ao Administrador Premier</h1>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            A <strong>Conciliação SIFAC</strong> é um instrumento interno de governança e auditoria prévia da Premier Logistics para saneamento de divergências cadastrais. O perfil <strong>{sessao?.perfil || "Convidado"}</strong> não possui autorização para acessar este recurso.
-          </p>
-        </div>
-        <div className="pt-2">
-          <Link
-            href="/painel"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors"
-          >
-            Retornar ao Painel Geral
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   // Lista de bases do sistema para o dropdown de filtros
+  // IMPORTANTE: useMemo deve ser declarado ANTES de qualquer return condicional (regra dos hooks React)
   const basesDisponiveis = useMemo(() => {
     const setBases = new Set<string>();
     divergencias.forEach((d) => {
@@ -179,6 +155,31 @@ export default function ConciliacaoSifacPage() {
       return matchTipo && matchBase && matchStatus && matchBusca;
     });
   }, [divergencias, filtroTipo, filtroBase, filtroStatus, termoBusca]);
+
+  // Bloqueio de acesso para perfis não autorizados (Fiscal Petrobras / Outros)
+  if (!carregandoSessao && (ehFiscal || !ehAdmin)) {
+    return (
+      <div className="max-w-xl mx-auto my-16 p-8 bg-white border border-rose-200 rounded-2xl shadow-sm text-center space-y-4">
+        <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+          <ShieldCheck className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-xl font-bold text-slate-900">Acesso Restrito ao Administrador Premier</h1>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            A <strong>Conciliação SIFAC</strong> é um instrumento interno de governança e auditoria prévia da Premier Logistics para saneamento de divergências cadastrais. O perfil <strong>{sessao?.perfil || "Convidado"}</strong> não possui autorização para acessar este recurso.
+          </p>
+        </div>
+        <div className="pt-2">
+          <Link
+            href="/painel"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors"
+          >
+            Retornar ao Painel Geral
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   // Abertura do Modal de Tratamento
   const handleAbrirTratamento = (div: DivergenciaConciliacao) => {
@@ -802,5 +803,13 @@ export default function ConciliacaoSifacPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ConciliacaoSifacPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-500">Carregando conciliação...</div>}>
+      <ConciliacaoSifacConteudo />
+    </Suspense>
   );
 }

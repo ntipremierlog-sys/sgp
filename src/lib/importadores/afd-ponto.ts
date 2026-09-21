@@ -131,8 +131,8 @@ export async function processarArquivoAfd(
   // 1. VALIDAÇÃO DO CABEÇALHO (LINHA 1)
   // ---------------------------------------------------------------------------
   const linhaCabecalho = linhas[0];
-  let tipoCabecalho = linhaCabecalho.substring(9, 10);
-  let nsrCabecalho = linhaCabecalho.substring(0, 9);
+  const _tipoCabecalho = linhaCabecalho.substring(9, 10);
+  const nsrCabecalho = linhaCabecalho.substring(0, 9);
 
   // Formato Portaria 671 / 1510: NSR (9 zeros) + Tipo '1' (ou '0')
   if (nsrCabecalho !== "000000000" && !linhaCabecalho.startsWith("000000000")) {
