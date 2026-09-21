@@ -4,6 +4,32 @@ Todas as alterações relevantes e entregas incrementais por semana de desenvolv
 
 ---
 
+## [Entrega Oficial — Consolidação dos Relatórios & Memória de Cálculo Oficial (Item 11.3)] — 21/09/2026
+
+### O que ficou pronto:
+- **Relatórios Oficiais & Memória de Cálculo da Medição (`src/app/relatorios/page.tsx`):**
+  - Implementação integral dos Requisitos R4 e R5 do **Item 11.3** do Contrato Petrobras ICJ 5900.0129796.25.2.
+  - Suporte multi-base cobrindo todas as 29 bases operacionais através de `obterTodosPostosContrato()`.
+  - Competência mensal dinâmica com cálculo automático de dias apurados e corte determinístico de dados de ponto.
+  - **Nova Aba 1 — Memória de Cálculo & Faturamento:**
+    - Painel executivo com Diárias Exigíveis, Diárias Cumpridas (Presente + Coberto), Diárias Glosadas (Descobertos) e SLA Contratual (Meta >= 95,0%).
+    - Demonstrativo financeiro referencial de faturamento bruto, cálculo de glosas (30 avos por dia descoberto) e faturamento líquido estimado.
+    - Consolidação sintética por base operacional comparando cumprimento com meta de SLA.
+  - **Aba 2 — Espelho Mensal de Ocupação:** Visão analítica posto a posto detalhando presença, cobertura, postos vagos e taxa de entrega.
+  - **Aba 3 — Demonstrativo de Glosas & Descobertos:** Detalhamento dia a dia das ausências injustificadas para respaldo de glosas na fatura da Petrobras.
+  - **Aba 4 — Rastreabilidade de Coberturas & Interjornada:** Registro de substitutos com auditoria em tempo real de conformidade ao intervalo de 11h (Art. 66 da CLT e passivo de 50% conforme Súmula 110/TST).
+- **Exportação XLSX Oficial Multi-Abas:**
+  - Geração nativa de pasta de trabalho Excel (`.xlsx`) com 4 abas estruturadas (*1. Memória de Cálculo*, *2. Espelho de Ocupação*, *3. Glosas e Descobertos*, *4. Coberturas e Interjornada*).
+  - Exportação de CSV por aba ativa e suporte a impressão executiva sem elementos visuais supérfluos (`window.print()`).
+- **Autenticidade e Auditoria:**
+  - Carimbo digital com chave de autenticidade SHA-256 e termos de assinatura formal para Gestor da Contratada e Fiscal Técnico Petrobras.
+- **Métricas de Qualidade:**
+  - 5 novos testes automatizados adicionados em `src/__tests__/relatorios-memoria-calculo.test.ts`.
+  - Suíte geral de testes: **155 testes passando em 20 arquivos (100% de sucesso)**.
+  - Compilação estática de produção verificada com zero erros.
+
+---
+
 ## [Entrega Complementar — Interjornada CLT Art. 66, Dados Reais de Ponto e Redesenho Multi-Base] — 21/09/2026
 
 ### O que ficou pronto:
