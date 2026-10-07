@@ -12,6 +12,7 @@ import {
   LogAuditoriaOperacional,
   OcorrenciaOperacional,
 } from "@/lib/dados/estado-operacional";
+import { ALOCACOES_MC_REAIS } from "@/lib/dados/estrutura-postos";
 import { ItemInconsistencia } from "@/lib/importadores/rm-funcionarios";
 import {
   obterPeriodoCompetencia,
@@ -341,6 +342,19 @@ export async function simularImportacaoAbono(
     }
   });
 
+  const alocs = estado.alocacoes && estado.alocacoes.length > 0 ? estado.alocacoes : ALOCACOES_MC_REAIS;
+  alocs.forEach((aloc) => {
+    if (aloc.matricula && aloc.postoIdSGP) {
+      const chapaNorm = aloc.matricula.replace(/^0+/, "");
+      if (!mapaPostoPorTitular.has(aloc.matricula)) {
+        mapaPostoPorTitular.set(aloc.matricula, { codigoPosto: aloc.postoIdSGP });
+      }
+      if (!mapaPostoPorTitular.has(chapaNorm)) {
+        mapaPostoPorTitular.set(chapaNorm, { codigoPosto: aloc.postoIdSGP });
+      }
+    }
+  });
+
   const todasInconsistencias: ItemInconsistencia[] = [];
   const linhasProcessadas: LinhaAbonoProcessada[] = [];
   const linhasRejeitadasLista: ItemRejeitadoAbono[] = [];
@@ -418,7 +432,8 @@ export async function simularImportacaoAbono(
     }
 
     // Identificar posto associado caso o colaborador seja titular
-    const postoDoTitular = mapaPostoPorTitular.get(chapa);
+    const chapaNorm = chapa ? chapa.replace(/^0+/, "") : "";
+    const postoDoTitular = mapaPostoPorTitular.get(chapa) || (chapaNorm ? mapaPostoPorTitular.get(chapaNorm) : undefined);
     const postoCodigo = funcRm?.postoCodigo || postoDoTitular?.codigoPosto || undefined;
 
     // Extração de quantidade de horas decimais e dias (ABONO2, HORAS, QUANTIDADE, DIAS)

@@ -58,6 +58,7 @@ import { MarcacaoPontoOriginal } from "@/lib/dados/ponto-tipos";
 import { useSessaoUsuario } from "@/lib/auth/use-sessao-usuario";
 import { podeVerDadosPessoaisCompletos } from "@/lib/dados/rm-tipos";
 import { ItemAlocadoSifac } from "@/lib/dados/conciliacao-sifac";
+import { VAGAS_MC_REAIS, ALOCACOES_MC_REAIS } from "@/lib/dados/estrutura-postos";
 import { validarInterjornadaClt } from "@/lib/servicos/validacao-interjornada";
 import { obterPeriodoCompetencia } from "@/lib/servicos/calendario-competencia";
 
@@ -591,8 +592,8 @@ export default function CoberturasPage() {
       setOcorrencias(estado.ocorrencias || []);
       setPostos(obterTodosPostosContrato(estado.postos));
       setProfissionais(estado.profissionais || []);
-      setVagas(estado.vagas || []);
-      setAlocacoes(estado.alocacoes || []);
+      setVagas(estado.vagas && estado.vagas.length > 0 ? estado.vagas : VAGAS_MC_REAIS);
+      setAlocacoes(estado.alocacoes && estado.alocacoes.length > 0 ? estado.alocacoes : ALOCACOES_MC_REAIS);
       setMarcacoesPonto(obterMarcacoesPonto());
       setAlocadosSifac(estado.alocadosSifac || []);
 
@@ -836,7 +837,7 @@ export default function CoberturasPage() {
       const vinculo = mapaChapaAloc.get(chapaNorm) || mapaChapaAloc.get(oc.matricula);
 
       // Código do posto
-      const postoCod = oc.postoCodigo || vinculo?.posto?.codigoPosto || vinculo?.vaga?.postoIdSGP || vinculo?.vaga?.idPosto;
+      const postoCod = oc.postoCodigo || vinculo?.posto?.codigoPosto || vinculo?.vaga?.postoIdSGP || vinculo?.vaga?.idPosto || vinculo?.aloc?.postoIdSGP;
       if (!postoCod) return;
 
       const postoObj = postos.find((p) => p.codigoPosto === postoCod || p.idPosto === postoCod || p.id === postoCod) || vinculo?.posto;
@@ -997,8 +998,9 @@ export default function CoberturasPage() {
   const totalPostosComCobertura = useMemo(() => {
     const setCodigos = new Set<string>();
     coberturasFiltradas.forEach((c) => setCodigos.add(c.postoCodigo));
+    listaDescobertosNoMes.forEach((d) => setCodigos.add(d.postoCodigo));
     return setCodigos.size;
-  }, [coberturasFiltradas]);
+  }, [coberturasFiltradas, listaDescobertosNoMes]);
 
   const totalPostosDisponiveis = useMemo(() => {
     return postos.filter((p) => {

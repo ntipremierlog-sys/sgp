@@ -2697,6 +2697,35 @@ export function carregarEstado(): EstadoOperacionalCompleto {
         if (!estadoMemoria.pendenciasEscala || estadoMemoria.pendenciasEscala.length === 0) {
           estadoMemoria.pendenciasEscala = [...PENDENCIAS_ESCALA_REV04];
         }
+
+        // Sincroniza postos das ocorrências se faltar postoCodigo
+        if (Array.isArray(estadoMemoria.ocorrencias)) {
+          const mapaPostosIniciais = new Map(OCORRENCIAS_INICIAIS.map((o) => [o.id, o.postoCodigo]));
+          const mapaAlocPosto = new Map<string, string>();
+          const alocs =
+            estadoMemoria.alocacoes && estadoMemoria.alocacoes.length > 0
+              ? estadoMemoria.alocacoes
+              : ALOCACOES_MC_REAIS;
+          alocs.forEach((aloc) => {
+            if (aloc.matricula && aloc.postoIdSGP) {
+              mapaAlocPosto.set(aloc.matricula, aloc.postoIdSGP);
+              mapaAlocPosto.set(aloc.matricula.replace(/^0+/, ""), aloc.postoIdSGP);
+            }
+          });
+
+          estadoMemoria.ocorrencias = estadoMemoria.ocorrencias.map((oc) => {
+            if (!oc.postoCodigo) {
+              const postoIni = mapaPostosIniciais.get(oc.id);
+              const chapaNorm = (oc.matricula || "").replace(/^0+/, "");
+              const postoAloc = mapaAlocPosto.get(oc.matricula) || (chapaNorm ? mapaAlocPosto.get(chapaNorm) : undefined);
+              const novoCod = postoIni || postoAloc;
+              if (novoCod) {
+                return { ...oc, postoCodigo: novoCod };
+              }
+            }
+            return oc;
+          });
+        }
       }
     } catch {
       // Falha silenciosa de localStorage (usa estadoMemoria)
