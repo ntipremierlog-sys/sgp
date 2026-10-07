@@ -2115,23 +2115,6 @@ export default function CoberturasPage() {
                             {hp.base}
                           </div>
                         </div>
-                        {hp.totalDiasDescobertos > 0 && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const primeiraDataDesc = datasCompetencia.find((d) => hp.descDias.has(d));
-                              const descItem = primeiraDataDesc ? hp.descDias.get(primeiraDataDesc) : undefined;
-                              const todasDatas = datasCompetencia.filter((d) => hp.descDias.has(d));
-                              const ultimaDataDesc = todasDatas[todasDatas.length - 1];
-                              abrirModalIncluir(hp.codigoPosto, primeiraDataDesc, descItem?.vagaId, ultimaDataDesc, descItem?.motivo);
-                            }}
-                            className="ml-1.5 shrink-0 px-2 py-0.5 text-[10px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 active:scale-95 border border-rose-200/90 rounded-md transition-all flex items-center gap-1 shadow-2xs hover:border-rose-400 cursor-pointer"
-                            title={`Designar cobertura para ${hp.codigoPosto} (${hp.totalDiasDescobertos} dia(s) descoberto(s))`}>
-                            <UserPlus className="w-3 h-3 text-rose-600" />
-                            <span>Designar</span>
-                          </button>
-                        )}
                       </div>
 
                       {/* Células diárias */}

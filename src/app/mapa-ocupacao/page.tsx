@@ -1090,9 +1090,10 @@ export default function MapaOcupacaoPage() {
     setPostosExpandidos(new Set());
   };
 
-  // Ações e dados Premier somente para perfis Premier confirmados pela sessão
+  // Permissões operacionais: Fiscal Petrobras tem perfil somente-leitura restrito. Usuários operacionais / Premier podem designar e registrar coberturas
+  const ehFiscal = ehPerfilFiscalPetrobras(perfilAtivo);
+  const podeEditarOperacao = !ehFiscal;
   const ehPremier = podeVerDadosPessoaisCompletos(perfilAtivo);
-  const ehFiscal = !ehPremier;
 
   // Lista de feristas e colaboradores candidatos para substituição
   const listaCandidatosCobertura = useMemo(() => {
@@ -1199,8 +1200,7 @@ export default function MapaOcupacaoPage() {
     setMensagemAjusteSucesso("");
 
     // Inicializa valores do formulário de cobertura
-    const ehDiaDescoberto = apuracao.status === "DESCOBERTO";
-    setRegistrandoCobertura(ehDiaDescoberto && ehPremier);
+    setRegistrandoCobertura(false);
     setFormSubstitutoChapa("");
     setFormSubstitutoNome("");
     setFormDataInicioCob(dataStr);
@@ -1303,9 +1303,10 @@ export default function MapaOcupacaoPage() {
   const esconderTooltipHover = useCallback(() => {
     if (tooltipTimeoutRef.current) {
       clearTimeout(tooltipTimeoutRef.current);
-      tooltipTimeoutRef.current = null;
     }
-    setTooltipOcupacao(null);
+    tooltipTimeoutRef.current = setTimeout(() => {
+      setTooltipOcupacao(null);
+    }, 250);
   }, []);
 
   useEffect(() => {
@@ -1575,6 +1576,150 @@ export default function MapaOcupacaoPage() {
     );
   };
 
+  // Renderizador do Formulário de Cobertura Operacional (reutilizável no drawer e em cards)
+  const renderFormularioCobertura = (posicaoCodigoTxt?: string, titularNomeTxt?: string) => {
+    return (
+      <div className="bg-amber-50/80 border border-amber-300 rounded-lg p-3.5 space-y-3 shadow-xs">
+        <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+          <span className="font-bold text-amber-950 text-xs uppercase tracking-wide flex items-center gap-1.5">
+            <UserCheck className="w-4 h-4 text-emerald-700" />
+            <span>Designar Cobertura Operacional</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setRegistrandoCobertura(false)}
+            className="text-slate-400 hover:text-slate-700 text-xs font-semibold px-2 py-0.5 rounded hover:bg-amber-100 transition-colors cursor-pointer"
+          >
+            ✕ Fechar
+          </button>
+        </div>
+
+        {erroCobertura && (
+          <div className="p-2 bg-rose-100 border border-rose-300 text-rose-900 rounded text-xs font-medium">
+            {erroCobertura}
+          </div>
+        )}
+
+        <div className="space-y-2.5 text-xs">
+          <div className="grid grid-cols-2 gap-2 bg-white/70 p-2 rounded border border-amber-200/60">
+            <div>
+              <span className="text-[10px] font-semibold text-slate-600 uppercase block">Posição</span>
+              <span className="font-bold text-slate-900 text-xs">{posicaoCodigoTxt || (drawerInspecao ? obterCodigoVisualPosicao(drawerInspecao.vaga, drawerInspecao.posto) : "")}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-semibold text-slate-600 uppercase block">Titular Ausente</span>
+              {(() => {
+                const titNome = titularNomeTxt || (drawerInspecao ? (drawerInspecao.ocupacao.ocupanteNome || (drawerInspecao.vaga as any).titularReferencia || obterAlocacaoVigenteVaga(drawerInspecao.vaga.id, alocacoes, drawerInspecao.dataStr)?.nome) : "") || "Vaga sem titular";
+                return <span className="font-bold text-slate-900 text-xs truncate block">{titNome}</span>;
+              })()}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-slate-700 uppercase block">
+              Quem Cobre (Substituto / Ferista) *
+            </label>
+            <select
+              value={formSubstitutoChapa}
+              onChange={(e) => handleSelecionarSubstituto(e.target.value)}
+              className="w-full mt-1 border border-slate-300 rounded px-2.5 py-1.5 bg-white text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+            >
+              <option value="">Selecione o colaborador / ferista...</option>
+              {listaCandidatosCobertura.map((c) => (
+                <option key={c.matricula} value={c.matricula}>
+                  {c.nome} ({c.matricula}) {c.ehFerista ? "• [Ferista Homologado]" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Alerta de Vínculo Não Homologado */}
+          {avisoVinculoSubstituto && !avisoVinculoSubstituto.vinculado && (
+            <div className="p-2.5 bg-rose-50 border border-rose-300 text-rose-900 rounded text-xs space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-rose-800">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                <span>Colaborador não vinculado previamente a este posto</span>
+              </div>
+              <p className="text-[11px] text-rose-700">
+                {avisoVinculoSubstituto.mensagem}
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] font-semibold text-slate-700 uppercase block">Data Início</label>
+              <input
+                type="date"
+                value={formDataInicioCob}
+                onChange={(e) => setFormDataInicioCob(e.target.value)}
+                className="w-full mt-1 border border-slate-300 rounded px-2 py-1.5 bg-white text-xs font-semibold"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-slate-700 uppercase block">Data Fim</label>
+              <input
+                type="date"
+                value={formDataFimCob}
+                onChange={(e) => setFormDataFimCob(e.target.value)}
+                className="w-full mt-1 border border-slate-300 rounded px-2 py-1.5 bg-white text-xs font-semibold"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold text-slate-700 uppercase block">Motivo da Cobertura</label>
+            <select
+              value={formMotivoCob}
+              onChange={(e) => setFormMotivoCob(e.target.value)}
+              className="w-full mt-1 border border-slate-300 rounded px-2 py-1.5 bg-white text-xs font-semibold"
+            >
+              <option value="LICENÇA / AFASTAMENTO">LICENÇA / AFASTAMENTO</option>
+              <option value="FÉRIAS DO TITULAR">FÉRIAS DO TITULAR</option>
+              <option value="FOLGA DA ESCALA">FOLGA DA ESCALA</option>
+              <option value="COBERTURA OPERACIONAL">COBERTURA OPERACIONAL</option>
+              <option value="TREINAMENTO / RECICLAGEM">TREINAMENTO / RECICLAGEM</option>
+            </select>
+          </div>
+
+          {/* Justificativa Obrigatória se não vinculado */}
+          {avisoVinculoSubstituto && !avisoVinculoSubstituto.vinculado && (
+            <div>
+              <label className="text-[10px] font-bold text-rose-800 uppercase block">
+                Justificativa Operacional (Obrigatória) *
+              </label>
+              <textarea
+                rows={2}
+                value={formJustificativaNaoVinculado}
+                onChange={(e) => setFormJustificativaNaoVinculado(e.target.value)}
+                placeholder="Descreva o motivo excepcional para a designação de colaborador não vinculado a este posto..."
+                className="w-full mt-1 border border-rose-300 rounded p-2 bg-white text-xs"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1 border-t border-amber-200">
+          <button
+            type="button"
+            onClick={() => setRegistrandoCobertura(false)}
+            className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded text-xs hover:bg-slate-50 cursor-pointer font-medium"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleRegistrarCobertura}
+            className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white rounded text-xs font-bold shadow-xs hover:shadow cursor-pointer flex items-center gap-1.5"
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Confirmar Cobertura</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   // Exportação XLSX (sem valores nem medição)
   const handleExportarXlsx = async () => {
     try {
@@ -1667,7 +1812,7 @@ export default function MapaOcupacaoPage() {
             >
               Por Posto
             </button>
-            {ehPremier && (
+            {podeEditarOperacao && (
               <button
                 onClick={() => setAbaVisao("PENDENCIAS")}
                 className={`px-2.5 py-1 rounded text-xs font-medium transition-all cursor-pointer flex items-center gap-1 ${
@@ -1684,7 +1829,7 @@ export default function MapaOcupacaoPage() {
             )}
           </div>
 
-          {ehPremier && (
+          {podeEditarOperacao && (
             <button
               onClick={() => setModalConfirmarLimpezaOperacional(true)}
               className="inline-flex items-center gap-1 text-rose-700 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-200 hover:border-rose-600 text-xs font-semibold px-2.5 py-1 rounded shadow-2xs transition-colors cursor-pointer"
@@ -2145,8 +2290,37 @@ export default function MapaOcupacaoPage() {
                                   </span>
                                 </div>
 
-                                <div className="text-xs text-slate-600 font-medium">
-                                  Ciclo: <span className="text-slate-900 font-semibold">{percentualCicloFmt}</span>
+                                <div className="flex items-center gap-2.5">
+                                  {(() => {
+                                    const diaComDesc = apuracaoCiclo?.dias?.find((ad) =>
+                                      ad.vagasDetalhe?.some((vd) => vd.status === "DESCOBERTO")
+                                    );
+                                    if (diaComDesc && podeEditarOperacao) {
+                                      const primeiraVagaDesc = posicoesFiltradas.find((vg) =>
+                                        diaComDesc.vagasDetalhe?.some(
+                                          (vd) => (vd.vagaId === vg.id || vd.posicaoId === vg.id) && vd.status === "DESCOBERTO"
+                                        )
+                                      ) || posicoesFiltradas[0];
+                                      const dataDescStr = (diaComDesc as any).dataStr || diaComDesc.data;
+
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={() => abrirInspecaoDia(primeiraVagaDesc, posto, dataDescStr)}
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-rose-700 hover:text-white hover:bg-rose-600 bg-rose-50 border border-rose-300 rounded-md transition-all shadow-2xs hover:shadow cursor-pointer"
+                                          title="Designar cobertura para as ausências deste posto"
+                                        >
+                                          <UserCheck className="w-3.5 h-3.5" />
+                                          <span>+ Designar Cobertura</span>
+                                        </button>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
+
+                                  <div className="text-xs text-slate-600 font-medium">
+                                    Ciclo: <span className="text-slate-900 font-semibold">{percentualCicloFmt}</span>
+                                  </div>
                                 </div>
                               </div>
 
@@ -2739,7 +2913,7 @@ export default function MapaOcupacaoPage() {
 
                                             <BadgeStatus status={statusVagaDia.statusVaga} tamanho="sm" />
 
-                                            {statusVagaDia.status === "DESCOBERTO" && ehPremier && (
+                                            {statusVagaDia.status === "DESCOBERTO" && podeEditarOperacao && (
                                               <button
                                                 onClick={(e) => {
                                                   e.stopPropagation();
@@ -2924,7 +3098,7 @@ export default function MapaOcupacaoPage() {
       {/* ========================================================================= */}
       {/* 5. VISÃO PAINEL DE PENDÊNCIAS (Item 6 - Apenas Perfil Premier) */}
       {/* ========================================================================= */}
-      {abaVisao === "PENDENCIAS" && ehPremier && (
+      {abaVisao === "PENDENCIAS" && podeEditarOperacao && (
         <div className="space-y-4">
           {/* Card de Contador: "posições com programação completa / total" */}
           <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-2xs space-y-3">
@@ -3213,7 +3387,7 @@ export default function MapaOcupacaoPage() {
                 <div className="bg-slate-50 rounded-lg border border-slate-200 p-3.5 space-y-2.5">
                   <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between border-b border-slate-200 pb-1.5">
                     <span>Parâmetros Operacionais da Posição</span>
-                    {ehPremier && !editandoEscala && (
+                    {podeEditarOperacao && !editandoEscala && (
                       <button
                         onClick={() => {
                           setEditandoEscala(true);
@@ -3298,11 +3472,13 @@ export default function MapaOcupacaoPage() {
                           </span>
                         )}
                       </div>
-                      {ehPremier && !registrandoCobertura && (
+                      {podeEditarOperacao && !registrandoCobertura && (
                         <button
                           onClick={() => {
                             setRegistrandoCobertura(true);
                             setEditandoEscala(false);
+                            setFormDataInicioCob(drawerInspecao.dataStr);
+                            setFormDataFimCob(drawerInspecao.dataStr);
                           }}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs shadow-xs hover:shadow transition-all cursor-pointer border border-emerald-500"
                         >
@@ -3391,7 +3567,7 @@ export default function MapaOcupacaoPage() {
                 </div>
 
                 {/* FORMULÁRIO DE EDIÇÃO DE ESCALA DA POSIÇÃO (Item 5 - Perfil Premier) */}
-                {editandoEscala && ehPremier && (
+                {editandoEscala && podeEditarOperacao && (
                   <div className="bg-blue-50/70 border border-blue-200 rounded-lg p-3.5 space-y-3">
                     <div className="flex items-center justify-between border-b border-blue-200 pb-2">
                       <span className="font-bold text-blue-950 text-xs uppercase tracking-wide">
@@ -3455,136 +3631,9 @@ export default function MapaOcupacaoPage() {
                   </div>
                 )}
 
-                {/* FORMULÁRIO DE REGISTRO DE COBERTURA (Item 4 - Perfil Premier) */}
-                {registrandoCobertura && ehPremier && (
-                  <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-3.5 space-y-3">
-                    <div className="flex items-center justify-between border-b border-amber-200 pb-2">
-                      <span className="font-bold text-amber-950 text-xs uppercase tracking-wide">
-                        Registrar Cobertura Operacional
-                      </span>
-                      <button
-                        onClick={() => setRegistrandoCobertura(false)}
-                        className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-
-                    {erroCobertura && (
-                      <div className="p-2 bg-rose-100 border border-rose-300 text-rose-900 rounded text-xs">
-                        {erroCobertura}
-                      </div>
-                    )}
-
-                    <div className="space-y-2.5 text-xs">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <span className="text-[10px] font-semibold text-slate-600 uppercase block">Posição</span>
-                          <span className="font-bold text-slate-900 text-xs">{codigoPosicao}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-semibold text-slate-600 uppercase block">Titular</span>
-                          <span className="font-bold text-slate-900 text-xs truncate block">{titularVigente?.nome || "Vaga sem titular"}</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-semibold text-slate-700 uppercase block">Quem Cobre (Substituto)</label>
-                        <select
-                          value={formSubstitutoChapa}
-                          onChange={(e) => handleSelecionarSubstituto(e.target.value)}
-                          className="w-full mt-1 border border-slate-300 rounded px-2.5 py-1.5 bg-white text-xs font-medium"
-                        >
-                          <option value="">Selecione o colaborador / ferista...</option>
-                          {listaCandidatosCobertura.map((c) => (
-                            <option key={c.matricula} value={c.matricula}>
-                              {c.nome} ({c.matricula}) {c.ehFerista ? "• [Ferista Homologado]" : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Alerta de Vínculo Não Homologado */}
-                      {avisoVinculoSubstituto && !avisoVinculoSubstituto.vinculado && (
-                        <div className="p-2.5 bg-rose-50 border border-rose-300 text-rose-900 rounded text-xs space-y-1">
-                          <div className="font-bold flex items-center gap-1.5 text-rose-800">
-                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                            <span>Colaborador não vinculado previamente a este posto</span>
-                          </div>
-                          <p className="text-[11px] text-rose-700">
-                            {avisoVinculoSubstituto.mensagem}
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] font-semibold text-slate-700 uppercase block">Data Início</label>
-                          <input
-                            type="date"
-                            value={formDataInicioCob}
-                            onChange={(e) => setFormDataInicioCob(e.target.value)}
-                            className="w-full mt-1 border border-slate-300 rounded px-2 py-1.5 bg-white text-xs"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-semibold text-slate-700 uppercase block">Data Fim</label>
-                          <input
-                            type="date"
-                            value={formDataFimCob}
-                            onChange={(e) => setFormDataFimCob(e.target.value)}
-                            className="w-full mt-1 border border-slate-300 rounded px-2 py-1.5 bg-white text-xs"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-semibold text-slate-700 uppercase block">Motivo da Cobertura</label>
-                        <select
-                          value={formMotivoCob}
-                          onChange={(e) => setFormMotivoCob(e.target.value)}
-                          className="w-full mt-1 border border-slate-300 rounded px-2 py-1.5 bg-white text-xs"
-                        >
-                          <option value="FÉRIAS DO TITULAR">FÉRIAS DO TITULAR</option>
-                          <option value="FOLGA DA ESCALA">FOLGA DA ESCALA</option>
-                          <option value="LICENÇA / AFASTAMENTO">LICENÇA / AFASTAMENTO</option>
-                          <option value="COBERTURA OPERACIONAL">COBERTURA OPERACIONAL</option>
-                          <option value="TREINAMENTO / RECICLAGEM">TREINAMENTO / RECICLAGEM</option>
-                        </select>
-                      </div>
-
-                      {/* Justificativa Obrigatória se não vinculado */}
-                      {avisoVinculoSubstituto && !avisoVinculoSubstituto.vinculado && (
-                        <div>
-                          <label className="text-[10px] font-bold text-rose-800 uppercase block">
-                            Justificativa Operacional (Obrigatória) *
-                          </label>
-                          <textarea
-                            rows={2}
-                            value={formJustificativaNaoVinculado}
-                            onChange={(e) => setFormJustificativaNaoVinculado(e.target.value)}
-                            placeholder="Descreva o motivo excepcional para a designação de colaborador não vinculado a este posto..."
-                            className="w-full mt-1 border border-rose-300 rounded p-2 bg-white text-xs"
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex justify-end gap-2 pt-1">
-                      <button
-                        onClick={() => setRegistrandoCobertura(false)}
-                        className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded text-xs hover:bg-slate-50 cursor-pointer"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        onClick={handleRegistrarCobertura}
-                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-bold shadow-xs cursor-pointer"
-                      >
-                        Confirmar Cobertura
-                      </button>
-                    </div>
-                  </div>
+                {/* FORMULÁRIO DE REGISTRO DE COBERTURA (quando aberto fora de dia descoberto) */}
+                {registrandoCobertura && podeEditarOperacao && drawerInspecao.ocupacao.status !== "DESCOBERTO" && (
+                  renderFormularioCobertura(codigoPosicao, titularProf?.nome || titularVigente?.nome)
                 )}
 
                 {/* MAPA DIÁRIO DO CICLO (Item 1 & 2) */}
@@ -3680,7 +3729,7 @@ export default function MapaOcupacaoPage() {
                         Motivo registrado: {drawerInspecao.ocupacao.motivoPublico}
                       </div>
 
-                      {drawerInspecao.ocupacao.coberturaId && ehPremier && (
+                      {drawerInspecao.ocupacao.coberturaId && podeEditarOperacao && (
                         <div className="pt-2 border-t border-sky-200/80 flex items-center justify-between gap-2">
                           <Link
                             href="/coberturas"
@@ -3734,7 +3783,7 @@ export default function MapaOcupacaoPage() {
                       </p>
 
                       {/* Botão Principal de Ação Imediata para Designar Cobertura */}
-                      {ehPremier && !registrandoCobertura && (
+                      {podeEditarOperacao && !registrandoCobertura && (
                         <button
                           type="button"
                           onClick={() => {
@@ -3745,14 +3794,24 @@ export default function MapaOcupacaoPage() {
                             setFormMotivoCob(
                               drawerInspecao.ocupacao.categoriaAusencia ||
                               drawerInspecao.ocupacao.motivoPublico ||
-                              "COBERTURA OPERACIONAL"
+                              "LICENÇA / AFASTAMENTO"
                             );
                           }}
-                          className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer border border-emerald-500"
+                          className="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs shadow hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer border border-emerald-500"
                         >
                           <UserCheck className="w-4 h-4" />
                           <span>+ Designar Cobertura para este Posto</span>
                         </button>
+                      )}
+
+                      {/* Se o formulário de cobertura estiver ativo para este dia descoberto */}
+                      {podeEditarOperacao && registrandoCobertura && (
+                        <div className="pt-1">
+                          {renderFormularioCobertura(
+                            codigoPosicao,
+                            drawerInspecao.ocupacao.ocupanteNome || titularProf?.nome || titularVigente?.nome
+                          )}
+                        </div>
                       )}
 
                       {/* Sugestão de Feristas Vinculados Disponíveis (Item 3) */}
@@ -3780,12 +3839,19 @@ export default function MapaOcupacaoPage() {
                                 <span className="font-semibold text-slate-800">
                                   {f.nome} <span className="font-mono text-slate-500 font-normal">({f.chapa})</span>
                                 </span>
-                                {ehPremier && !registrandoCobertura && (
+                                {podeEditarOperacao && !registrandoCobertura && (
                                   <button
                                     onClick={() => {
                                       setFormSubstitutoChapa(f.chapa);
                                       setFormSubstitutoNome(f.nome);
                                       setRegistrandoCobertura(true);
+                                      setFormDataInicioCob(drawerInspecao.dataStr);
+                                      setFormDataFimCob(drawerInspecao.dataStr);
+                                      setFormMotivoCob(
+                                        drawerInspecao.ocupacao.categoriaAusencia ||
+                                        drawerInspecao.ocupacao.motivoPublico ||
+                                        "COBERTURA OPERACIONAL"
+                                      );
                                     }}
                                     className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 cursor-pointer"
                                   >
@@ -3905,7 +3971,7 @@ export default function MapaOcupacaoPage() {
                         <span className="text-[11px] text-slate-600">
                           Ou configure a escala para calcular o mês inteiro automaticamente:
                         </span>
-                        {ehPremier && !editandoEscala && (
+                        {podeEditarOperacao && !editandoEscala && (
                           <button
                             onClick={() => {
                               setEditandoEscala(true);
@@ -4148,7 +4214,7 @@ export default function MapaOcupacaoPage() {
                 left: `${left}px`,
                 transform,
                 zIndex: 9999,
-                pointerEvents: "none",
+                pointerEvents: "auto",
               }}
               className="w-[320px] bg-slate-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl border border-slate-700/80 p-3 animate-in fade-in zoom-in-95 duration-100 ring-1 ring-black/40 text-xs"
             >
@@ -4208,6 +4274,20 @@ export default function MapaOcupacaoPage() {
                             statusVaga.categoriaAusencia ||
                             "Ausência sem cobertura registrada"}
                         </div>
+                        {podeEditarOperacao && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTooltipOcupacao(null);
+                              abrirInspecaoDia(vaga, posto, dataStr);
+                            }}
+                            className="w-full mt-2.5 py-1 px-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded text-[11px] font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-emerald-400"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>+ Designar Cobertura</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -4385,10 +4465,18 @@ export default function MapaOcupacaoPage() {
                     <AlertTriangle className="w-3 h-3 text-rose-500" />
                     <span>Posto Descoberto</span>
                   </span>
-                  <span className="text-emerald-300 font-bold bg-emerald-950 px-2 py-0.5 rounded border border-emerald-700/70 flex items-center gap-1">
-                    <UserCheck className="w-3 h-3 text-emerald-400" />
-                    <span>Clique na célula para Designar</span>
-                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTooltipOcupacao(null);
+                      abrirInspecaoDia(vaga, posto, dataStr);
+                    }}
+                    className="text-emerald-200 hover:text-white font-bold bg-emerald-700 hover:bg-emerald-600 px-2.5 py-1 rounded border border-emerald-500 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                  >
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Designar Cobertura</span>
+                  </button>
                 </div>
               ) : (
                 <div className="mt-2 pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[9px] text-slate-400">
