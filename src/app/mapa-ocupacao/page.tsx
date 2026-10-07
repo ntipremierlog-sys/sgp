@@ -1199,12 +1199,17 @@ export default function MapaOcupacaoPage() {
     setMensagemAjusteSucesso("");
 
     // Inicializa valores do formulário de cobertura
-    setRegistrandoCobertura(false);
+    const ehDiaDescoberto = apuracao.status === "DESCOBERTO";
+    setRegistrandoCobertura(ehDiaDescoberto && ehPremier);
     setFormSubstitutoChapa("");
     setFormSubstitutoNome("");
     setFormDataInicioCob(dataStr);
     setFormDataFimCob(dataStr);
-    setFormMotivoCob("COBERTURA OPERACIONAL");
+    setFormMotivoCob(
+      apuracao.categoriaAusencia ||
+      apuracao.motivoPublico ||
+      "COBERTURA OPERACIONAL"
+    );
     setFormJustificativaNaoVinculado("");
     setAvisoVinculoSubstituto(null);
     setMensagemCoberturaSucesso("");
@@ -2734,6 +2739,20 @@ export default function MapaOcupacaoPage() {
 
                                             <BadgeStatus status={statusVagaDia.statusVaga} tamanho="sm" />
 
+                                            {statusVagaDia.status === "DESCOBERTO" && ehPremier && (
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  abrirInspecaoDia(vaga, posto, diaReferenciaStr);
+                                                }}
+                                                className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 hover:text-white hover:bg-rose-600 bg-rose-50 border border-rose-300 px-2 py-1 rounded transition-colors cursor-pointer shadow-2xs"
+                                                title="Designar cobertura para esta posição descoberta"
+                                              >
+                                                <UserCheck className="w-3 h-3" />
+                                                <span>Designar Cobertura</span>
+                                              </button>
+                                            )}
+
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
@@ -3699,7 +3718,7 @@ export default function MapaOcupacaoPage() {
 
                   {/* Se DESCOBERTO (D) */}
                   {drawerInspecao.ocupacao.status === "DESCOBERTO" && (
-                    <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-300 text-rose-950 text-xs space-y-2">
+                    <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-300 text-rose-950 text-xs space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="font-bold block text-rose-800 uppercase text-[10px]">
                           Posição Descoberta (D)
@@ -3713,6 +3732,28 @@ export default function MapaOcupacaoPage() {
                       <p className="text-[11px] text-rose-900 leading-relaxed">
                         {drawerInspecao.ocupacao.motivoPublico}
                       </p>
+
+                      {/* Botão Principal de Ação Imediata para Designar Cobertura */}
+                      {ehPremier && !registrandoCobertura && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRegistrandoCobertura(true);
+                            setEditandoEscala(false);
+                            setFormDataInicioCob(drawerInspecao.dataStr);
+                            setFormDataFimCob(drawerInspecao.dataStr);
+                            setFormMotivoCob(
+                              drawerInspecao.ocupacao.categoriaAusencia ||
+                              drawerInspecao.ocupacao.motivoPublico ||
+                              "COBERTURA OPERACIONAL"
+                            );
+                          }}
+                          className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer border border-emerald-500"
+                        >
+                          <UserCheck className="w-4 h-4" />
+                          <span>+ Designar Cobertura para este Posto</span>
+                        </button>
+                      )}
 
                       {/* Sugestão de Feristas Vinculados Disponíveis (Item 3) */}
                       <div className="pt-2 border-t border-rose-200/80 space-y-1.5">
@@ -4338,14 +4379,27 @@ export default function MapaOcupacaoPage() {
               </div>
 
               {/* Rodapé / Dica de Interação */}
-              <div className="mt-2 pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[9px] text-slate-400">
-                <span className="truncate max-w-[180px]">
-                  {formatarTituloPosto(posto)}
-                </span>
-                <span className="text-blue-400 font-medium shrink-0 ml-1">
-                  Clique para abrir inspeção
-                </span>
-              </div>
+              {statusVaga.status === "DESCOBERTO" ? (
+                <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between text-[10px]">
+                  <span className="text-rose-400 font-bold flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 text-rose-500" />
+                    <span>Posto Descoberto</span>
+                  </span>
+                  <span className="text-emerald-300 font-bold bg-emerald-950 px-2 py-0.5 rounded border border-emerald-700/70 flex items-center gap-1">
+                    <UserCheck className="w-3 h-3 text-emerald-400" />
+                    <span>Clique na célula para Designar</span>
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-2 pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[9px] text-slate-400">
+                  <span className="truncate max-w-[180px]">
+                    {formatarTituloPosto(posto)}
+                  </span>
+                  <span className="text-blue-400 font-medium shrink-0 ml-1">
+                    Clique para abrir inspeção
+                  </span>
+                </div>
+              )}
             </div>
           );
         })()}
