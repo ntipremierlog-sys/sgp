@@ -2290,37 +2290,8 @@ export default function MapaOcupacaoPage() {
                                   </span>
                                 </div>
 
-                                <div className="flex items-center gap-2.5">
-                                  {(() => {
-                                    const diaComDesc = apuracaoCiclo?.dias?.find((ad) =>
-                                      ad.vagasDetalhe?.some((vd) => vd.status === "DESCOBERTO")
-                                    );
-                                    if (diaComDesc && podeEditarOperacao) {
-                                      const primeiraVagaDesc = posicoesFiltradas.find((vg) =>
-                                        diaComDesc.vagasDetalhe?.some(
-                                          (vd) => (vd.vagaId === vg.id || vd.posicaoId === vg.id) && vd.status === "DESCOBERTO"
-                                        )
-                                      ) || posicoesFiltradas[0];
-                                      const dataDescStr = (diaComDesc as any).dataStr || diaComDesc.data;
-
-                                      return (
-                                        <button
-                                          type="button"
-                                          onClick={() => abrirInspecaoDia(primeiraVagaDesc, posto, dataDescStr)}
-                                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-rose-700 hover:text-white hover:bg-rose-600 bg-rose-50 border border-rose-300 rounded-md transition-all shadow-2xs hover:shadow cursor-pointer"
-                                          title="Designar cobertura para as ausências deste posto"
-                                        >
-                                          <UserCheck className="w-3.5 h-3.5" />
-                                          <span>+ Designar Cobertura</span>
-                                        </button>
-                                      );
-                                    }
-                                    return null;
-                                  })()}
-
-                                  <div className="text-xs text-slate-600 font-medium">
-                                    Ciclo: <span className="text-slate-900 font-semibold">{percentualCicloFmt}</span>
-                                  </div>
+                                <div className="text-xs text-slate-600 font-medium">
+                                  Ciclo: <span className="text-slate-900 font-semibold">{percentualCicloFmt}</span>
                                 </div>
                               </div>
 
@@ -2913,19 +2884,7 @@ export default function MapaOcupacaoPage() {
 
                                             <BadgeStatus status={statusVagaDia.statusVaga} tamanho="sm" />
 
-                                            {statusVagaDia.status === "DESCOBERTO" && podeEditarOperacao && (
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  abrirInspecaoDia(vaga, posto, diaReferenciaStr);
-                                                }}
-                                                className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 hover:text-white hover:bg-rose-600 bg-rose-50 border border-rose-300 px-2 py-1 rounded transition-colors cursor-pointer shadow-2xs"
-                                                title="Designar cobertura para esta posição descoberta"
-                                              >
-                                                <UserCheck className="w-3 h-3" />
-                                                <span>Designar Cobertura</span>
-                                              </button>
-                                            )}
+                                            
 
                                             <button
                                               onClick={(e) => {
@@ -4214,7 +4173,7 @@ export default function MapaOcupacaoPage() {
                 left: `${left}px`,
                 transform,
                 zIndex: 9999,
-                pointerEvents: "auto",
+                pointerEvents: "none",
               }}
               className="w-[320px] bg-slate-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl border border-slate-700/80 p-3 animate-in fade-in zoom-in-95 duration-100 ring-1 ring-black/40 text-xs"
             >
@@ -4274,20 +4233,7 @@ export default function MapaOcupacaoPage() {
                             statusVaga.categoriaAusencia ||
                             "Ausência sem cobertura registrada"}
                         </div>
-                        {podeEditarOperacao && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setTooltipOcupacao(null);
-                              abrirInspecaoDia(vaga, posto, dataStr);
-                            }}
-                            className="w-full mt-2.5 py-1 px-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded text-[11px] font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-emerald-400"
-                          >
-                            <UserCheck className="w-3.5 h-3.5" />
-                            <span>+ Designar Cobertura</span>
-                          </button>
-                        )}
+                        
                       </div>
                     </div>
                   </div>
@@ -4465,18 +4411,9 @@ export default function MapaOcupacaoPage() {
                     <AlertTriangle className="w-3 h-3 text-rose-500" />
                     <span>Posto Descoberto</span>
                   </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setTooltipOcupacao(null);
-                      abrirInspecaoDia(vaga, posto, dataStr);
-                    }}
-                    className="text-emerald-200 hover:text-white font-bold bg-emerald-700 hover:bg-emerald-600 px-2.5 py-1 rounded border border-emerald-500 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                  >
-                    <UserCheck className="w-3.5 h-3.5 text-emerald-300" />
-                    <span>Designar Cobertura</span>
-                  </button>
+                  <span className="text-blue-400 font-medium text-[9px]">
+                    Clique para abrir inspeção
+                  </span>
                 </div>
               ) : (
                 <div className="mt-2 pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[9px] text-slate-400">
