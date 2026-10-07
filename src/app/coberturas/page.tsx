@@ -58,7 +58,7 @@ import { MarcacaoPontoOriginal } from "@/lib/dados/ponto-tipos";
 import { useSessaoUsuario } from "@/lib/auth/use-sessao-usuario";
 import { podeVerDadosPessoaisCompletos } from "@/lib/dados/rm-tipos";
 import { ItemAlocadoSifac } from "@/lib/dados/conciliacao-sifac";
-import { VAGAS_MC_REAIS, ALOCACOES_MC_REAIS } from "@/lib/dados/estrutura-postos";
+import { VAGAS_MC_REAIS, ALOCACOES_MC_REAIS, FERISTAS_REV04 } from "@/lib/dados/estrutura-postos";
 import { validarInterjornadaClt } from "@/lib/servicos/validacao-interjornada";
 import { obterPeriodoCompetencia } from "@/lib/servicos/calendario-competencia";
 
@@ -920,7 +920,9 @@ export default function CoberturasPage() {
 
   // Indicador 3: Uso da Reserva Técnica (Pessoas físicas alocadas no mês / pessoas disponíveis)
   const profissionaisRtTotal = useMemo(() => {
-    return profissionais.filter((p) => p.situacao === "ATIVO" && !p.postoCodigo);
+    const matriculasFeristas = new Set(FERISTAS_REV04.map((f) => f.matricula || f.chapaRM));
+    const daLista = profissionais.filter((p) => matriculasFeristas.has(p.matricula) || matriculasFeristas.has(p.chapa));
+    return daLista.length > 0 ? daLista : (FERISTAS_REV04 as unknown as ProfissionalOperacional[]);
   }, [profissionais]);
 
   const substitutosRtUsadosNoMes = useMemo(() => {
@@ -1788,7 +1790,7 @@ export default function CoberturasPage() {
           >
             <div className="flex items-center justify-between mb-1">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Taxa de Cobertura
+                Cobertura de Ausências
               </span>
               <Activity className={`w-4 h-4 ${estiloTaxa.text}`} />
             </div>
@@ -1798,7 +1800,7 @@ export default function CoberturasPage() {
                 {taxaCoberturaPct.toFixed(1)}%
               </span>
               <span className="text-[11px] text-slate-500 font-medium">
-                {totalDiasCobertosMes} de {totalAusenciasNoMes}d
+                {totalDiasCobertosMes} de {totalAusenciasNoMes}d cobertos
               </span>
             </div>
 
@@ -1840,7 +1842,7 @@ export default function CoberturasPage() {
           >
             <div className="flex items-center justify-between mb-1">
               <span className={`text-[11px] font-bold uppercase tracking-wider ${totalDiasDescobertos > 0 ? "text-rose-800" : "text-slate-500"}`}>
-                Dias Descobertos
+                Diárias a Cobrir
               </span>
               <Building2 className={`w-4 h-4 ${totalDiasDescobertos > 0 ? "text-rose-600" : "text-slate-400"}`} />
             </div>
@@ -1850,7 +1852,7 @@ export default function CoberturasPage() {
                 {totalDiasDescobertos}
               </span>
               <span className={`text-[11px] font-medium ${totalDiasDescobertos > 0 ? "text-rose-700 font-semibold" : "text-slate-500"}`}>
-                {totalDiasDescobertos > 0 ? "postos sem ninguém" : "100% coberto"}
+                {totalDiasDescobertos > 0 ? `dias ausentes em ${totalPostosComCobertura} postos` : "100% coberto"}
               </span>
             </div>
 
@@ -1878,7 +1880,7 @@ export default function CoberturasPage() {
           >
             <div className="flex items-center justify-between mb-1">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Uso da Reserva Técnica
+                Equipe de Feristas / RT
               </span>
               <ShieldCheck className="w-4 h-4 text-blue-600" />
             </div>
@@ -1888,13 +1890,13 @@ export default function CoberturasPage() {
                 {pctUsoRt.toFixed(1)}%
               </span>
               <span className="text-[11px] text-blue-700 font-medium">
-                {qtdRtUsados} de {qtdRtDisponiveis} pessoas
+                {qtdRtUsados} de {qtdRtDisponiveis} feristas
               </span>
             </div>
 
             {/* Legenda explicativa estrita */}
             <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
-              <span className="text-slate-500">pessoas em atuação:</span>
+              <span className="text-slate-500">feristas em atuação:</span>
               <span className="font-semibold text-blue-900">
                 {qtdRtUsados} pessoas físicas
               </span>
