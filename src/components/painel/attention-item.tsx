@@ -82,16 +82,9 @@ export function AttentionItem({
     if (tipo === "POSTO_PENDENCIA") rotulo = "Posto sem cobertura";
     if (tipo === "IMPORTACAO_INCOMPLETA" || tipo === "IMPORTACAO_ATRASADA") rotulo = "Dado pendente";
 
-    if (isDadoPendente) {
-      return (
-        <span className="px-2 py-0.5 rounded text-xs font-semibold bg-[#FEF4E6] text-[#B54708] border border-[#FED7AA]">
-          {rotulo}
-        </span>
-      );
-    }
     return (
-      <span className="px-2 py-0.5 rounded text-xs font-semibold bg-[#FDECEA] text-[#B42318] border border-[#FECACA]">
-        {rotulo}
+      <span className={`text-xs font-semibold ${isDadoPendente ? "text-[#B54708]" : "text-[#B42318]"}`}>
+        · {rotulo}
       </span>
     );
   };
@@ -111,7 +104,7 @@ export function AttentionItem({
             </span>
 
             {postoCodigo && (
-              <span className="px-2 py-0.5 rounded font-mono text-xs font-semibold bg-[#F1F3F5] text-[#1A2230] border border-[#E3E6EB]">
+              <span className="font-mono text-xs text-[#5B6474]">
                 {postoCodigo}
               </span>
             )}
@@ -120,13 +113,13 @@ export function AttentionItem({
 
             {prazoTexto && (
               <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                className={`inline-flex items-center gap-1 text-xs font-semibold ${
                   isUrgente
-                    ? "bg-[#FDECEA] text-[#B42318] border border-[#FECACA]"
-                    : "bg-[#FEF4E6] text-[#B54708] border border-[#FED7AA]"
+                    ? "text-[#B42318]"
+                    : "text-[#B54708]"
                 }`}
               >
-                <Clock className="w-3 h-3 shrink-0" />
+                <Clock className="w-3.5 h-3.5 shrink-0" />
                 <span>{prazoTexto}</span>
               </span>
             )}

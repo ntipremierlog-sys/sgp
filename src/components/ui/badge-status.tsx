@@ -7,7 +7,8 @@ export type StatusOcupacao =
   | "DESCOBERTO"
   | "NAO_EXIGIVEL"
   | "POSTO_VAGO"
-  | "PENDENTE_APURACAO";
+  | "PENDENTE_APURACAO"
+  | "SEM_DADO";
 
 interface BadgeStatusProps {
   status: StatusOcupacao;
@@ -40,7 +41,7 @@ const statusConfig: Record<
     rotulo: "Descoberto",
     classes: "bg-rose-50 text-rose-800 border-rose-300 font-semibold",
     icone: AlertCircle,
-    descricao: "Titular ausente sem cobertura (passível de glosa)",
+    descricao: "Titular ausente sem cobertura",
   },
   NAO_EXIGIVEL: {
     rotulo: "Não Exigível",
@@ -59,6 +60,12 @@ const statusConfig: Record<
     classes: "bg-amber-50 text-amber-800 border-amber-300",
     icone: HelpCircle,
     descricao: "Dados insuficientes, exige ação da Premier",
+  },
+  SEM_DADO: {
+    rotulo: "Sem dado",
+    classes: "bg-[#F1F3F5] text-slate-600 border border-dashed border-[#D0D5DD]",
+    icone: HelpCircle,
+    descricao: "Sem informação de presença ou ausência importada",
   },
 };
 

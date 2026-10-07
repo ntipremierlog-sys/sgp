@@ -42,5 +42,7 @@ next-env.d.ts
 *.xls
 
 # backups e scratch
-/backups/
-/scratch/
+**/backups/
+**/scratch/
+**/.vite/
+

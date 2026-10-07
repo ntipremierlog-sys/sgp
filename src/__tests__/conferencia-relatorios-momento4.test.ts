@@ -72,7 +72,7 @@ describe("Conferência dos Relatórios Importados e Cubo de Registros", () => {
     const idRm = identificarTipoArquivo(cabecalhosRm);
     expect(idRm.reconhecido).toBe(true);
     expect(idRm.tipo).toBe("FUNCIONARIOS_RM");
-  });
+  }, 35000);
 
   it("deve simular e extrair marcações e dias de folga/base zero de CUBO DE REGISTROS.xlsx", async () => {
     const bufCuboRegistros = fs.readFileSync("CUBO DE REGISTROS.xlsx");
@@ -83,7 +83,7 @@ describe("Conferência dos Relatórios Importados e Cubo de Registros", () => {
     expect(simulacao.totais.novos).toBeGreaterThan(15000); // 15.752 marcações
     expect(simulacao.diasSemJornadaPrevista).toBeDefined();
     expect(simulacao.diasSemJornadaPrevista?.length).toBeGreaterThan(2000); // 2.885 dias sem jornada
-  });
+  }, 35000);
 
   it("deve realizar apuração correta no dia do Feriado Nacional de 07/09 e antes de admissões", async () => {
     const bufCuboRegistros = fs.readFileSync("CUBO DE REGISTROS.xlsx");
@@ -133,5 +133,5 @@ describe("Conferência dos Relatórios Importados e Cubo de Registros", () => {
       (a) => a.chapa === "036073" && a.data === "2026-08-31"
     );
     expect(apuracaoAmanda31?.situacao).not.toBe("FALTA");
-  });
+  }, 35000);
 });

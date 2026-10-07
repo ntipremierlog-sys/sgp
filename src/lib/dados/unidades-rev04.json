@@ -1,0 +1,176 @@
+[
+  {
+    "id": "UNI-001",
+    "nome": "BASE TAQUIPE",
+    "codigo": "BASE_TAQUIPE",
+    "totalAlocacoes": 1
+  },
+  {
+    "id": "UNI-002",
+    "nome": "BOAVENTURA",
+    "codigo": "BOAVENTURA",
+    "totalAlocacoes": 15
+  },
+  {
+    "id": "UNI-003",
+    "nome": "CABIUNAS",
+    "codigo": "CABIUNAS",
+    "totalAlocacoes": 5
+  },
+  {
+    "id": "UNI-004",
+    "nome": "CENPES",
+    "codigo": "CENPES",
+    "totalAlocacoes": 9
+  },
+  {
+    "id": "UNI-005",
+    "nome": "EDIBRA",
+    "codigo": "EDIBRA",
+    "totalAlocacoes": 19
+  },
+  {
+    "id": "UNI-006",
+    "nome": "EDIHB",
+    "codigo": "EDIHB",
+    "totalAlocacoes": 84
+  },
+  {
+    "id": "UNI-007",
+    "nome": "EDIRN",
+    "codigo": "EDIRN",
+    "totalAlocacoes": 1
+  },
+  {
+    "id": "UNI-008",
+    "nome": "EDISA",
+    "codigo": "EDISA",
+    "totalAlocacoes": 4
+  },
+  {
+    "id": "UNI-009",
+    "nome": "EDISEN",
+    "codigo": "EDISEN",
+    "totalAlocacoes": 5
+  },
+  {
+    "id": "UNI-010",
+    "nome": "EDISER",
+    "codigo": "EDISER",
+    "totalAlocacoes": 4
+  },
+  {
+    "id": "UNI-011",
+    "nome": "EDIVIT",
+    "codigo": "EDIVIT",
+    "totalAlocacoes": 2
+  },
+  {
+    "id": "UNI-012",
+    "nome": "EDMAN",
+    "codigo": "EDMAN",
+    "totalAlocacoes": 1
+  },
+  {
+    "id": "UNI-013",
+    "nome": "FAROL DE SÃO TOMÉ",
+    "codigo": "FAROL_DE_S_O_TOM_",
+    "totalAlocacoes": 4
+  },
+  {
+    "id": "UNI-014",
+    "nome": "FRONAPE",
+    "codigo": "FRONAPE",
+    "totalAlocacoes": 2
+  },
+  {
+    "id": "UNI-015",
+    "nome": "IMBETIBA",
+    "codigo": "IMBETIBA",
+    "totalAlocacoes": 8
+  },
+  {
+    "id": "UNI-016",
+    "nome": "IMBOASSICA",
+    "codigo": "IMBOASSICA",
+    "totalAlocacoes": 4
+  },
+  {
+    "id": "UNI-017",
+    "nome": "LUBNOR",
+    "codigo": "LUBNOR",
+    "totalAlocacoes": 2
+  },
+  {
+    "id": "UNI-018",
+    "nome": "PITUBA",
+    "codigo": "PITUBA",
+    "totalAlocacoes": 12
+  },
+  {
+    "id": "UNI-019",
+    "nome": "RECAP",
+    "codigo": "RECAP",
+    "totalAlocacoes": 17
+  },
+  {
+    "id": "UNI-020",
+    "nome": "REDUC",
+    "codigo": "REDUC",
+    "totalAlocacoes": 23
+  },
+  {
+    "id": "UNI-021",
+    "nome": "REFAP",
+    "codigo": "REFAP",
+    "totalAlocacoes": 9
+  },
+  {
+    "id": "UNI-022",
+    "nome": "REGAP",
+    "codigo": "REGAP",
+    "totalAlocacoes": 11
+  },
+  {
+    "id": "UNI-023",
+    "nome": "REPAR",
+    "codigo": "REPAR",
+    "totalAlocacoes": 11
+  },
+  {
+    "id": "UNI-024",
+    "nome": "REPLAN",
+    "codigo": "REPLAN",
+    "totalAlocacoes": 12
+  },
+  {
+    "id": "UNI-025",
+    "nome": "REVAP",
+    "codigo": "REVAP",
+    "totalAlocacoes": 11
+  },
+  {
+    "id": "UNI-026",
+    "nome": "RNEST",
+    "codigo": "RNEST",
+    "totalAlocacoes": 20
+  },
+  {
+    "id": "UNI-027",
+    "nome": "RPBC",
+    "codigo": "RPBC",
+    "totalAlocacoes": 22
+  },
+  {
+    "id": "UNI-028",
+    "nome": "UFN-III",
+    "codigo": "UFN_III",
+    "totalAlocacoes": 3
+  },
+  {
+    "id": "UNI-029",
+    "nome": "UTG-CA",
+    "codigo": "UTG_CA",
+    "totalAlocacoes": 1
+  }
+]

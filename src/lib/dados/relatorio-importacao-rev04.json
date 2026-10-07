@@ -1,0 +1,345 @@
+{
+  "dataGeracao": "2026-09-30T19:03:24.323Z",
+  "planilhaFonte": "Base_Estruturada_SGP_Petrobras_REV04.xlsx",
+  "totais": {
+    "totalPostos": 244,
+    "totalPosicoes": 311,
+    "totalFeristas": 23,
+    "totalEscalas": 311,
+    "totalPendenciasEscala": 101,
+    "totalPendentesRM": 11,
+    "totalValidacoesPlanilha": 29,
+    "totalLinhasRejeitadasPosicoes": 8
+  },
+  "linhasRejeitadas": [
+    {
+      "linhaExcel": 313,
+      "conteudo": {
+        "Horario_RM_Titular": "Regra estrutural: 4 posições por posto de 24h."
+      },
+      "motivo": "Linha sem Posicao_ID_SGP válido (anotação de regra operacional)"
+    },
+    {
+      "linhaExcel": 314,
+      "conteudo": {
+        "Horario_RM_Titular": "Regra estrutural: 4 posições por posto de 24h."
+      },
+      "motivo": "Linha sem Posicao_ID_SGP válido (anotação de regra operacional)"
+    },
+    {
+      "linhaExcel": 315,
+      "conteudo": {
+        "Horario_RM_Titular": "Regra estrutural: 4 posições por posto de 24h."
+      },
+      "motivo": "Linha sem Posicao_ID_SGP válido (anotação de regra operacional)"
+    },
+    {
+      "linhaExcel": 316,
+      "conteudo": {
+        "Horario_RM_Titular": "Regra estrutural: 4 posições por posto de 24h. O sufixo 251.5 excede a quantidade estrutural esperada (4). Tratar como registro de alocação histórica/temporária até identificar qual posição estrutural foi ocupada."
+      },
+      "motivo": "Linha sem Posicao_ID_SGP válido (anotação de regra operacional)"
+    },
+    {
+      "linhaExcel": 317,
+      "conteudo": {
+        "Horario_RM_Titular": "Regra estrutural: 1 posição por posto de 9h."
+      },
+      "motivo": "Linha sem Posicao_ID_SGP válido (anotação de regra operacional)"
+    },
+    {
+      "linhaExcel": 318,
+      "conteudo": {
+        "Horario_RM_Titular": "Premissa operacional: postos de 16h com 2 posições; confirmar com Luiz. Não fechar a quantidade definitiva antes da resposta do Luiz."
+      },
+      "motivo": "Linha sem Posicao_ID_SGP válido (anotação de regra operacional)"
+    },
+    {
+      "linhaExcel": 319,
+      "conteudo": {
+        "Horario_RM_Titular": "Premissa operacional: postos de 16h com 2 posições; confirmar com Luiz. Não fechar a quantidade definitiva antes da resposta do Luiz."
+      },
+      "motivo": "Linha sem Posicao_ID_SGP válido (anotação de regra operacional)"
+    },
+    {
+      "linhaExcel": 320,
+      "conteudo": {
+        "Horario_RM_Titular": "Regra estrutural: 1 posição por posto de 9h."
+      },
+      "motivo": "Linha sem Posicao_ID_SGP válido (anotação de regra operacional)"
+    }
+  ],
+  "validacoesAutomaticas": {
+    "titularSegSexEmTurno": [
+      {
+        "tipo": "TITULAR_SEG_SEX_EM_TURNO",
+        "posicaoIdSGP": "POS-BOAVENTURA-008-02",
+        "postoIdSGP": "PST-BOAVENTURA-008",
+        "titular": "MARCUS VINICIUS DE LIMA CASEMIRO",
+        "horario": "PETROBRAS - 07:00 AS 16:48 - SEG/SEX",
+        "mensagem": "Titular com horário SEG/SEX em posto de Turno contínuo"
+      },
+      {
+        "tipo": "TITULAR_SEG_SEX_EM_TURNO",
+        "posicaoIdSGP": "POS-RECAP-177-02",
+        "postoIdSGP": "PST-RECAP-177",
+        "titular": "ARIANE LUZIA CARVALHO DOS ANJOS",
+        "horario": "PETROBRAS - 11:00 AS 20:48 - SEG/SEX",
+        "mensagem": "Titular com horário SEG/SEX em posto de Turno contínuo"
+      },
+      {
+        "tipo": "TITULAR_SEG_SEX_EM_TURNO",
+        "posicaoIdSGP": "POS-RPBC-250-01",
+        "postoIdSGP": "PST-RPBC-250",
+        "titular": "ALINE ALVES DE NOVAES",
+        "horario": "PETROBRAS - 08:00 AS 17:48 - SEG/SEX",
+        "mensagem": "Titular com horário SEG/SEX em posto de Turno contínuo"
+      }
+    ],
+    "posicaoSemTitular": [
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-CENPES-012-02",
+        "postoIdSGP": "PST-CENPES-012",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-CENPES-013-02",
+        "postoIdSGP": "PST-CENPES-013",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-EDIBRA-020-01",
+        "postoIdSGP": "PST-EDIBRA-020",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-EDIBRA-032-01",
+        "postoIdSGP": "PST-EDIBRA-032",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-EDIHB-069-01",
+        "postoIdSGP": "PST-EDIHB-069",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-EDIHB-090-01",
+        "postoIdSGP": "PST-EDIHB-090",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-EDIHB-094-01",
+        "postoIdSGP": "PST-EDIHB-094",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-EDISEN-123-01",
+        "postoIdSGP": "PST-EDISEN-123",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-PITUBA-173-01",
+        "postoIdSGP": "PST-PITUBA-173",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-REDUC-199-01",
+        "postoIdSGP": "PST-REDUC-199",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-REFAP-204-01",
+        "postoIdSGP": "PST-REFAP-204",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-REPAR-213-04",
+        "postoIdSGP": "PST-REPAR-213",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-REPLAN-217-04",
+        "postoIdSGP": "PST-REPLAN-217",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-REPLAN-218-01",
+        "postoIdSGP": "PST-REPLAN-218",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-REPLAN-218-02",
+        "postoIdSGP": "PST-REPLAN-218",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-REPLAN-218-03",
+        "postoIdSGP": "PST-REPLAN-218",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-REPLAN-218-04",
+        "postoIdSGP": "PST-REPLAN-218",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-REVAP-220-01",
+        "postoIdSGP": "PST-REVAP-220",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-REVAP-222-03",
+        "postoIdSGP": "PST-REVAP-222",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-REVAP-223-04",
+        "postoIdSGP": "PST-REVAP-223",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-RNEST-226-01",
+        "postoIdSGP": "PST-RNEST-226",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-RPBC-245-01",
+        "postoIdSGP": "PST-RPBC-245",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-RPBC-248-02",
+        "postoIdSGP": "PST-RPBC-248",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      },
+      {
+        "tipo": "POSICAO_SEM_TITULAR",
+        "posicaoIdSGP": "POS-RPBC-251-04",
+        "postoIdSGP": "PST-RPBC-251",
+        "mensagem": "Posição estrutural ativa sem titular confirmado na MC"
+      }
+    ],
+    "posto9hUnicaPessoaFerista": [
+      {
+        "tipo": "POSTO_9H_UNICA_PESSOA_FERISTA",
+        "postoIdSGP": "PST-EDIBRA-020",
+        "mensagem": "Posto 09h cuja única pessoa identificada é ferista"
+      },
+      {
+        "tipo": "POSTO_9H_UNICA_PESSOA_FERISTA",
+        "postoIdSGP": "PST-EDIBRA-032",
+        "mensagem": "Posto 09h cuja única pessoa identificada é ferista"
+      },
+      {
+        "tipo": "POSTO_9H_UNICA_PESSOA_FERISTA",
+        "postoIdSGP": "PST-EDIHB-069",
+        "mensagem": "Posto 09h cuja única pessoa identificada é ferista"
+      },
+      {
+        "tipo": "POSTO_9H_UNICA_PESSOA_FERISTA",
+        "postoIdSGP": "PST-EDIHB-090",
+        "mensagem": "Posto 09h cuja única pessoa identificada é ferista"
+      },
+      {
+        "tipo": "POSTO_9H_UNICA_PESSOA_FERISTA",
+        "postoIdSGP": "PST-EDIHB-094",
+        "mensagem": "Posto 09h cuja única pessoa identificada é ferista"
+      },
+      {
+        "tipo": "POSTO_9H_UNICA_PESSOA_FERISTA",
+        "postoIdSGP": "PST-REFAP-204",
+        "mensagem": "Posto 09h cuja única pessoa identificada é ferista"
+      },
+      {
+        "tipo": "POSTO_9H_UNICA_PESSOA_FERISTA",
+        "postoIdSGP": "PST-REVAP-220",
+        "mensagem": "Posto 09h cuja única pessoa identificada é ferista"
+      },
+      {
+        "tipo": "POSTO_9H_UNICA_PESSOA_FERISTA",
+        "postoIdSGP": "PST-RNEST-226",
+        "mensagem": "Posto 09h cuja única pessoa identificada é ferista"
+      },
+      {
+        "tipo": "POSTO_9H_UNICA_PESSOA_FERISTA",
+        "postoIdSGP": "PST-RPBC-245",
+        "mensagem": "Posto 09h cuja única pessoa identificada é ferista"
+      }
+    ],
+    "postoSemRegimeIdentificavel": [
+      {
+        "tipo": "POSTO_SEM_REGIME_IDENTIFICAVEL",
+        "postoIdSGP": "PST-EDISA-118",
+        "postoDeServico": "SERVIÇO DE APOIO EM ANÁSELISE DE ENGENHARIA",
+        "mensagem": "Posto sem regime de jornada identificável no nome do serviço"
+      },
+      {
+        "tipo": "POSTO_SEM_REGIME_IDENTIFICAVEL",
+        "postoIdSGP": "PST-IMBETIBA-150",
+        "postoDeServico": "SERVIÇO DE APOIO EM ANÁSELISE DE ENGENHARIA",
+        "mensagem": "Posto sem regime de jornada identificável no nome do serviço"
+      }
+    ],
+    "colaboradorMcNaoLocalizadoRM": [
+      {
+        "tipo": "COLABORADOR_MC_NAO_LOCALIZADO_RM",
+        "colaborador": "PRISCILLA DE CASTRO MAGALHAES DOS SANTOS",
+        "postoIdSGP": "PST-CENPES-013",
+        "mensagem": "Colaborador da MC não localizado na folha de pagamento RM"
+      },
+      {
+        "tipo": "COLABORADOR_MC_NAO_LOCALIZADO_RM",
+        "colaborador": "CARLOS ALEXANDRE ALVES DA SILVA",
+        "postoIdSGP": "PST-EDIHB-094",
+        "mensagem": "Colaborador da MC não localizado na folha de pagamento RM"
+      },
+      {
+        "tipo": "COLABORADOR_MC_NAO_LOCALIZADO_RM",
+        "colaborador": "ISABELA GONCALVES FERNANDES DE ALBUQUERQUE",
+        "postoIdSGP": "PST-EDISEN-123",
+        "mensagem": "Colaborador da MC não localizado na folha de pagamento RM"
+      },
+      {
+        "tipo": "COLABORADOR_MC_NAO_LOCALIZADO_RM",
+        "colaborador": "-",
+        "postoIdSGP": "PST-REDUC-199",
+        "mensagem": "Colaborador da MC não localizado na folha de pagamento RM"
+      },
+      {
+        "tipo": "COLABORADOR_MC_NAO_LOCALIZADO_RM",
+        "colaborador": "JACQUELINE RAQUEL GONCALVES DA SILVA",
+        "postoIdSGP": "PST-REVAP-222",
+        "mensagem": "Colaborador da MC não localizado na folha de pagamento RM"
+      },
+      {
+        "tipo": "COLABORADOR_MC_NAO_LOCALIZADO_RM",
+        "colaborador": "VIVIANE TEMOTEO ASSUMPCAO DE OLIVEIRA",
+        "postoIdSGP": "PST-RPBC-248",
+        "mensagem": "Colaborador da MC não localizado na folha de pagamento RM"
+      }
+    ]
+  }
+}

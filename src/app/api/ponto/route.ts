@@ -15,7 +15,7 @@ function obterCaminhosArquivos() {
 }
 
 function carregarDadosIniciaisServidor() {
-  if (cacheMarcacoes && cacheDiasFolga) {
+  if (cacheMarcacoes && cacheMarcacoes.length > 0 && cacheDiasFolga) {
     return { marcacoes: cacheMarcacoes, diasFolga: cacheDiasFolga };
   }
 
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
       total: listaMarcacoes.length,
       marcacoes: listaMarcacoes,
       diasFolgaRm: dados.diasFolga,
-      dataReferencia: "2026-09-15 23:59",
+      dataReferencia: listaMarcacoes.length > 0 ? "2026-09-15 23:59" : null,
       lotes: cacheLotesPonto,
     });
   } catch (err: unknown) {

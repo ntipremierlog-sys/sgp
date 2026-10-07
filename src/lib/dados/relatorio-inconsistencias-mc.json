@@ -1,0 +1,541 @@
+{
+  "dataGeracao": "2026-09-30T13:55:08.793Z",
+  "resumo": {
+    "totalLinhasMC": 365,
+    "totalPostos": 244,
+    "totalVagas": 320,
+    "totalAlocacoes": 322,
+    "totalIdsDuplicados": 3,
+    "totalPostosComExcessoPessoas": 11,
+    "totalColaboradoresSemRM": 1
+  },
+  "idsDuplicados": [
+    {
+      "id": "7.3",
+      "totalOcorrencias": 2,
+      "linhas": [
+        {
+          "linhaExcel": 14,
+          "colaborador": "JORGE RENATO PATROCINIO DOS SANTOS",
+          "identificadorPetrobras": "71544252",
+          "postoServico": "SUPORTE À OPERAÇÃO DE MOBILIDADE - Turno/24h",
+          "comentario": ""
+        },
+        {
+          "linhaExcel": 15,
+          "colaborador": "KEVYLLIN SILVA E SOUZA",
+          "identificadorPetrobras": "72507868",
+          "postoServico": "SUPORTE À OPERAÇÃO DE MOBILIDADE - Turno/24h",
+          "comentario": ""
+        }
+      ]
+    },
+    {
+      "id": "110",
+      "totalOcorrencias": 2,
+      "linhas": [
+        {
+          "linhaExcel": 140,
+          "colaborador": "JOAO PAULO GOMES CARDOSO",
+          "identificadorPetrobras": "40993731",
+          "postoServico": "SUPORTE À OPERAÇÃO DE MOBILIDADE - Adm/09h",
+          "comentario": ""
+        },
+        {
+          "linhaExcel": 141,
+          "colaborador": "LEANDRO BATISTA DE SOUZA",
+          "identificadorPetrobras": "70291338",
+          "postoServico": "SUPORTE À OPERAÇÃO DE MOBILIDADE - Adm/09h",
+          "comentario": "1º PRÉVIA - Colaborador(a) Ferista - Colaborador realizou a cobertura do posto de serviços de Debora Regina entre os dias 02/08 a 14/08 (5 dias) e no período de 15/08 a 24/08 realizou a cobertura da colaboradora Ana Carolina Corado (10 dias).\r\n2ª PRÉVIA - Colaborador realizou a cobertura do posto de serviços de Tania Andrade de Mello Nogueira entre os dias 08/09 a 22/09 (2 dias)"
+        }
+      ]
+    },
+    {
+      "id": "250.2",
+      "totalOcorrencias": 2,
+      "linhas": [
+        {
+          "linhaExcel": 350,
+          "colaborador": "DANIEL DOS SANTOS SILVA",
+          "identificadorPetrobras": "72961520",
+          "postoServico": "SUPORTE À OPERAÇÃO DE MOBILIDADE - Turno/24h",
+          "comentario": "1º PRÉVIA - Colaborador afastado pelo INSS em 06/07/2026. Substituto é Jonas Eduardo."
+        },
+        {
+          "linhaExcel": 351,
+          "colaborador": "JONAS EDUARDO VITALIANO DE BASTOS",
+          "identificadorPetrobras": "71025808",
+          "postoServico": "SUPORTE À OPERAÇÃO DE MOBILIDADE - Turno/24h",
+          "comentario": "1º PRÉVIA - Colaborador substituto do Daniel dos Santos Silva afastado pelo INSS.\r\n2ª PRÉVIA - Colaboradora realizou a cobertura do posto da Aline Alves no dia 05/09 e 11/09"
+        }
+      ]
+    }
+  ],
+  "excessoPessoasPorPosto": [
+    {
+      "idPosto": "8",
+      "tipoPosto": "Turno/24h",
+      "vagasEsperadas": 4,
+      "totalOcupantesNaMC": 5,
+      "excesso": 1,
+      "ocupantes": [
+        {
+          "linhaExcel": 16,
+          "idNaMC": "8.1",
+          "colaborador": "LUCAS VASCONCELLOS DOS SANTOS",
+          "identificadorPetrobras": "73169930",
+          "comentario": "1ª PRÉVIA - Colaborador Ferista - Cobertura de férias do Wallace Souza entre os dias 26/08 a 14/09.\r\n2ª PRÉVIA - Colaborador realizou a cobertura do posto sdo Jean Claudio nos dias 09/09/ e 10/09."
+        },
+        {
+          "linhaExcel": 17,
+          "idNaMC": "8.2",
+          "colaborador": "LUCAS VERTULI DOS SANTOS",
+          "identificadorPetrobras": "71393513",
+          "comentario": "1ª PRÉVIA - Ausência no período de 20 e 21/08, justificada mediante apresentação de atestado, realocação de atividades para ANDRE LUIS GUIMARAES (folga)."
+        },
+        {
+          "linhaExcel": 18,
+          "idNaMC": "8.3",
+          "colaborador": "MARCUS VINICIUS DE LIMA CASEMIRO",
+          "identificadorPetrobras": "73088041",
+          "comentario": ""
+        },
+        {
+          "linhaExcel": 19,
+          "idNaMC": "8.4",
+          "colaborador": "VICTOR YURI DA LUZ COSTA",
+          "identificadorPetrobras": "72504891",
+          "comentario": "2ª PRÉVIA - Colaborador realizou a cobertura do colaborador Jean Claudio da Foncesa nos dias 07/09 e 08/09."
+        },
+        {
+          "linhaExcel": 20,
+          "idNaMC": "8.5",
+          "colaborador": "WALLACE SOUSA DA SILVA",
+          "identificadorPetrobras": "71566975",
+          "comentario": "1ª PRÉVIA - Colaboradora de férias entre os dias 26/08 a 14/09, totalizando 15 dias na  MC de setembro/26 e 05 dias na MC de outubro. LUCAS VASCONCELOS ferista."
+        }
+      ]
+    },
+    {
+      "idPosto": "10",
+      "tipoPosto": "Turno/16h",
+      "vagasEsperadas": 3,
+      "totalOcupantesNaMC": 4,
+      "excesso": 1,
+      "ocupantes": [
+        {
+          "linhaExcel": 22,
+          "idNaMC": "10.1",
+          "colaborador": "CRISTIANE DA SILVA ESPERIDIAO",
+          "identificadorPetrobras": "72395276",
+          "comentario": "1ª PRÉVIA - Ausência da colaboradora em 20/08/2026. Saldo do Banco de Horas: 54:34. Débito do dia: 08:00. Saldo final: 46:34 com cobertura de GILMARA CAETANO.\r\n// 2ª PRÉVIA - Ausência da colaboradora em 29/08/2026. Saldo do Banco de Horas: 46:34. Débito do dia: 08:00. Saldo final: 38:34. GILMARA CAETANO realizou a cobertura do posto."
+        },
+        {
+          "linhaExcel": 23,
+          "idNaMC": "10.2",
+          "colaborador": "FLAVIA NIELE SOUZA DOS SANTOS",
+          "identificadorPetrobras": "71788062",
+          "comentario": "2ª PRÉVIA - Ausências da colaboradora nos dias 03 e 06/09/2026, totalizando 16h00 de débito em Banco de Horas. Saldo de Banco de Horas : 53h30, débito dos dias: 16h00 com saldo final: 37h30. Durante ambos os períodos de ausência, as atividades foram integralmente realocadas para a colaboradora Gilmara Caetano, sem impacto operacional.\r\n2ª PRÉVIA - Ausência da colaboradora no dia 09/09/2026, com cobertura realizada pela Gilmara Caetano."
+        },
+        {
+          "linhaExcel": 24,
+          "idNaMC": "10.3",
+          "colaborador": "GILMARA CAETANO DE ASSIS",
+          "identificadorPetrobras": "73095290",
+          "comentario": "1ª PRÉVIA - Colaborador(a) Ferista - Colaboradora realizoua cobertura do posto da Cristiane no dia 20/08 e 29/08 - cobertiura da Cristiane Esperidião\r\n2ª PRÉVIA - Cobertura do posto da Flavia nos dias 03/09, 06/09 e 09/09.\r\n2ª PRÉVIA - Cobertura da Thainna no dia 30/08."
+        },
+        {
+          "linhaExcel": 25,
+          "idNaMC": "10.4",
+          "colaborador": "THAINNA DE ALMEIDA VANDELLI",
+          "identificadorPetrobras": "71886252",
+          "comentario": "2ª PRÉVIA - Ausência da colaboradora em 30/08/2026. Saldo do Banco de Horas: 24:25. Débito do dia: 08:00. Saldo final: 16:25. GILMARA CAETANO realizou a cobertura do posto."
+        }
+      ]
+    },
+    {
+      "idPosto": "110",
+      "tipoPosto": "Adm/09h",
+      "vagasEsperadas": 1,
+      "totalOcupantesNaMC": 2,
+      "excesso": 1,
+      "ocupantes": [
+        {
+          "linhaExcel": 140,
+          "idNaMC": "110",
+          "colaborador": "JOAO PAULO GOMES CARDOSO",
+          "identificadorPetrobras": "40993731",
+          "comentario": ""
+        },
+        {
+          "linhaExcel": 141,
+          "idNaMC": "110",
+          "colaborador": "LEANDRO BATISTA DE SOUZA",
+          "identificadorPetrobras": "70291338",
+          "comentario": "1º PRÉVIA - Colaborador(a) Ferista - Colaborador realizou a cobertura do posto de serviços de Debora Regina entre os dias 02/08 a 14/08 (5 dias) e no período de 15/08 a 24/08 realizou a cobertura da colaboradora Ana Carolina Corado (10 dias).\r\n2ª PRÉVIA - Colaborador realizou a cobertura do posto de serviços de Tania Andrade de Mello Nogueira entre os dias 08/09 a 22/09 (2 dias)"
+        }
+      ]
+    },
+    {
+      "idPosto": "177",
+      "tipoPosto": "Turno/24h",
+      "vagasEsperadas": 4,
+      "totalOcupantesNaMC": 5,
+      "excesso": 1,
+      "ocupantes": [
+        {
+          "linhaExcel": 220,
+          "idNaMC": "177.1",
+          "colaborador": "ANDERSON FERREIRA DA SILVA",
+          "identificadorPetrobras": "71583401",
+          "comentario": "2º PRÉVIA - Fisc Operacional_Avaliação_Junho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota máxima."
+        },
+        {
+          "linhaExcel": 221,
+          "idNaMC": "177.2",
+          "colaborador": "ARIANE LUZIA CARVALHO DOS ANJOS",
+          "identificadorPetrobras": "72392286",
+          "comentario": "1ª PRÉVIA - Colaboradora em período de férias de 03/08 a 01/09, totalizando 07 dias na MC de agosto/26 e 23 dias na MC de setembro/26, LAIS DE MORAES ferista. \r\n2º PRÉVIA - Fisc Operacional_Avaliação_Junho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota máxima."
+        },
+        {
+          "linhaExcel": 222,
+          "idNaMC": "177.3",
+          "colaborador": "GUSTAVO FERREIRA DE SOUZA",
+          "identificadorPetrobras": "71555229",
+          "comentario": "2º PRÉVIA - Fisc Operacional_Avaliação_Junho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota máxima."
+        },
+        {
+          "linhaExcel": 223,
+          "idNaMC": "177.4",
+          "colaborador": "LAIS DE MORAES MADUREIRA RODRIGUES",
+          "identificadorPetrobras": "73117587",
+          "comentario": "1º PRÉVIA - Colaborador(a) Ferista - cobertura de Ariane Luiza entre os dias 03/08 a 01/09. \r\n2º PRÉVIA - Fisc Operacional_Avaliação_Junho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota máxima."
+        },
+        {
+          "linhaExcel": 224,
+          "idNaMC": "177.5",
+          "colaborador": "THUANY GREICE BATISTA LINHARES BERNARDO",
+          "identificadorPetrobras": "72975283",
+          "comentario": "2º PRÉVIA - Fisc Operacional_Avaliação_Junho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota máxima."
+        }
+      ]
+    },
+    {
+      "idPosto": "200",
+      "tipoPosto": "Turno/24h",
+      "vagasEsperadas": 4,
+      "totalOcupantesNaMC": 5,
+      "excesso": 1,
+      "ocupantes": [
+        {
+          "linhaExcel": 253,
+          "idNaMC": "200.1",
+          "colaborador": "JUSSARA RIBEIRO ATANASIO",
+          "identificadorPetrobras": "48937045",
+          "comentario": ""
+        },
+        {
+          "linhaExcel": 254,
+          "idNaMC": "200.2",
+          "colaborador": "MARCIA PEREIRA ALVES",
+          "identificadorPetrobras": "71544276",
+          "comentario": "1ª PRÉVIA - Colaborador em período de férias de 10/08 a 29/08, totalizando 20 dias na MC de setembro/26, WALLACE TAROUQUELA DA ROCHA ferista."
+        },
+        {
+          "linhaExcel": 255,
+          "idNaMC": "200.3",
+          "colaborador": "SEVERINA DO RAMO DOS SANTOS",
+          "identificadorPetrobras": "70782207",
+          "comentario": "2ª PRÉVIA - Colaboradora em período de férias de 09/09 a 28/09, totalizando 01 dia na  MC de setembro/26 e 19 dias na MC de outubro/26, WALLACE TAROUQUELA DA ROCHA ferista."
+        },
+        {
+          "linhaExcel": 256,
+          "idNaMC": "200.4",
+          "colaborador": "VINICIUS PINHEIRO DE SOUZA",
+          "identificadorPetrobras": "72274350",
+          "comentario": ""
+        },
+        {
+          "linhaExcel": 257,
+          "idNaMC": "200.5",
+          "colaborador": "WALLACE TAROUQUELA DA ROCHA",
+          "identificadorPetrobras": "72095624",
+          "comentario": "1º PRÉVIA - Colaborador(a) Ferista - cobrindo as férias da colaboradora Marcia Pereira Alves, entre os dias 10/08/2026 e 29/08/2026 (20 dias).\r\n2ª PRÉVIA - Cobertura das férias da colaboradora Severina do Ramo dos Santos, entre os dias 09/09/2026 e 28/09/2026 (01 dia)"
+        }
+      ]
+    },
+    {
+      "idPosto": "205",
+      "tipoPosto": "Turno/24h",
+      "vagasEsperadas": 4,
+      "totalOcupantesNaMC": 5,
+      "excesso": 1,
+      "ocupantes": [
+        {
+          "linhaExcel": 262,
+          "idNaMC": "205.1",
+          "colaborador": "ARQUILA ASSIS DA SILVA CARVALHO",
+          "identificadorPetrobras": "72516773",
+          "comentario": "2ª PRÉVIA - Colaborador em período de férias de 01/09 a 20/09, totalizando 09 dias na  MC de setembro/26 e 11 dias na MC de outubro/26, MARCIO MARQUES DE ANDRADE  ferista.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota máxima."
+        },
+        {
+          "linhaExcel": 263,
+          "idNaMC": "205.2",
+          "colaborador": "MARCIO MARQUES DE ANDRADE",
+          "identificadorPetrobras": "73138964",
+          "comentario": "2º PRÉVIA  - Colaborador(a) Ferista cobrindo férias do colaborador Arquila Assis da Silva Carvalho entre os dias  01 a 20/09/2026 (09 dias).\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota máxima."
+        },
+        {
+          "linhaExcel": 264,
+          "idNaMC": "205.3",
+          "colaborador": "PEDRO AUGUSTO MENDES MOREIRA",
+          "identificadorPetrobras": "71544067",
+          "comentario": "2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota 2 para o item 1. \"Atendeu demandas diferentes da forma a qual foi orientado\""
+        },
+        {
+          "linhaExcel": 265,
+          "idNaMC": "205.4",
+          "colaborador": "SAMUEL LEAL RODRIGUES",
+          "identificadorPetrobras": "71744563",
+          "comentario": "2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota 2 para os itens 1 e 3 \"Atendeu demandas diferentes da forma a qual foi orientado. Ausência em 2 dias suprida por Victoria e Clóvis\""
+        },
+        {
+          "linhaExcel": 266,
+          "idNaMC": "205.5",
+          "colaborador": "VICTORIA SILVA DIAS",
+          "identificadorPetrobras": "72718948",
+          "comentario": "2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota máxima."
+        }
+      ]
+    },
+    {
+      "idPosto": "209",
+      "tipoPosto": "Turno/24h",
+      "vagasEsperadas": 4,
+      "totalOcupantesNaMC": 5,
+      "excesso": 1,
+      "ocupantes": [
+        {
+          "linhaExcel": 273,
+          "idNaMC": "209.1",
+          "colaborador": "LAVINIA CATALUNHA FERREIRA",
+          "identificadorPetrobras": "73129088",
+          "comentario": "1º PRÉVIA - Colaborador(a) Ferista - cobrindo as férias do colaborador Marcos Vinicius Faria Queiroz Pio, entre os dias 10/08/2026 e 24/08/2026 (15 dias) .// 2ª PRÉVIA - cobrindo as férias do colaborador Elisson de Jesus Moraes, entre os dias 01/09/2026 e 30/09/2026 (09 dias)\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Junho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota máxima."
+        },
+        {
+          "linhaExcel": 274,
+          "idNaMC": "209.2",
+          "colaborador": "LUCAS SOARES TEIXEIRA",
+          "identificadorPetrobras": "72452933",
+          "comentario": "2º PRÉVIA - Fisc Operacional_Avaliação_Junho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: item 1 nota 2 \"Falhas pontuais no acompanhamento das programações diárias, principalmente no acompanhamento quanto a alocação de veículo pelas contratadas. Atentar para forma de comunicação com as empresas prestadoras de serviço\""
+        },
+        {
+          "linhaExcel": 275,
+          "idNaMC": "209.3",
+          "colaborador": "MARCOS VINICIUS FARIA QUEIROZ PIO",
+          "identificadorPetrobras": "72700110",
+          "comentario": "1ª PRÉVIA - Colaborador em período de férias de 10/08 a 24/08, totalizando 15 dias na  MC de setembro/26, LAVINIA CATALUNHA FERREIRA  ferista.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Junho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com nota máxima."
+        },
+        {
+          "linhaExcel": 276,
+          "idNaMC": "209.4",
+          "colaborador": "MATHEUS JOSE BORGES",
+          "identificadorPetrobras": "71920213",
+          "comentario": "2º PRÉVIA - Fisc Operacional_Avaliação_Junho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: item 1 nota 2 \"Falhas pontuais nos acompanhamentos das linhas coletivas e nas inspeções dos veículos\""
+        },
+        {
+          "linhaExcel": 277,
+          "idNaMC": "209.5",
+          "colaborador": "WILGNER GUSTAVO FERREIRA ALVES DE LIMA",
+          "identificadorPetrobras": "72951144",
+          "comentario": "2º PRÉVIA - Fisc Operacional_Avaliação_Junho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Julho/26: Avaliado com nota máxima.\r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: item 1 nota 2  \"Falhas pontuais no acompanhamento das programações diárias, principalmente no acompanhamento quanto a alocação de veículo pelas contratadas. Atentar para forma de comunicação com as empresas prestadoras de serviço\""
+        }
+      ]
+    },
+    {
+      "idPosto": "218",
+      "tipoPosto": "Turno/24h",
+      "vagasEsperadas": 4,
+      "totalOcupantesNaMC": 5,
+      "excesso": 1,
+      "ocupantes": [
+        {
+          "linhaExcel": 296,
+          "idNaMC": "218.1",
+          "colaborador": "LUCAS GABRIEL DE OLIVEIRA",
+          "identificadorPetrobras": "72535253",
+          "comentario": ""
+        },
+        {
+          "linhaExcel": 297,
+          "idNaMC": "218.2",
+          "colaborador": "LUIS AUGUSTO CASTRO KETELHUTH",
+          "identificadorPetrobras": "72121498",
+          "comentario": ""
+        },
+        {
+          "linhaExcel": 298,
+          "idNaMC": "218.3",
+          "colaborador": "THIAGO DA COSTA BARROS",
+          "identificadorPetrobras": "72700251",
+          "comentario": ""
+        },
+        {
+          "linhaExcel": 299,
+          "idNaMC": "218.4",
+          "colaborador": "VAGNER MOREIRA DA SILVA",
+          "identificadorPetrobras": "70511898",
+          "comentario": ""
+        },
+        {
+          "linhaExcel": 300,
+          "idNaMC": "218.5",
+          "colaborador": "VALTER BARBOSA DA CUNHA",
+          "identificadorPetrobras": "40357580",
+          "comentario": ""
+        }
+      ]
+    },
+    {
+      "idPosto": "229",
+      "tipoPosto": "Turno/24h",
+      "vagasEsperadas": 4,
+      "totalOcupantesNaMC": 5,
+      "excesso": 1,
+      "ocupantes": [
+        {
+          "linhaExcel": 317,
+          "idNaMC": "229.1",
+          "colaborador": "AMANDA MARIA ALVES DE SANTANA",
+          "identificadorPetrobras": "72972350",
+          "comentario": ""
+        },
+        {
+          "linhaExcel": 318,
+          "idNaMC": "229.2",
+          "colaborador": "JEFFERSON MELO DA SILVA",
+          "identificadorPetrobras": "73076921",
+          "comentario": "1ª PRÉVIA - Colaborador (a) Ferista - Cobertura das férias do colaborador Lucas Edilson dos Santos de 03/08 a 22/08 (13 dias)."
+        },
+        {
+          "linhaExcel": 319,
+          "idNaMC": "229.3",
+          "colaborador": "LUCAS EDILSON DOS SANTOS",
+          "identificadorPetrobras": "72369302",
+          "comentario": "1ª PRÉVIA - Colaborador em período de férias de 03/08 a 22/08, totalizando 07 dias na MC de agosto/26 e 13 dias na MC de setembro/26, JEFFERSON MELO DA SILVA ferista."
+        },
+        {
+          "linhaExcel": 320,
+          "idNaMC": "229.4",
+          "colaborador": "LUCAS FERREIRA TORRES",
+          "identificadorPetrobras": "72096080",
+          "comentario": "1ª PREMIER - Ausência no dias 15 e 17/08 atividades. Posto coberto pelo feristra JEFFERSON MELO na folga (extra Premier)."
+        },
+        {
+          "linhaExcel": 321,
+          "idNaMC": "229.5",
+          "colaborador": "SATIRO DE SOUZA ANJOS NETO",
+          "identificadorPetrobras": "71544830",
+          "comentario": ""
+        }
+      ]
+    },
+    {
+      "idPosto": "250",
+      "tipoPosto": "Turno/24h",
+      "vagasEsperadas": 4,
+      "totalOcupantesNaMC": 5,
+      "excesso": 1,
+      "ocupantes": [
+        {
+          "linhaExcel": 349,
+          "idNaMC": "250.1",
+          "colaborador": "ALINE ALVES DE NOVAES",
+          "identificadorPetrobras": "71611594",
+          "comentario": "2ª PRÉVIA - Ausência por motivo de doença no período do dia  02/09 a 16/09 (escala da Aline Alves - 03/09, 05/09, 07/09, 09/09, 11/09, 13/09 e 14/09), justificada mediante apresentação de atestado, para assegurar a continuidade da operação foi necessário elaborar uma escala de cobertura, contando com a disponibilidade dos colaboradores que estavam em seus dias de folga para assumir os respectivos postos.\r\nNo dia 03/09 não houve cobertura do posto (descontar na MC o dia).\r\nNos dias 05/09 e 11/09 a cobertura foi realizada pelo colaboradora Jonas Eduardo.\r\nNo dia 07/09 cobertura realizda ela Samara Canal.\r\nNos dias 09/09 e 15/09 cobertura realizada pelo colaborador Paulo Vitor.\r\nNo dia 13/09 a cobertura foi realizada pela Denise."
+        },
+        {
+          "linhaExcel": 350,
+          "idNaMC": "250.2",
+          "colaborador": "DANIEL DOS SANTOS SILVA",
+          "identificadorPetrobras": "72961520",
+          "comentario": "1º PRÉVIA - Colaborador afastado pelo INSS em 06/07/2026. Substituto é Jonas Eduardo."
+        },
+        {
+          "linhaExcel": 351,
+          "idNaMC": "250.2",
+          "colaborador": "JONAS EDUARDO VITALIANO DE BASTOS",
+          "identificadorPetrobras": "71025808",
+          "comentario": "1º PRÉVIA - Colaborador substituto do Daniel dos Santos Silva afastado pelo INSS.\r\n2ª PRÉVIA - Colaboradora realizou a cobertura do posto da Aline Alves no dia 05/09 e 11/09"
+        },
+        {
+          "linhaExcel": 352,
+          "idNaMC": "250.3",
+          "colaborador": "DENISE DE SOUZA",
+          "identificadorPetrobras": "70997403",
+          "comentario": "2ª PRÉVIA - Colaboradora realizou a cobertura do posto da Aline Alves no dia 13/06."
+        },
+        {
+          "linhaExcel": 353,
+          "idNaMC": "250.4",
+          "colaborador": "GUILHERME ROGERIO ALMEIDA DE JESUS ELIAS DE OLIVEIRA",
+          "identificadorPetrobras": "71333092",
+          "comentario": ""
+        }
+      ]
+    },
+    {
+      "idPosto": "251",
+      "tipoPosto": "Turno/24h",
+      "vagasEsperadas": 4,
+      "totalOcupantesNaMC": 5,
+      "excesso": 1,
+      "ocupantes": [
+        {
+          "linhaExcel": 354,
+          "idNaMC": "251.1",
+          "colaborador": "JESSICA PEREIRA DE SOUSA",
+          "identificadorPetrobras": "72153590",
+          "comentario": "1ª PRÉVIA - Ausência no dia 14/08 atividades foram realocadas para o colaborador GUILHERME ROGERIO (folga). Colaboradora de férias entre os dias 01/09 a 30/09, entre os dias 01/09 a 25/09 o ferista Jose Artur da Nobrega Alves realizará a cobertura e entre os das 26/09 o posto será coberto pela colaboradora Jessica Colares."
+        },
+        {
+          "linhaExcel": 355,
+          "idNaMC": "251.2",
+          "colaborador": "JOSE ARTUR DA NOBREGA ALVES",
+          "identificadorPetrobras": "43298113",
+          "comentario": "1º PRÉVIA - Colaborador(a) Ferista - realizou a cobertua do posto 02 do EDISA entre os dias 10/08 a 28/08 e realizou a cobertura de férias da Jessica Pereira entre os dias 01/09 a 30/09. \r\n2º PRÉVIA - Fisc Operacional_Avaliação_Agosto/26: Avaliado com com nota \"2\" nos três critérios de avaliação, referente a competencia agosto (10/7 a 9/08)."
+        },
+        {
+          "linhaExcel": 356,
+          "idNaMC": "251.3",
+          "colaborador": "JULIANA CARDOSO DA SILVA SANTOS",
+          "identificadorPetrobras": "43700803",
+          "comentario": "1º PRÉVIA - Colaborador(a) Ferista - realizou a cobertua do posto 02 do EDISA entre os dias 10/08 a 28/08."
+        },
+        {
+          "linhaExcel": 357,
+          "idNaMC": "251.4",
+          "colaborador": "LARISSA SANTOS RIBEIRO",
+          "identificadorPetrobras": "72153620",
+          "comentario": "1ª PRÉVIA - Ausência no período de 21/08, justificada mediante apresentação de atestado, não teve realocação de atividades para outro colaborador."
+        },
+        {
+          "linhaExcel": 358,
+          "idNaMC": "251.5",
+          "colaborador": "PAULO VITOR MORATO DO NASCIMENTO",
+          "identificadorPetrobras": "72154721",
+          "comentario": "2ª PRÉVIA - Colaborador realizou a cobertura do posto da Aline Alves nos dia 09/09 e 15/09."
+        }
+      ]
+    }
+  ],
+  "colaboradoresSemRm": [
+    {
+      "linhaExcel": 249,
+      "idNaMC": "199.1",
+      "idPosto": "199",
+      "colaborador": "-",
+      "identificadorPetrobras": "-"
+    }
+  ]
+}

@@ -558,7 +558,12 @@ export function confirmarImportacaoSifac(
     throw new Error(`Importação bloqueada: ${simulacao.erroBloqueanteArquivo}`);
   }
 
-  const snapshotAnterior: EstadoOperacionalCompleto = JSON.parse(JSON.stringify(estadoAtual));
+  const snapshotAnterior: EstadoOperacionalCompleto = {
+    profissionais: [...(estadoAtual.profissionais || [])],
+    ocorrencias: [...(estadoAtual.ocorrencias || [])],
+    coberturas: [...(estadoAtual.coberturas || [])],
+    alocadosSifac: [...(estadoAtual.alocadosSifac || [])],
+  } as any;
   const loteId = `LOTE-SIFAC-${Date.now()}`;
   const dataHoraAtual = new Date().toISOString().replace("T", " ").substring(0, 19);
 

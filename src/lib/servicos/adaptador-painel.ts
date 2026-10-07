@@ -200,7 +200,7 @@ export function prepararEntradaCalculo(
       funcao: p.funcao,
       unidadeId: p.unidadeId,
       unidadeNome: p.unidadeNome,
-      escala: p.escala,
+      escala: (p.escala === "12x36" || p.escala === "5x2" || p.escala === "6x1") ? p.escala : "OUTRA",
       jornadaSemanalHoras: p.jornadaSemanalHoras,
       horarioInicio: p.horarioInicio,
       horarioFim: p.horarioFim,

@@ -130,4 +130,58 @@ describe("MOMENTO 1 — Limpeza dos Dados de Demonstração e Backup Completo", 
     const sucesso = restaurarSnapshotSistema(snapshot);
     expect(sucesso).toBe(true);
   });
+
+  it("deve limpar dados operacionais do mapa mantendo as posições e zerando presença, cobertura e descoberto", async () => {
+    const { limparDadosOperacionaisOcupacao } = await import("@/lib/dados/limpeza-dados-demo");
+    const { registrarAjusteManualDia, calcularStatusDia } = await import("@/lib/dados/estado-operacional");
+
+    // Simula presença manual e dados operacionais
+    registrarAjusteManualDia({
+      posicaoId: "PST-ALM-001.1",
+      data: "2026-09-02",
+      status: "PRESENTE",
+      justificativa: "Teste presenca manual",
+    });
+
+    const relatorio = limparDadosOperacionaisOcupacao("Administrador Premier (Marcos Valério)");
+    expect(relatorio.sucesso).toBe(true);
+
+    const estadoLimpo = carregarEstado();
+
+    // 1. As posições (vagas) e postos são preservados
+    expect(estadoLimpo.postos.length).toBeGreaterThan(0);
+    const vagasTab = relatorio.tabelasAfetadas.find((t) => t.tabela.includes("vagas"));
+    expect(vagasTab?.status).toBe("PRESERVADO");
+
+    // 2. Informações de presença, cobertura e descoberto zeradas
+    expect(estadoLimpo.ocorrencias.length).toBe(0);
+    expect(estadoLimpo.coberturas.length).toBe(0);
+    expect(estadoLimpo.apontamentos.length).toBe(0);
+    expect(estadoLimpo.ajustesManuaisDia?.length).toBe(0);
+    expect(estadoLimpo.marcacoesPonto?.length).toBe(0);
+
+    // 3. Verificação no cálculo de apuração: zero presença, zero cobertura e zero descoberto
+    const postoTeste = estadoLimpo.postos[0];
+    const apuracao = calcularStatusDia(
+      postoTeste,
+      2,
+      2026,
+      8, // Setembro
+      estadoLimpo.ocorrencias,
+      estadoLimpo.coberturas,
+      estadoLimpo.apontamentos,
+      new Set(),
+      "2026-09-15"
+    );
+
+    expect(apuracao.posicoesAtendidas).toBe(0);
+    const posicoes = apuracao.posicoesDetalhe || [];
+    const temPresente = posicoes.some((p) => p.status === "PRESENTE");
+    const temCoberto = posicoes.some((p) => p.status === "COBERTO");
+    const temDescoberto = posicoes.some((p) => p.status === "DESCOBERTO");
+    expect(temPresente).toBe(false);
+    expect(temCoberto).toBe(false);
+    expect(temDescoberto).toBe(false);
+  });
 });
+

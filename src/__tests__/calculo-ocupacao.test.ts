@@ -397,4 +397,50 @@ describe("Suíte de Testes Obrigatórios do Motor de Ocupação e Painel Geral (
     expect(resultadoVermelho.slaCompetencia.valor).toBe(0);
     expect(resultadoVermelho.slaCompetencia.corSla).toBe("vermelho");
   });
+
+  // 11. Percentual de cumprimento de presença consolidado por posto
+  it("Cenário 11: deve calcular o percentual de cumprimento de presença consolidado por posto de forma discreta e precisa", () => {
+    const postos: PostoEntrada[] = [
+      { ...postoBase, id: "p-cumprido", codigoPosto: "P-CUMPRIDO" },
+      { ...postoBase, id: "p-parcial", codigoPosto: "P-PARCIAL", titularMatricula: "PRM-PARCIAL" },
+    ];
+
+    const pontos: PontoEntrada[] = [
+      { matricula: "PRM-TESTE-01", data: "2026-09-01", situacaoPonto: "PRESENTE" },
+      { matricula: "PRM-TESTE-01", data: "2026-09-02", situacaoPonto: "PRESENTE" },
+      { matricula: "PRM-PARCIAL", data: "2026-09-01", situacaoPonto: "PRESENTE" },
+      { matricula: "PRM-PARCIAL", data: "2026-09-02", situacaoPonto: "AUSENTE" },
+    ];
+
+    const resultado = calcularOcupacao({
+      competencia: "2026-09",
+      dataReferenciaHoje: "2026-09-02",
+      perfilUsuario: "PREMIER_GESTOR",
+      dados: {
+        postos,
+        ocorrencias: [],
+        coberturas: [],
+        pontos,
+        logsImportacao: [
+          { fonte: "RHID", dataExecucao: "2026-09-02 18:00", periodoFim: "2026-09-02 18:00", status: "CONCLUIDO" },
+        ],
+        apontamentos: [],
+      },
+    });
+
+    expect(resultado.cumprimentoPostos).toBeDefined();
+    const cCumprido = resultado.cumprimentoPostos["P-CUMPRIDO"];
+    expect(cCumprido).toBeDefined();
+    expect(cCumprido.totalExigiveis).toBe(2);
+    expect(cCumprido.totalAtendidos).toBe(2);
+    expect(cCumprido.percentual).toBe(100);
+    expect(cCumprido.percentualFormatado).toBe("100,0%");
+
+    const cParcial = resultado.cumprimentoPostos["P-PARCIAL"];
+    expect(cParcial).toBeDefined();
+    expect(cParcial.totalExigiveis).toBe(2);
+    expect(cParcial.totalAtendidos).toBe(1);
+    expect(cParcial.percentual).toBe(50);
+    expect(cParcial.percentualFormatado).toBe("50,0%");
+  });
 });

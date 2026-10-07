@@ -79,3 +79,95 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
 }
+
+/* Regras de Impressão Corporativa (Ficha de Registro / Dossiê de RH) */
+@page {
+  size: A4 portrait;
+  margin: 12mm 15mm;
+}
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Oculta navegação, cabeçalhos do sistema, menu lateral e rodapés */
+  aside,
+  nav,
+  header,
+  footer,
+  .no-print,
+  [role="navigation"],
+  .print\:hidden,
+  [class*="print:hidden"] {
+    display: none !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Exibe a ficha de RH em página inteira sem gaveta ou backdrop */
+  .ficha-rh-container {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Oculta o modal interativo com abas da tela durante a impressão */
+  .ficha-rh-drawer {
+    display: none !important;
+  }
+
+  .ficha-rh-backdrop {
+    display: none !important;
+  }
+
+  /* Garantir que o container oficial apareça limpo e formatado */
+  .ficha-impressao-oficial {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .page-break {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .avoid-break {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}

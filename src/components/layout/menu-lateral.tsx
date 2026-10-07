@@ -9,16 +9,17 @@ import {
   Briefcase,
   Users,
   AlertTriangle,
+  AlertCircle,
   UserCheck2,
   MessageSquare,
-  FileSpreadsheet,
   UploadCloud,
   History,
   ShieldCheck,
   Settings,
   FileCheck,
+  FileSpreadsheet,
   Clock,
-  Lock,
+  Construction,
 } from "lucide-react";
 import { carregarEstado } from "@/lib/dados/estado-operacional";
 import { can } from "@/lib/auth/permissoes";
@@ -32,6 +33,7 @@ interface MenuItem {
   temBadge?: boolean;
   recurso?: Recurso;
   alertaPonto?: boolean;
+  rotasAdicionais?: string[];
 }
 
 interface GrupoMenu {
@@ -43,33 +45,28 @@ const gruposMenuConfig: GrupoMenu[] = [
   {
     titulo: "OPERAÇÃO",
     itens: [
-      { rotulo: "Painel geral", href: "/painel", icone: LayoutDashboard, recurso: "PAINEL" },
-      { rotulo: "Mapa de ocupação", href: "/mapa-ocupacao", icone: CalendarCheck, recurso: "MAPA_OCUPACAO" },
-      { rotulo: "Presença diária", href: "/presenca-diaria", icone: Clock, recurso: "PROFISSIONAIS" },
-      { rotulo: "Postos do Anexo 1-A", href: "/postos", icone: Briefcase, recurso: "POSTOS" },
+      { rotulo: "Painel", href: "/painel", icone: LayoutDashboard, recurso: "PAINEL" },
+      { rotulo: "Mapa de cobertura", href: "/mapa-ocupacao", icone: CalendarCheck, recurso: "MAPA_OCUPACAO", rotasAdicionais: ["/descobertos", "/presenca-diaria"] },
+      { rotulo: "Coberturas e ocorrências", href: "/coberturas", icone: UserCheck2, recurso: "COBERTURAS", rotasAdicionais: ["/ocorrencias"] },
       { rotulo: "Profissionais", href: "/profissionais", icone: Users, recurso: "PROFISSIONAIS" },
-      { rotulo: "Ocorrências", href: "/ocorrencias", icone: AlertTriangle, recurso: "OCORRENCIAS" },
-      { rotulo: "Coberturas", href: "/coberturas", icone: UserCheck2, recurso: "COBERTURAS" },
+      { rotulo: "Postos (Anexo 1-A)", href: "/postos", icone: Briefcase, recurso: "POSTOS" },
     ],
   },
   {
     titulo: "FISCALIZAÇÃO",
     itens: [
+      { rotulo: "Relatórios", href: "/relatorios", icone: FileSpreadsheet, recurso: "RELATORIOS" },
       { rotulo: "Apontamentos Petrobras", href: "/apontamentos", icone: MessageSquare, temBadge: true, recurso: "APONTAMENTOS" },
-      { rotulo: "Relatórios e medição", href: "/relatorios", icone: FileSpreadsheet, recurso: "RELATORIOS" },
-      { rotulo: "Fechamento mensal", href: "/fechamento", icone: Lock, recurso: "ADMINISTRACAO" },
-      { rotulo: "Conformidade contratual", href: "/conformidade", icone: ShieldCheck, recurso: "CONFORMIDADE" },
-      { rotulo: "Trilha de auditoria", href: "/auditoria", icone: History, recurso: "AUDITORIA" },
+      { rotulo: "Conformidade", href: "/conformidade", icone: ShieldCheck, recurso: "CONFORMIDADE" },
     ],
   },
   {
     titulo: "SISTEMA",
     itens: [
-      { rotulo: "Importações de dados", href: "/importacoes", icone: UploadCloud, recurso: "IMPORTACOES" },
+      { rotulo: "Importações", href: "/importacoes", icone: UploadCloud, recurso: "IMPORTACOES" },
       { rotulo: "Conciliação SIFAC", href: "/conciliacao-sifac", icone: FileCheck, recurso: "CONCILIACAO_SIFAC" },
-      { rotulo: "Pendências de ponto", href: "/admin/pendencias-ponto", icone: AlertTriangle, recurso: "ADMINISTRACAO" },
-      { rotulo: "Modelos de ponto", href: "/admin/modelos-ponto", icone: Settings, recurso: "ADMINISTRACAO" },
-      { rotulo: "Administração", href: "/admin", icone: Settings, recurso: "ADMINISTRACAO", alertaPonto: true },
+      { rotulo: "Auditoria", href: "/auditoria", icone: History, recurso: "AUDITORIA" },
+      { rotulo: "Administração", href: "/admin", icone: Settings, recurso: "ADMINISTRACAO", alertaPonto: true, rotasAdicionais: ["/admin/importar-funcionarios"] },
     ],
   },
 ];
@@ -121,9 +118,9 @@ export function MenuLateral() {
   }, []);
 
   return (
-    <aside className="w-[240px] bg-[#0F1E36] text-[#C9D2E0] flex flex-col shrink-0 select-none border-r border-[#1E2E4A]">
+    <aside className="w-[240px] h-full bg-[#0F1E36] text-[#C9D2E0] flex flex-col shrink-0 select-none border-r border-[#1E2E4A]">
       {/* Topo: Logo "P" + "Premier Logistics" + "SGP · Gestão de Postos" */}
-      <div className="p-4 border-b border-[#1E2E4A] flex items-center gap-3">
+      <div className="p-4 border-b border-[#1E2E4A] flex items-center gap-3 shrink-0">
         <div className="w-8 h-8 rounded-lg bg-[#1F4FD1] text-white flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
           P
         </div>
@@ -159,7 +156,10 @@ export function MenuLateral() {
               <div className="space-y-0.5 pt-1">
                 {itensVisiveis.map((item) => {
                   const Icone = item.icone;
-                  const ativo = pathname === item.href || pathname.startsWith(item.href + "/");
+                  const ativo =
+                    pathname === item.href ||
+                    pathname.startsWith(item.href + "/") ||
+                    Boolean(item.rotasAdicionais?.some((r) => pathname === r || pathname.startsWith(r + "/")));
                   const mostrarPontoAlerta = item.alertaPonto && temPendenciaAdmin;
 
                   return (
@@ -216,7 +216,7 @@ export function MenuLateral() {
       </nav>
 
       {/* Rodapé: Indicador verde "Ambiente seguro · LGPD" e versão v1.0 */}
-      <div className="p-3.5 bg-[#0B1628] border-t border-[#1E2E4A] text-xs text-[#7F90AA] flex items-center justify-between">
+      <div className="p-3.5 bg-[#0B1628] border-t border-[#1E2E4A] text-xs text-[#7F90AA] flex items-center justify-between shrink-0">
         <Link
           href="/admin/ambiente"
           className="flex items-center gap-2 hover:text-white transition-colors"

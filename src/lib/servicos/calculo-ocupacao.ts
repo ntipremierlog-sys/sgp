@@ -409,6 +409,24 @@ export interface ResultadoOcupacaoConsolidado {
 
   // Matriz detalhada indexada por `postoId_data`
   matrizDetalhada: Record<string, DetalhePostoDia>;
+
+  // Cumprimento de presença consolidado por posto no período apurado
+  cumprimentoPostos: Record<string, ResumoCumprimentoPosto>;
+}
+
+export interface ResumoCumprimentoPosto {
+  postoId: string;
+  codigoPosto: string;
+  funcao?: string;
+  totalExigiveis: number;
+  totalAtendidos: number;
+  totalPresentes: number;
+  totalCobertos: number;
+  totalDescobertos: number;
+  totalVagos: number;
+  totalSemDado: number;
+  percentual: number | null;
+  percentualFormatado: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -911,20 +929,63 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
   let totalSemDadoCompetencia = 0;
   let totalPrevistosCompetencia = 0;
 
+  const cumprimentoPostos: Record<string, ResumoCumprimentoPosto> = {};
+
   for (const posto of postosFiltrados) {
+    let pPrevistos = 0;
+    let pPresentes = 0;
+    let pCobertos = 0;
+    let pDescobertos = 0;
+    let pVagos = 0;
+    let pSemDado = 0;
+
     for (const dataStr of datasApuracaoCompetencia) {
       const detalhe = matrizDetalhada[`${posto.id}_${dataStr}`];
       if (!detalhe) continue;
 
       if (detalhe.status !== "SEM_ESCALA" && detalhe.status !== "AGUARDANDO_TURNO") {
         totalPrevistosCompetencia++;
-        if (detalhe.status === "PRESENTE") totalPresencaCompetencia++;
-        else if (detalhe.status === "COBERTO") totalCobertoCompetencia++;
-        else if (detalhe.status === "DESCOBERTO") totalDescobertoCompetencia++;
-        else if (detalhe.status === "VAGO") totalVagoCompetencia++;
-        else if (detalhe.status === "SEM_DADO") totalSemDadoCompetencia++;
+        pPrevistos++;
+        if (detalhe.status === "PRESENTE") {
+          totalPresencaCompetencia++;
+          pPresentes++;
+        } else if (detalhe.status === "COBERTO") {
+          totalCobertoCompetencia++;
+          pCobertos++;
+        } else if (detalhe.status === "DESCOBERTO") {
+          totalDescobertoCompetencia++;
+          pDescobertos++;
+        } else if (detalhe.status === "VAGO") {
+          totalVagoCompetencia++;
+          pVagos++;
+        } else if (detalhe.status === "SEM_DADO") {
+          totalSemDadoCompetencia++;
+          pSemDado++;
+        }
       }
     }
+
+    const pAtendidos = pPresentes + pCobertos;
+    const pPerc = pPrevistos > 0 ? parseFloat(((pAtendidos / pPrevistos) * 100).toFixed(1)) : null;
+    const pPercFmt = pPerc !== null ? `${pPerc.toFixed(1).replace(".", ",")}%` : "—";
+
+    const resumo: ResumoCumprimentoPosto = {
+      postoId: posto.id,
+      codigoPosto: posto.codigoPosto,
+      funcao: posto.funcao,
+      totalExigiveis: pPrevistos,
+      totalAtendidos: pAtendidos,
+      totalPresentes: pPresentes,
+      totalCobertos: pCobertos,
+      totalDescobertos: pDescobertos,
+      totalVagos: pVagos,
+      totalSemDado: pSemDado,
+      percentual: pPerc,
+      percentualFormatado: pPercFmt,
+    };
+
+    cumprimentoPostos[posto.id] = resumo;
+    cumprimentoPostos[posto.codigoPosto] = resumo;
   }
 
   const totalAtendidosSla = totalPresencaCompetencia + totalCobertoCompetencia;
@@ -1130,9 +1191,17 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
           if (det.status === "PRESENTE" || det.status === "COBERTO") {
             atendidosBase++;
             avaliadosBase++;
-          } else if (det.status === "DESCOBERTO" || det.status === "VAGO") {
+          } else if (det.status === "DESCOBERTO") {
             descMes++;
             avaliadosBase++;
+          } else if (det.status === "VAGO") {
+            if (
+              dados.parametros?.tratamentoPostoVago === "GLOSA" ||
+              dados.parametros?.tratamentoPostoVago === "DESCOBERTO_SEM_GLOSA"
+            ) {
+              descMes++;
+              avaliadosBase++;
+            }
           }
         }
       }
@@ -1330,8 +1399,15 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
         if (det.status === "PRESENTE" || det.status === "COBERTO") {
           atendidosNoDia++;
           avaliadosNoDia++;
-        } else if (det.status === "DESCOBERTO" || det.status === "VAGO") {
+        } else if (det.status === "DESCOBERTO") {
           avaliadosNoDia++;
+        } else if (det.status === "VAGO") {
+          if (
+            dados.parametros?.tratamentoPostoVago === "GLOSA" ||
+            dados.parametros?.tratamentoPostoVago === "DESCOBERTO_SEM_GLOSA"
+          ) {
+            avaliadosNoDia++;
+          }
         }
       }
     }
@@ -1538,5 +1614,6 @@ export function calcularOcupacao(filtros: FiltrosCalculoOcupacao): ResultadoOcup
     faixaAcao: itensFaixaAcao,
     reguaFiscalizacao,
     matrizDetalhada,
+    cumprimentoPostos,
   };
 }

@@ -27,6 +27,7 @@ import {
   OcorrenciaOperacional,
   CoberturaOperacional,
   ApontamentoOperacional,
+  POSTOS_INICIAIS,
 } from "./estado-operacional";
 import { gerarSnapshotSistema, SnapshotBackupSGP } from "./backup-dados";
 import { mascararCpf } from "../importadores/tipos";
@@ -95,7 +96,8 @@ export function semearDadosDemoParaTeste() {
     dataCriacao: "2026-09-08 11:20",
   }));
 
-  const postosComTitular = estado.postos.map((p) => {
+  const basePostos = POSTOS_INICIAIS;
+  const postosComTitular = basePostos.map((p) => {
     const prof = profs.find((pr) => pr.postoCodigo === p.codigoPosto);
     return {
       ...p,
@@ -195,6 +197,24 @@ export function simularLimpezaDadosDemo(
       status: "PRESERVADO",
     },
     {
+      tabela: "vaga (posições contratuais)",
+      descricao: "Estrutura oficial de posições do Anexo 1-A e Memória de Cálculo",
+      registrosRemovidos: 0,
+      status: "PRESERVADO",
+    },
+    {
+      tabela: "ajuste_manual_dia (apontamentos manuais na escala)",
+      descricao: "Ajustes de presença, folga e descoberto aplicados manualmente na escala",
+      registrosRemovidos: estado.ajustesManuaisDia?.length || 0,
+      status: "LIMPO",
+    },
+    {
+      tabela: "marcacao_ponto (presença / batidas)",
+      descricao: "Registros de frequência e ponto apurados",
+      registrosRemovidos: estado.marcacoesPonto?.length || 0,
+      status: "LIMPO",
+    },
+    {
       tabela: "log_auditoria",
       descricao: "Trilha imutável de eventos e segurança",
       registrosRemovidos: 0,
@@ -212,7 +232,9 @@ export function simularLimpezaDadosDemo(
       qtdAlocacoesFicticias +
       qtdOcorrencias +
       qtdCoberturas +
-      qtdApontamentos,
+      qtdApontamentos +
+      (estado.ajustesManuaisDia?.length || 0) +
+      (estado.marcacoesPonto?.length || 0),
     postosAnexo1APreservados: estado.postos.length,
     snapshotBackup: snapshot,
   };
@@ -238,6 +260,8 @@ export function executarLimpezaDadosDemo(
   const qtdOcorrencias = estadoAtual.ocorrencias.length;
   const qtdCoberturas = estadoAtual.coberturas.length;
   const qtdApontamentos = estadoAtual.apontamentos.length;
+  const qtdAjustes = estadoAtual.ajustesManuaisDia?.length || 0;
+  const qtdMarcacoes = estadoAtual.marcacoesPonto?.length || 0;
 
   // 2. Preserva os postos do Anexo 1-A, mas remove as titularidades fictícias (postos tornam-se vagos)
   const postosLimpos: PostoOperacional[] = estadoAtual.postos.map((posto) => ({
@@ -255,7 +279,7 @@ export function executarLimpezaDadosDemo(
     perfil: "PREMIER_ADMIN",
     acao: "LIMPEZA_DADOS_DEMONSTRACAO",
     entidade: "DadosOperacionais",
-    detalhes: `Limpeza de demonstração concluída: ${qtdProfissionais} profissionais removidos, ${qtdAlocacoesFicticias} alocações fictícias removidas (postos Anexo 1-A preservados vagos), ${qtdOcorrencias} ocorrências removidas, ${qtdCoberturas} coberturas removidas, ${qtdApontamentos} apontamentos removidos. Backup gerado com sucesso.`,
+    detalhes: `Limpeza de demonstração concluída: ${qtdProfissionais} profissionais removidos, ${qtdAlocacoesFicticias} alocações fictícias removidas (postos Anexo 1-A preservados vagos), ${qtdOcorrencias} ocorrências removidas, ${qtdCoberturas} coberturas removidas, ${qtdApontamentos} apontamentos removidos, ${qtdAjustes} ajustes manuais da escala removidos, ${qtdMarcacoes} marcações de ponto removidas. Backup gerado com sucesso.`,
     ip: "189.120.45.12",
   };
 
@@ -265,7 +289,13 @@ export function executarLimpezaDadosDemo(
     profissionais: [], // 100% limpo para receber a importação RM
     ocorrencias: [],
     coberturas: [],
+    coberturasExcluidasIds: [],
     apontamentos: [],
+    ajustesManuaisDia: [],
+    marcacoesPonto: [],
+    diasFolgaRm: [],
+    pendenciasPonto: [],
+    dataReferenciaPonto: undefined,
     logsAuditoria: [logLimpeza, ...estadoAtual.logsAuditoria],
   };
 
@@ -275,6 +305,118 @@ export function executarLimpezaDadosDemo(
   const sim = simularLimpezaDadosDemo(executadoPor);
   return {
     ...sim,
+    snapshotBackup,
+  };
+}
+
+/**
+ * Limpeza focada no Mapa de Ocupação:
+ * - MANTÉM integralmente todas as posições (vagas) e postos do contrato.
+ * - EXCLUI presenças (marcações de ponto / batidas).
+ * - EXCLUI coberturas (substituições temporárias registradas).
+ * - EXCLUI ausências e ocorrências geradoras de descoberto (atestados, faltas e apontamentos).
+ * - EXCLUI ajustes manuais de dia aplicados na escala (ajustesManuaisDia).
+ */
+export function limparDadosOperacionaisOcupacao(
+  executadoPor: string = "Administrador Premier"
+): RelatorioLimpezaDados {
+  const estadoAtual = carregarEstado();
+
+  // 1. Gera backup prévio de segurança
+  const snapshotBackup = gerarSnapshotSistema(
+    "Backup Pré-Limpeza Operacional do Mapa de Ocupação",
+    executadoPor
+  );
+
+  const qtdOcorrencias = estadoAtual.ocorrencias.length;
+  const qtdCoberturas = estadoAtual.coberturas.length;
+  const qtdApontamentos = estadoAtual.apontamentos.length;
+  const qtdAjustes = estadoAtual.ajustesManuaisDia?.length || 0;
+  const qtdMarcacoes = estadoAtual.marcacoesPonto?.length || 0;
+  const totalPosicoes = (estadoAtual.vagas && estadoAtual.vagas.length > 0) ? estadoAtual.vagas.length : 311;
+
+  // 2. Registro de auditoria
+  const dataIso = new Date().toISOString();
+  const logLimpeza = {
+    id: `log-limpeza-mapa-${Date.now()}`,
+    timestamp: dataIso.replace("T", " ").substring(0, 19),
+    usuario: executadoPor,
+    perfil: "PREMIER_ADMIN",
+    acao: "LIMPEZA_MAPA_OCUPACAO",
+    entidade: "MapaOcupacao",
+    detalhes: `Limpeza operacional do Mapa de Ocupação: ${totalPosicoes} posições mantidas. Excluídos: ${qtdMarcacoes} pontos/presenças, ${qtdCoberturas} coberturas, ${qtdOcorrencias} ocorrências/descobertos, ${qtdApontamentos} apontamentos, ${qtdAjustes} ajustes manuais diários.`,
+    ip: "189.120.45.12",
+  };
+
+  // 3. Aplica a limpeza das informações de presença, cobertura e descoberto mantendo as posições
+  const novoEstado: Partial<EstadoOperacionalCompleto> = {
+    ocorrencias: [],
+    coberturas: [],
+    coberturasExcluidasIds: [],
+    apontamentos: [],
+    ajustesManuaisDia: [],
+    marcacoesPonto: [],
+    diasFolgaRm: [],
+    pendenciasPonto: [],
+    dataReferenciaPonto: undefined,
+    logsAuditoria: [logLimpeza, ...(estadoAtual.logsAuditoria || [])],
+  };
+
+  salvarEstado(novoEstado);
+
+  const tabelasAfetadas: ItemRelatorioLimpeza[] = [
+    {
+      tabela: "vagas (posições contratuais)",
+      descricao: "Estrutura oficial de posições do Anexo 1-A e Memória de Cálculo",
+      registrosRemovidos: 0,
+      status: "PRESERVADO",
+    },
+    {
+      tabela: "posto (Anexo 1-A e Memória de Cálculo)",
+      descricao: "Cadastro oficial de postos homologados da Petrobras",
+      registrosRemovidos: 0,
+      status: "PRESERVADO",
+    },
+    {
+      tabela: "marcacoes_ponto (presença)",
+      descricao: "Registros de batidas e presenças de ponto apuradas",
+      registrosRemovidos: qtdMarcacoes,
+      status: "LIMPO",
+    },
+    {
+      tabela: "cobertura",
+      descricao: "Coberturas e substituições operacionais registradas",
+      registrosRemovidos: qtdCoberturas,
+      status: "LIMPO",
+    },
+    {
+      tabela: "ocorrencia / ocorrencia_dado_sensivel",
+      descricao: "Atestados, faltas, afastamentos e ocorrências geradoras de descoberto",
+      registrosRemovidos: qtdOcorrencias,
+      status: "LIMPO",
+    },
+    {
+      tabela: "apontamento",
+      descricao: "Apontamentos formais de fiscalização",
+      registrosRemovidos: qtdApontamentos,
+      status: "LIMPO",
+    },
+    {
+      tabela: "ajuste_manual_dia",
+      descricao: "Apontamentos manuais de presença, folga ou falta lançados na escala",
+      registrosRemovidos: qtdAjustes,
+      status: "LIMPO",
+    },
+  ];
+
+  return {
+    sucesso: true,
+    timestamp: dataIso,
+    executadoPor,
+    tabelasAfetadas,
+    totalRegistrosOperacionaisRemovidos:
+      qtdOcorrencias + qtdCoberturas + qtdApontamentos + qtdAjustes + qtdMarcacoes,
+    postosAnexo1APreservados: estadoAtual.postos.length,
     snapshotBackup,
   };
 }

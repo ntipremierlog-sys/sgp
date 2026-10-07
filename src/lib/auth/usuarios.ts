@@ -6,7 +6,7 @@ import {
   LogAuditoriaAdmin,
 } from "./tipos";
 
-const CHAVE_STORAGE_USUARIOS = "sgp_usuarios_v2";
+const CHAVE_STORAGE_USUARIOS = "sgp_usuarios_v4";
 const CHAVE_STORAGE_AUDITORIA_ADMIN = "sgp_auditoria_admin_v1";
 
 export const USUARIOS_PADRAO: UsuarioCadastro[] = [
@@ -24,86 +24,6 @@ export const USUARIOS_PADRAO: UsuarioCadastro[] = [
     criadoEm: "2026-08-01T08:00:00.000Z",
     atualizadoEm: "2026-09-17T10:15:00.000Z",
     autorizadoPor: "Diretoria de Governança Premier",
-    totpAtivo: true,
-  },
-  {
-    id: "usr-gestor-01",
-    nome: "Marcos Valério de Souza",
-    email: "marcos.valerio@premierlogistics.com.br",
-    empresa: "Premier Logistics",
-    perfil: "PREMIER_GESTOR",
-    status: "ATIVO",
-    tipoConta: "SSO_MICROSOFT",
-    basesVinculadas: ["TODAS"],
-    cargo: "Gestor do Contrato Petrobras",
-    ultimoAcesso: "2026-09-17 09:40:00",
-    criadoEm: "2026-08-05T09:00:00.000Z",
-    atualizadoEm: "2026-09-15T14:30:00.000Z",
-    autorizadoPor: "Administrador Premier",
-    totpAtivo: true,
-  },
-  {
-    id: "usr-fiscal-01",
-    nome: "Carlos Eduardo Mendes",
-    email: "carlos.mendes@petrobras.com.br",
-    empresa: "Petróleo Brasileiro S.A. – Petrobras",
-    perfil: "PETROBRAS_FISCAL",
-    status: "ATIVO",
-    tipoConta: "SSO_MICROSOFT",
-    basesVinculadas: ["UFN-III"],
-    cargo: "Fiscal Técnico Petrobras",
-    ultimoAcesso: "2026-09-17 08:30:00",
-    criadoEm: "2026-08-10T10:00:00.000Z",
-    atualizadoEm: "2026-09-10T11:00:00.000Z",
-    autorizadoPor: "Gerência Geral de Suprimentos Petrobras",
-    totpAtivo: true,
-  },
-  {
-    id: "usr-gestor-petro-01",
-    nome: "Mariana Albuquerque",
-    email: "mariana.albuquerque@petrobras.com.br",
-    empresa: "Petróleo Brasileiro S.A. – Petrobras",
-    perfil: "PETROBRAS_GESTOR",
-    status: "ATIVO",
-    tipoConta: "SSO_MICROSOFT",
-    basesVinculadas: ["TODAS"],
-    cargo: "Fiscal Administrativo / Gestora Contratual",
-    ultimoAcesso: "2026-09-16 16:45:00",
-    criadoEm: "2026-08-10T10:00:00.000Z",
-    atualizadoEm: "2026-08-10T10:00:00.000Z",
-    autorizadoPor: "Diretoria de Suprimentos Petrobras",
-    totpAtivo: true,
-  },
-  {
-    id: "usr-supervisor-01",
-    nome: "Renato Silva",
-    email: "renato.silva@premierlogistics.com.br",
-    empresa: "Premier Logistics",
-    perfil: "PREMIER_SUPERVISOR",
-    status: "ATIVO",
-    tipoConta: "LOCAL",
-    basesVinculadas: ["UFN-III"],
-    cargo: "Supervisor Operacional de Campo",
-    ultimoAcesso: "2026-09-17 07:10:00",
-    criadoEm: "2026-08-15T08:00:00.000Z",
-    atualizadoEm: "2026-08-15T08:00:00.000Z",
-    autorizadoPor: "Marcos Valério de Souza",
-    totpAtivo: false,
-  },
-  {
-    id: "usr-rh-01",
-    nome: "Fabiana Ribeiro",
-    email: "fabiana.ribeiro@premierlogistics.com.br",
-    empresa: "Premier Logistics",
-    perfil: "PREMIER_RH",
-    status: "ATIVO",
-    tipoConta: "LOCAL",
-    basesVinculadas: ["TODAS"],
-    cargo: "Analista de Recursos Humanos",
-    ultimoAcesso: "2026-09-16 17:30:00",
-    criadoEm: "2026-08-15T08:00:00.000Z",
-    atualizadoEm: "2026-08-15T08:00:00.000Z",
-    autorizadoPor: "Administrador Premier",
     totpAtivo: true,
   },
 ];
@@ -156,13 +76,19 @@ let logsAdminMemoria: LogAuditoriaAdmin[] = [...LOGS_ADMIN_INICIAIS];
 export function carregarUsuarios(): UsuarioCadastro[] {
   if (typeof window !== "undefined") {
     try {
+      localStorage.removeItem("sgp_usuarios_v1");
+      localStorage.removeItem("sgp_usuarios_v2");
+      localStorage.removeItem("sgp_usuarios_v3");
       const salvo = localStorage.getItem(CHAVE_STORAGE_USUARIOS);
       if (salvo) {
         const parsed = JSON.parse(salvo);
         if (Array.isArray(parsed) && parsed.length > 0) {
           usuariosMemoria = parsed;
+          return usuariosMemoria;
         }
       }
+      localStorage.setItem(CHAVE_STORAGE_USUARIOS, JSON.stringify(USUARIOS_PADRAO));
+      usuariosMemoria = [...USUARIOS_PADRAO];
     } catch {
       // fallback
     }
@@ -475,8 +401,8 @@ export function redefinirSenhaLocal(
 /**
  * Exclusão / Remoção de Usuário
  */
-export function excluirUsuario(usuarioId: string, executor: UsuarioSessao): boolean {
-  if (executor.id === usuarioId) {
+export function excluirUsuario(usuarioId: string, executor?: UsuarioSessao): boolean {
+  if (executor && executor.id === usuarioId) {
     throw new Error("Regra de Segurança: Não é permitido excluir a própria conta.");
   }
 
@@ -493,8 +419,21 @@ export function excluirUsuario(usuarioId: string, executor: UsuarioSessao): bool
   const novaLista = usuarios.filter((u) => u.id !== usuarioId);
   salvarUsuarios(novaLista);
 
+  const executorReal: UsuarioSessao = executor || {
+    id: "usr-admin-01",
+    nome: "Administrador Premier",
+    email: "admin.sgp@premierlogistics.com.br",
+    empresa: "Premier Logistics",
+    perfil: "PREMIER_ADMIN",
+    status: "ATIVO",
+    tipoConta: "LOCAL",
+    basesVinculadas: ["TODAS"],
+    cargo: "Administrador de Sistemas",
+    ultimoAcesso: new Date().toISOString(),
+  };
+
   registrarLogAuditoriaAdmin(
-    executor,
+    executorReal,
     "EXCLUIR_USUARIO",
     "USUARIO",
     usuarioId,
@@ -504,4 +443,39 @@ export function excluirUsuario(usuarioId: string, executor: UsuarioSessao): bool
   );
 
   return true;
+}
+
+/**
+ * Purgar todos os usuários secundários e manter estritamente o Administrador Premier
+ */
+export function manterApenasAdministradorPremier(executor?: UsuarioSessao): UsuarioCadastro[] {
+  const usuarios = carregarUsuarios();
+  const admin = usuarios.find((u) => u.perfil === "PREMIER_ADMIN") || USUARIOS_PADRAO[0];
+  const novaLista = [admin];
+  salvarUsuarios(novaLista);
+
+  const executorReal: UsuarioSessao = executor || {
+    id: "usr-admin-01",
+    nome: "Administrador Premier",
+    email: "admin.sgp@premierlogistics.com.br",
+    empresa: "Premier Logistics",
+    perfil: "PREMIER_ADMIN",
+    status: "ATIVO",
+    tipoConta: "LOCAL",
+    basesVinculadas: ["TODAS"],
+    cargo: "Administrador de Sistemas",
+    ultimoAcesso: new Date().toISOString(),
+  };
+
+  registrarLogAuditoriaAdmin(
+    executorReal,
+    "PURGAR_USUARIOS",
+    "USUARIO",
+    admin.id,
+    "Exclusão em lote realizada: apenas o Administrador Premier foi mantido no sistema",
+    `${usuarios.length} usuários`,
+    "1 usuário (Administrador Premier)"
+  );
+
+  return novaLista;
 }

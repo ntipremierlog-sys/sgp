@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { FileSpreadsheet, CheckCircle2, ArrowLeft } from "lucide-react";
+import { FileSpreadsheet, CheckCircle2, ArrowLeft, ArrowRight } from "lucide-react";
 import { carregarEstado, EstadoOperacionalCompleto } from "@/lib/dados/estado-operacional";
 import { obterOcupacaoConsolidada } from "@/lib/servicos/adaptador-painel";
 import { ResultadoOcupacaoConsolidado } from "@/lib/servicos/calculo-ocupacao";
@@ -363,6 +363,14 @@ function PainelBaseContent() {
                     <span className="text-[#5B6474] font-medium">
                       {item.titularNome}
                     </span>
+                    {item.percentualCumprimentoFormatado && (
+                      <>
+                        <span className="text-slate-300">·</span>
+                        <span className="text-[#5B6474] text-xs font-normal">
+                          Presença: <span className="font-mono text-[#1A2230] font-medium">{item.percentualCumprimentoFormatado}</span>
+                        </span>
+                      </>
+                    )}
                   </div>
 
                   {/* Resumo em uma frase sem texto cortado */}
@@ -374,20 +382,20 @@ function PainelBaseContent() {
                 {/* Direita: Selo Único de Prazo + Botão Primário Único */}
                 <div className="flex items-center gap-3 shrink-0">
                   <span
-                    className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap ${
-                      item.seloCor === "vermelho"
-                        ? "bg-[#FEF3F2] text-[#B42318] border border-[#FECDCA]"
-                        : "bg-[#FFFAEB] text-[#B54708] border border-[#FEDF89]"
+                    className={`text-xs font-semibold whitespace-nowrap inline-flex items-center gap-1.5 ${
+                      item.seloCor === "vermelho" ? "text-[#B42318]" : "text-[#B54708]"
                     }`}
                   >
-                    {item.seloTexto}
+                    <span className={`w-2 h-2 rounded-full ${item.seloCor === "vermelho" ? "bg-[#B42318]" : "bg-[#B54708]"}`} />
+                    <span>{item.seloTexto}</span>
                   </span>
 
                   <button
                     onClick={() => handleAbrirDrawer(item)}
-                    className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#1F4FD1] hover:bg-[#163CA8] text-white text-xs font-semibold shadow-xs transition-all"
+                    className="h-8 px-3.5 inline-flex items-center gap-1.5 rounded-lg border border-[#D0D5DD] bg-white hover:bg-[#F8FAFC] hover:border-[#1F4FD1] text-[#344054] hover:text-[#1F4FD1] text-xs font-semibold shadow-2xs transition-all cursor-pointer group/btn shrink-0"
                   >
-                    {ehFiscal ? "Ver detalhes" : "Resolver"}
+                    <span>{ehFiscal ? "Ver detalhes" : "Resolver"}</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-[#98A2B3] group-hover/btn:text-[#1F4FD1] group-hover/btn:translate-x-0.5 transition-transform" />
                   </button>
                 </div>
               </div>

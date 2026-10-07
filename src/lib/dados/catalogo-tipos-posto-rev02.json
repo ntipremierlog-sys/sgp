@@ -1,0 +1,54 @@
+[
+  {
+    "id": "ADM_09H",
+    "nome": "Adm/09h",
+    "posicoesPorPosto": 1,
+    "statusPremissa": "fechada",
+    "regraCadastro": "1 posto = 1 posição",
+    "observacao": "Não inferir nova posição por troca de empregado."
+  },
+  {
+    "id": "ADM_12H",
+    "nome": "Adm/12h",
+    "posicoesPorPosto": 2,
+    "statusPremissa": "fechada",
+    "regraCadastro": "1 posto = 2 posições",
+    "observacao": "Pessoas diferentes no período não aumentam a estrutura."
+  },
+  {
+    "id": "TURNO_12H",
+    "nome": "Turno/12h",
+    "posicoesPorPosto": 2,
+    "statusPremissa": "fechada",
+    "regraCadastro": "1 posto = 2 posições",
+    "observacao": "Pessoas diferentes no período não aumentam a estrutura."
+  },
+  {
+    "id": "ADM_16H",
+    "nome": "Adm/16h",
+    "posicoesPorPosto": 2,
+    "statusPremissa": "a confirmar",
+    "regraCadastro": "Premissa: 1 posto = 2 posições",
+    "observacao": "Confirmar a regra operacional antes da carga definitiva."
+  },
+  {
+    "id": "TURNO_16H",
+    "nome": "Turno/16h",
+    "posicoesPorPosto": 2,
+    "statusPremissa": "a confirmar",
+    "regraCadastro": "Premissa: 1 posto = 2 posições",
+    "observacao": "Confirmar a regra operacional antes da carga definitiva.",
+    "excecoes": {
+      "CABIUNAS": 4,
+      "PST-CABIUNAS-010": 4
+    }
+  },
+  {
+    "id": "TURNO_24H",
+    "nome": "Turno/24h",
+    "posicoesPorPosto": 4,
+    "statusPremissa": "fechada",
+    "regraCadastro": "1 posto = 4 posições",
+    "observacao": "Ferista, férias, substituição ou sucessão não criam 5ª posição."
+  }
+]

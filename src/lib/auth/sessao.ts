@@ -18,6 +18,8 @@ export const SESSAO_PADRAO_DEV: UsuarioSessao = {
   ultimoAcesso: "2026-09-17 10:15:00",
 };
 
+export const TIMEOUT_INATIVIDADE_MS = 30 * 60 * 1000; // 30 minutos de inatividade máxima
+
 /**
  * Codifica a sessão em base64 com timestamp de integridade
  */
@@ -36,7 +38,7 @@ export function codificarTokenSessao(usuario: UsuarioSessao): string {
 /**
  * Decodifica o token de sessão e resolve o usuário ativo
  */
-export function decodificarTokenSessao(token: string): { userId: string; email: string } | null {
+export function decodificarTokenSessao(token: string): { userId: string; email: string; timestamp?: number } | null {
   try {
     const raw = Buffer.from(token, "base64").toString("utf-8");
     const parsed = JSON.parse(raw);
@@ -50,10 +52,23 @@ export function decodificarTokenSessao(token: string): { userId: string; email: 
 }
 
 /**
+ * Verifica se uma sessão ainda é válida ou se expirou por inatividade
+ */
+export function verificarSessaoAtiva(token: string): { valida: boolean; expiradaPorInatividade: boolean } {
+  const decodificado = decodificarTokenSessao(token);
+  if (!decodificado) return { valida: false, expiradaPorInatividade: false };
+  if (decodificado.timestamp && Date.now() - decodificado.timestamp > TIMEOUT_INATIVIDADE_MS) {
+    return { valida: false, expiradaPorInatividade: true };
+  }
+  return { valida: true, expiradaPorInatividade: false };
+}
+
+/**
  * Obtém a sessão autenticada no servidor (Server Components, API Routes, Server Actions)
  * O perfil sempre é revalidado contra o cadastro ativo do usuário no servidor!
  * "Alterações de perfil passam a valer na próxima requisição do usuário afetado."
  * "Usuário desativado perde o acesso imediatamente."
+ * "Sessão com expiração por inatividade."
  */
 export async function obterSessaoServidor(): Promise<UsuarioSessao | null> {
   let token: string | undefined;
@@ -79,6 +94,11 @@ export async function obterSessaoServidor(): Promise<UsuarioSessao | null> {
 
   const decodificado = decodificarTokenSessao(token);
   if (!decodificado) return null;
+
+  // Validação estrita de expiração por inatividade
+  if (decodificado.timestamp && Date.now() - decodificado.timestamp > TIMEOUT_INATIVIDADE_MS) {
+    return null;
+  }
 
   // Busca o cadastro atualizado
   const usuario = usuarios.find(

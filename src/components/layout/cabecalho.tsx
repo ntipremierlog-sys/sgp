@@ -97,13 +97,20 @@ export function Cabecalho({
             </span>
           </div>
 
-          <div className="hidden md:flex items-center gap-1.5 ml-4 pl-4 border-l border-slate-200 text-xs">
-            <Clock className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-slate-500">Ponto até:</span>
-            <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-              {dataRefPonto}
-            </span>
-          </div>
+          {dataRefPonto ? (
+            <div className="hidden md:flex items-center gap-1.5 ml-4 pl-4 border-l border-slate-200 text-xs">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-slate-500">Ponto até:</span>
+              <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                {dataRefPonto}
+              </span>
+            </div>
+          ) : (
+            <div className="hidden md:flex items-center gap-1.5 ml-4 pl-4 border-l border-slate-200 text-xs text-slate-400">
+              <Clock className="w-3.5 h-3.5 text-slate-300" />
+              <span className="italic">Aguardando importação RM</span>
+            </div>
+          )}
         </div>
 
         {/* Direita: Nome do Usuário + Nome do Perfil em texto simples (sem seletor de troca) */}

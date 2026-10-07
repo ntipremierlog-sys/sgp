@@ -237,6 +237,10 @@ model Posto {
   deletedAt           DateTime?       @map("deleted_at")
 
   unidade             Unidade         @relation(fields: [unidadeId], references: [id])
+  regimePostoId       String?         @map("regime_posto_id") @db.Uuid
+  regimePosto         RegimePosto?    @relation(fields: [regimePostoId], references: [id])
+  posicoes            PosicaoPosto[]
+  feristas            FeristaPosto[]
   alocacoes           Alocacao[]
   ocorrencias         Ocorrencia[]
   coberturas          Cobertura[]
@@ -281,6 +285,8 @@ model Profissional {
   frequencias           FrequenciaDia[]
   titularOcupacoes      OcupacaoPostoDia[]    @relation("TitularOcupacao")
   ocupanteOcupacoes     OcupacaoPostoDia[]    @relation("OcupanteOcupacao")
+  feristasPostos        FeristaPosto[]
+  historicoTitularPosicoes HistoricoTitularPosicao[]
 
   @@map("profissional")
 }
@@ -418,6 +424,8 @@ model Cobertura {
   deletedAt                 DateTime?       @map("deleted_at")
 
   posto                     Posto           @relation(fields: [postoId], references: [id])
+  posicaoId                 String?         @map("posicao_id") @db.Uuid
+  posicao                   PosicaoPosto?   @relation(fields: [posicaoId], references: [id])
   ocorrencia                Ocorrencia?     @relation(fields: [ocorrenciaId], references: [id])
   profissionalSubstituto    Profissional    @relation("SubstitutoCobertura", fields: [profissionalSubstitutoId], references: [id])
   ocupacoesDia              OcupacaoPostoDia[]
@@ -673,3 +681,231 @@ model ValorPostoContrato {
 
   @@map("valor_posto_contrato")
 }
+
+// -----------------------------------------------------------------------------
+// MODELOS: ESTRUTURA OFICIAL SGP (REGIME_POSTO, POSIÇÃO, HISTÓRICO E FERISTAS)
+// -----------------------------------------------------------------------------
+
+model RegimePosto {
+  id                  String        @id @default(uuid()) @db.Uuid
+  codigo              String        @unique @map("codigo") // ADM_09H, ADM_12H, TURNO_12H, ADM_16H, TURNO_16H, TURNO_24H
+  nome                String        @map("nome") // Adm/09h, Adm/12h, etc.
+  quantidadePosicoes  Int           @map("quantidade_posicoes") // 1, 2, 2, 2, 3, 4
+  regraCadastro       String        @map("regra_cadastro")
+  observacoes         String?       @map("observacoes")
+  statusPremissa      String        @default("fechada") @map("status_premissa")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  postos              Posto[]
+
+  @@map("regime_posto")
+}
+
+model PosicaoPosto {
+  id                  String        @id @default(uuid()) @db.Uuid
+  posicaoIdSgp        String        @unique @map("posicao_id_sgp") // Chave permanente e imutável (ex.: "POS-BOAVENTURA-007-01")
+  postoId             String        @map("posto_id") @db.Uuid
+  idOriginalMc        String?       @map("id_original_mc") // Numeração do Luiz (ex.: "7.1") - rastreabilidade, NUNCA chave
+  sufixo              Int           @map("sufixo") // 1, 2, 3, 4
+  statusValidacao     String        @default("VALIDADA") @map("status_validacao")
+  conflitoCadastro    String?       @map("conflito_cadastro")
+  ehEstrutural        Boolean       @default(true) @map("eh_estrutural")
+
+  // Escala da posição (Passo 4 - campos oficiais):
+  horarioRm           String?       @map("horario_rm")
+  escalaTipo          String?       @map("escala_tipo")
+  faixaHoraria        String?       @map("faixa_horaria")
+  regimeDias          String?       @map("regime_dias")
+  grupoRevezamento    String?       @map("grupo_revezamento") // NUNCA inferido. Vazio permanece vazio.
+  dataBaseEscala      DateTime?     @map("data_base_escala") @db.Date // NUNCA inferido. Vazio permanece vazio.
+  faseCiclo           String?       @map("fase_ciclo") // NUNCA inferido. Vazio permanece vazio.
+  fonteEscala         String?       @map("fonte_escala")
+  statusProgramacao   String?       @map("status_programacao")
+
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  posto               Posto         @relation(fields: [postoId], references: [id])
+  historicoTitulares  HistoricoTitularPosicao[]
+  coberturas          Cobertura[]
+
+  @@map("posicao_posto")
+}
+
+model HistoricoTitularPosicao {
+  id                  String        @id @default(uuid()) @db.Uuid
+  posicaoId           String        @map("posicao_id") @db.Uuid
+  profissionalId      String        @map("profissional_id") @db.Uuid
+  dataInicio          DateTime      @map("data_inicio") @db.Date
+  dataFim             DateTime?     @map("data_fim") @db.Date // nulo = titular vigente
+  motivo              String?       @map("motivo")
+  observacoes         String?       @map("observacoes")
+
+  posicao             PosicaoPosto  @relation(fields: [posicaoId], references: [id])
+  profissional        Profissional  @relation(fields: [profissionalId], references: [id])
+
+  @@map("historico_titular_posicao")
+}
+
+model FeristaPosto {
+  id                  String        @id @default(uuid()) @db.Uuid
+  profissionalId      String        @map("profissional_id") @db.Uuid
+  postoId             String        @map("posto_id") @db.Uuid
+  unidadeId           String?       @map("unidade_id") @db.Uuid
+  ativo               Boolean       @default(true)
+  dataInicio          DateTime      @default(now()) @map("data_inicio")
+  dataFim             DateTime?     @map("data_fim")
+  observacoes         String?       @map("observacoes")
+
+  profissional        Profissional  @relation(fields: [profissionalId], references: [id])
+  posto               Posto         @relation(fields: [postoId], references: [id])
+
+  @@unique([profissionalId, postoId])
+  @@map("ferista_posto")
+}
+
+// -----------------------------------------------------------------------------
+// MODELOS: IMPORTAÇÃO PERIÓDICA RM / TOTVS (FOLHA DE PAGAMENTO)
+// -----------------------------------------------------------------------------
+
+model HorarioRm {
+  codigo              String                 @id @map("codigo") // Chave = código "Horário" (texto, ex: "1390", "1409", "1441", "1391")
+  descricao           String                 @map("descricao") // Descrição intacta original (preserva espaços e literal \n)
+  jornadaPadrao       String?                @map("jornada_padrao") // Ex: "220:00"
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+
+  funcionarios        FuncionarioRm[]
+  historicos          HistoricoFuncionarioRm[]
+
+  @@map("horario_rm")
+}
+
+model SecaoRm {
+  codigo              String                 @id @map("codigo") // Chave = código "Seção" (texto no formato 1.01.080.XXX)
+  descricao           String                 @map("descricao") // Descrição original sem alteração (ex: "UFN-III (Três Lagoas - MS)")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+
+  funcionarios        FuncionarioRm[]
+  historicos          HistoricoFuncionarioRm[]
+
+  @@map("secao_rm")
+}
+
+model SituacaoRm {
+  codigo              String                 @id @map("codigo") // Chave = "Situação" (A, D, E, F, P, V, Z...)
+  descricao           String                 @map("descricao") // "Descrição da Situação" (Ativo, Demitido, Férias, etc.)
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+
+  funcionarios        FuncionarioRm[]
+  historicos          HistoricoFuncionarioRm[]
+
+  @@map("situacao_rm")
+}
+
+model FuncaoRm {
+  nome                String                 @id @map("nome") // A partir de "Nome Funcão" (ex: "ASSISTENTE DE LOGISTICA")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+
+  funcionarios        FuncionarioRm[]
+  historicos          HistoricoFuncionarioRm[]
+
+  @@map("funcao_rm")
+}
+
+model FuncionarioRm {
+  chapa               String                 @id @map("chapa") // Chave única = Chapa (texto com 6 dígitos, preservando zeros à esquerda)
+  nome                String                 @map("nome")
+  cpf                 String                 @unique @map("cpf") // CPF 11 dígitos texto único
+  funcaoNome          String                 @map("funcao_nome")
+  horarioCodigo       String                 @map("horario_codigo")
+  secaoCodigo         String                 @map("secao_codigo")
+  situacaoCodigo      String                 @map("situacao_codigo")
+  salarioMensal       Decimal                @map("salario_mensal") @db.Decimal(12, 2)
+  salarioHora         Decimal                @map("salario_hora") @db.Decimal(12, 2)
+  dataAdmissao        DateTime               @map("data_admissao") @db.Date
+  dataDemissao        DateTime?              @map("data_demissao") @db.Date
+  dataNascimento      DateTime               @map("data_nascimento") @db.Date
+  sexo                String                 @map("sexo") @db.VarChar(1) // "M" ou "F"
+  jornada             String                 @map("jornada") // Ex: "220:00"
+  
+  // Controle de snapshots e cargas recorrentes
+  constaUltimaCarga   Boolean                @default(true) @map("consta_ultima_carga")
+  loteUltimaCargaId   String?                @map("lote_ultima_carga_id") @db.Uuid
+  dataUltimaCarga     DateTime               @map("data_ultima_carga")
+
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+
+  funcao              FuncaoRm               @relation(fields: [funcaoNome], references: [nome])
+  horario             HorarioRm              @relation(fields: [horarioCodigo], references: [codigo])
+  secao               SecaoRm                @relation(fields: [secaoCodigo], references: [codigo])
+  situacao            SituacaoRm             @relation(fields: [situacaoCodigo], references: [codigo])
+  loteUltimaCarga     LoteCargaRm?           @relation(fields: [loteUltimaCargaId], references: [id])
+  historicos          HistoricoFuncionarioRm[]
+
+  @@map("funcionario_rm")
+}
+
+model HistoricoFuncionarioRm {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  chapa               String                 @map("chapa")
+  loteCargaId         String                 @map("lote_carga_id") @db.Uuid
+  dataVigencia        DateTime               @map("data_vigencia") @db.Date // Data de vigência = data da carga
+  tipoAlteracao       String                 @map("tipo_alteracao") // SECAO, HORARIO, FUNCAO, SITUACAO, SALARIO, CARGA_INICIAL
+  
+  // Campos de rastreabilidade
+  secaoCodigo         String?                @map("secao_codigo")
+  horarioCodigo       String?                @map("horario_codigo")
+  funcaoNome          String?                @map("funcao_nome")
+  situacaoCodigo      String?                @map("situacao_codigo")
+  
+  valorAnterior       String?                @map("valor_anterior")
+  valorNovo           String                 @map("valor_novo")
+  descricaoAnterior   String?                @map("descricao_anterior")
+  descricaoNova       String?                @map("descricao_nova")
+
+  createdAt           DateTime               @default(now()) @map("created_at")
+
+  funcionario         FuncionarioRm          @relation(fields: [chapa], references: [chapa])
+  loteCarga           LoteCargaRm            @relation(fields: [loteCargaId], references: [id])
+  secao               SecaoRm?               @relation(fields: [secaoCodigo], references: [codigo])
+  horario             HorarioRm?             @relation(fields: [horarioCodigo], references: [codigo])
+  funcao              FuncaoRm?              @relation(fields: [funcaoNome], references: [nome])
+  situacao            SituacaoRm?            @relation(fields: [situacaoCodigo], references: [codigo])
+
+  @@map("historico_funcionario_rm")
+}
+
+model LoteCargaRm {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  dataCarga           DateTime               @default(now()) @map("data_carga")
+  dataReferencia      DateTime               @map("data_referencia") @db.Date
+  nomeArquivo         String                 @map("nome_arquivo")
+  formatoArquivo      String                 @map("formato_arquivo") // XLS, XLSX, CSV
+  hashSha256          String                 @unique @map("hash_sha256")
+  
+  totalLinhasLidas    Int                    @map("total_linhas_lidas")
+  totalNovos          Int                    @map("total_novos")
+  totalAtualizados    Int                    @map("total_atualizados")
+  totalSemAlteracao   Int                    @map("total_sem_alteracao")
+  totalNaoConstam     Int                    @map("total_nao_constam")
+  totalErros          Int                    @map("total_erros")
+  totalAlertas        Int                    @map("total_alertas")
+  
+  divergenciaSecao    Boolean                @default(false) @map("divergencia_secao")
+  chapasNaoConstantes Json?                  @map("chapas_nao_constantes") // Lista de chapas ausentes
+  alertasDetalhes     Json?                  @map("alertas_detalhes")
+  errosDetalhes       Json?                  @map("erros_detalhes")
+  usuarioProcesso     String?                @map("usuario_processo")
+
+  funcionarios        FuncionarioRm[]
+  historicos          HistoricoFuncionarioRm[]
+
+  @@map("lote_carga_rm")
+}
+

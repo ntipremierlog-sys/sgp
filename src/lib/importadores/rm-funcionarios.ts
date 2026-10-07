@@ -22,9 +22,17 @@ import {
   salvarEstado,
   EstadoOperacionalCompleto,
   ProfissionalOperacional,
+  MovimentacaoHistorico,
   LoteImportacaoOperacional,
+  OcorrenciaOperacional,
+  LogAuditoriaOperacional,
+  ALOCACOES_MC_REAIS,
   calcularIdade,
 } from "../dados/estado-operacional";
+import {
+  obterPeriodoCompetencia,
+  marcarCalendarioDesatualizado,
+} from "../servicos/calendario-competencia";
 import {
   obterBasePorCodigoSecao,
   registrarSecaoImportada,
@@ -73,9 +81,11 @@ export interface LinhaFuncionarioRmProcessada {
   };
 }
 
+export type TipoArquivoRm = "FUNCIONARIOS_RM" | "ALOCADOS_SIFAC" | "ABONO_RM" | "REGISTROS_PONTO_RM" | "DESCONHECIDO";
+
 export interface ResultadoIdentificacaoRm {
   reconhecido: boolean;
-  tipo: "FUNCIONARIOS_RM" | "ALOCADOS_SIFAC" | "ABONO_RM" | "REGISTROS_PONTO_RM" | "DESCONHECIDO";
+  tipo: TipoArquivoRm;
   colunasEncontradas: string[];
   colunasObrigatoriasFaltando: string[];
 }
@@ -89,11 +99,31 @@ export interface TotaisSimulacaoRm {
   alertas: number;
 }
 
+export interface ItemLinhaRejeitada {
+  linha: number;
+  aba?: string;
+  chapa?: string;
+  nome?: string;
+  coluna?: string;
+  motivo: string;
+}
+
+export interface AfastamentoFeriasValido {
+  chapa: string;
+  tipoOriginal: string;
+  tipoMapeado: "Férias" | "Afastamento" | "Licença";
+  dataInicio: string;
+  dataFim?: string;
+  dataRetornoPrevisto?: string;
+}
+
 export interface ResultadoSimulacaoRm {
   tipo: "FUNCIONARIOS_RM";
   arquivoNome: string;
   hashSha256: string;
   dataReferencia: string;
+  competencia?: string;
+  dataExtracao?: string;
   arquivoDuplicado: boolean;
   loteAnteriorId?: string;
   loteAnteriorData?: string;
@@ -101,9 +131,23 @@ export interface ResultadoSimulacaoRm {
   linhas: LinhaFuncionarioRmProcessada[];
   inconsistencias: ItemInconsistencia[];
   alertasColaboradoresNaoConstantes: string[];
+  linhasRejeitadasLista?: ItemLinhaRejeitada[];
+  afastamentosValidos?: AfastamentoFeriasValido[];
 }
 
-// Colunas obrigatórias para identificação do tipo Funcionários RM
+// Colunas obrigatórias para identificação do tipo Funcionários RM (Aba CADASTRO)
+export const COLUNAS_OBRIGATORIAS_CADASTRO_RM = [
+  "chapa",
+  "nome",
+  "secao",
+  "descricao secao",
+  "nome funcao",
+  "horario",
+  "situacao",
+  "data de admissao",
+];
+
+// Colunas obrigatórias legado para compatibilidade de testes
 export const COLUNAS_OBRIGATORIAS_RM = [
   "chapa",
   "cpf",
@@ -111,6 +155,13 @@ export const COLUNAS_OBRIGATORIAS_RM = [
   "descricao secao",
   "nome funcao",
   "situacao",
+];
+
+// Colunas obrigatórias da Aba AFASTAMENTOS_FERIAS
+export const COLUNAS_OBRIGATORIAS_AFASTAMENTOS = [
+  "chapa",
+  "tipo",
+  "data_inicio",
 ];
 
 // Colunas permitidas (todas as outras são sumariamente descartadas na leitura)
@@ -348,12 +399,230 @@ export function identificarTipoArquivo(cabecalhosBrutos: string[]): ResultadoIde
 }
 
 /**
+ * Confere compatibilidade dos cabeçalhos com o tipo esperado e avisa caso pareça ser de outro tipo
+ */
+export function conferirCabecalhosComTipo(
+  tipoAlvo: "FUNCIONARIOS_RM" | "REGISTROS_PONTO_RM" | "ABONO_RM" | "ALOCADOS_SIFAC",
+  cabecalhosBrutos: string[]
+): {
+  compativel: boolean;
+  tipoDetectado: "FUNCIONARIOS_RM" | "REGISTROS_PONTO_RM" | "ABONO_RM" | "ALOCADOS_SIFAC" | "DESCONHECIDO";
+  avisoDivergencia?: string;
+  colunasFaltando: string[];
+} {
+  const detectado = identificarTipoArquivo(cabecalhosBrutos);
+  if (detectado.tipo === tipoAlvo) {
+    return {
+      compativel: true,
+      tipoDetectado: detectado.tipo,
+      colunasFaltando: [],
+    };
+  }
+
+  let avisoDivergencia: string | undefined;
+  if (detectado.tipo === "ABONO_RM") {
+    avisoDivergencia = "Este arquivo parece ser de Cubo de Abono.";
+  } else if (detectado.tipo === "REGISTROS_PONTO_RM") {
+    avisoDivergencia = "Este arquivo parece ser de Ponto / Registros.";
+  } else if (detectado.tipo === "FUNCIONARIOS_RM") {
+    avisoDivergencia = "Este arquivo parece ser de Funcionários (RM/TOTVS).";
+  } else if (detectado.tipo === "ALOCADOS_SIFAC") {
+    avisoDivergencia = "Este arquivo parece ser de Lista de Alocados (SIFAC).";
+  }
+
+  return {
+    compativel: false,
+    tipoDetectado: detectado.tipo,
+    avisoDivergencia,
+    colunasFaltando: detectado.colunasObrigatoriasFaltando,
+  };
+}
+
+/**
+ * Gera modelo oficial XLSX de Funcionários RM com 2 abas: CADASTRO e AFASTAMENTOS_FERIAS
+ */
+export function gerarModeloFuncionariosXlsx(): Uint8Array {
+  const wb = XLSX.utils.book_new();
+
+  // Aba 1: CADASTRO
+  // Obrigatórias: CHAPA, NOME, COD.SECAO, DESC.SECAO, FUNCAO, HORARIO, SITUACAO, DATA_ADMISSAO
+  // Opcionais: CPF, DATA_DEMISSAO, DATA_INICIO_AVISO
+  const dadosCadastro = [
+    {
+      CHAPA: "000101",
+      NOME: "CARLOS EDUARDO SILVA",
+      "COD.SECAO": "1.01.080.029",
+      "DESC.SECAO": "UFN-III (Três Lagoas - MS)",
+      FUNCAO: "Almoxarife Líder",
+      HORARIO: "001",
+      SITUACAO: "A",
+      DATA_ADMISSAO: "02/01/2024",
+      CPF: "52998224725",
+      DATA_DEMISSAO: "",
+      DATA_INICIO_AVISO: "",
+    },
+    {
+      CHAPA: "000102",
+      NOME: "MARIANA SOUZA LIMA",
+      "COD.SECAO": "1.01.080.029",
+      "DESC.SECAO": "UFN-III (Três Lagoas - MS)",
+      FUNCAO: "Auxiliar de Almoxarifado I",
+      HORARIO: "001",
+      SITUACAO: "A",
+      DATA_ADMISSAO: "05/01/2024",
+      CPF: "11144477735",
+      DATA_DEMISSAO: "",
+      DATA_INICIO_AVISO: "",
+    },
+    {
+      CHAPA: "000104",
+      NOME: "JOSE PEREIRA SANTOS",
+      "COD.SECAO": "1.01.080.029",
+      "DESC.SECAO": "UFN-III (Três Lagoas - MS)",
+      FUNCAO: "Operador de Empilhadeira Líder",
+      HORARIO: "002",
+      SITUACAO: "A",
+      DATA_ADMISSAO: "01/02/2024",
+      CPF: "05299822472",
+      DATA_DEMISSAO: "",
+      DATA_INICIO_AVISO: "",
+    },
+    {
+      CHAPA: "000114",
+      NOME: "THIAGO BARBOSA",
+      "COD.SECAO": "1.01.080.029",
+      "DESC.SECAO": "UFN-III (Três Lagoas - MS)",
+      FUNCAO: "Auxiliar de Pátio",
+      HORARIO: "001",
+      SITUACAO: "A",
+      DATA_ADMISSAO: "01/05/2024",
+      CPF: "78912345601",
+      DATA_DEMISSAO: "",
+      DATA_INICIO_AVISO: "",
+    },
+    {
+      CHAPA: "037355",
+      NOME: "MARCOS ROBERTO ALVES",
+      "COD.SECAO": "1.01.080.029",
+      "DESC.SECAO": "UFN-III (Três Lagoas - MS)",
+      FUNCAO: "Almoxarife",
+      HORARIO: "001",
+      SITUACAO: "A",
+      DATA_ADMISSAO: "10/03/2024",
+      CPF: "85491237000",
+      DATA_DEMISSAO: "",
+      DATA_INICIO_AVISO: "",
+    },
+  ];
+
+  const wsCadastro = XLSX.utils.json_to_sheet(dadosCadastro);
+  XLSX.utils.book_append_sheet(wb, wsCadastro, "CADASTRO");
+
+  // Aba 2: AFASTAMENTOS_FERIAS
+  // Obrigatórias: CHAPA, TIPO, DATA_INICIO
+  // Opcionais: DATA_FIM, DATA_RETORNO_PREVISTO
+  const dadosAfastamentos = [
+    {
+      CHAPA: "000102",
+      TIPO: "Férias Regulamentares",
+      DATA_INICIO: "15/08/2026",
+      DATA_FIM: "29/08/2026",
+      DATA_RETORNO_PREVISTO: "30/08/2026",
+    },
+    {
+      CHAPA: "000114",
+      TIPO: "Afastamento Médico (INSS)",
+      DATA_INICIO: "20/08/2026",
+      DATA_FIM: "",
+      DATA_RETORNO_PREVISTO: "10/09/2026",
+    },
+    {
+      CHAPA: "037355",
+      TIPO: "Licença Paternidade",
+      DATA_INICIO: "01/09/2026",
+      DATA_FIM: "05/09/2026",
+      DATA_RETORNO_PREVISTO: "06/09/2026",
+    },
+  ];
+
+  const wsAfastamentos = XLSX.utils.json_to_sheet(dadosAfastamentos);
+  XLSX.utils.book_append_sheet(wb, wsAfastamentos, "AFASTAMENTOS_FERIAS");
+
+  const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  return new Uint8Array(wbOut);
+}
+
+/**
+ * Lê uma planilha suportando abas específicas: CADASTRO e AFASTAMENTOS_FERIAS
+ */
+export function lerPlanilhaFuncionariosComAbas(buffer: Uint8Array | ArrayBuffer): {
+  cabecalhosCadastro: string[];
+  linhasCadastro: Record<string, unknown>[];
+  cabecalhosAfastamentos: string[];
+  linhasAfastamentos: Record<string, unknown>[];
+  temAbaAfastamentos: boolean;
+} {
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+  const sheetNames = workbook.SheetNames || [];
+
+  // Localiza aba de cadastro (nome contendo cadastro ou funcionarios, ou a 1ª aba)
+  const nomeAbaCadastro =
+    sheetNames.find((s) => {
+      const norm = normalizarCabecalho(s);
+      return norm.includes("cadastro") || norm.includes("funcionario");
+    }) || sheetNames[0];
+
+  // Localiza aba de afastamentos se houver
+  const nomeAbaAfastamentos = sheetNames.find((s) => {
+    const norm = normalizarCabecalho(s);
+    return norm.includes("afastament") || norm.includes("feria");
+  });
+
+  const extrairLinhasAba = (nomeAba?: string) => {
+    if (!nomeAba || !workbook.Sheets[nomeAba]) return { cabecalhos: [], linhas: [] };
+    const worksheet = workbook.Sheets[nomeAba];
+    const dados = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
+      header: 1,
+      defval: "",
+    });
+    if (!dados || dados.length < 2) return { cabecalhos: [], linhas: [] };
+    const cabecalhos = (dados[0] as string[]).map((c) => String(c || "").trim());
+    const linhas: Record<string, unknown>[] = [];
+    for (let i = 1; i < dados.length; i++) {
+      const row = dados[i] as unknown[];
+      if (!row || row.length === 0 || row.every((c) => c === "" || c === null || c === undefined)) continue;
+      const obj: Record<string, unknown> = {};
+      cabecalhos.forEach((col, idx) => {
+        obj[col] = row[idx] !== undefined ? row[idx] : "";
+      });
+      linhas.push(obj);
+    }
+    return { cabecalhos, linhas };
+  };
+
+  const { cabecalhos: cabCadastro, linhas: linCadastro } = extrairLinhasAba(nomeAbaCadastro);
+  const { cabecalhos: cabAfastamentos, linhas: linAfastamentos } = extrairLinhasAba(nomeAbaAfastamentos);
+
+  return {
+    cabecalhosCadastro: cabCadastro,
+    linhasCadastro: linCadastro,
+    cabecalhosAfastamentos: cabAfastamentos,
+    linhasAfastamentos: linAfastamentos,
+    temAbaAfastamentos: !!nomeAbaAfastamentos && linAfastamentos.length > 0,
+  };
+}
+
+/**
  * Extrai linhas de dados de uma planilha XLSX ou XLS
  */
 export function lerPlanilhaEmLinhas(buffer: Uint8Array | ArrayBuffer): {
   cabecalhos: string[];
   linhas: Record<string, unknown>[];
 } {
+  const parsed = lerPlanilhaFuncionariosComAbas(buffer);
+  if (parsed.cabecalhosCadastro.length > 0) {
+    return { cabecalhos: parsed.cabecalhosCadastro, linhas: parsed.linhasCadastro };
+  }
   const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
   const primeiraAba = workbook.SheetNames[0];
   if (!primeiraAba) {
@@ -364,14 +633,11 @@ export function lerPlanilhaEmLinhas(buffer: Uint8Array | ArrayBuffer): {
     header: 1,
     defval: "",
   });
-
   if (!dados || dados.length < 2) {
     throw new Error("A planilha não possui dados suficientes (esperado cabeçalho e ao menos uma linha de dados).");
   }
-
   const cabecalhos = (dados[0] as string[]).map((c) => String(c || "").trim());
   const linhas: Record<string, unknown>[] = [];
-
   for (let i = 1; i < dados.length; i++) {
     const linhaArr = dados[i] as unknown[];
     if (!linhaArr || linhaArr.length === 0 || linhaArr.every((c) => c === "" || c === null || c === undefined)) {
@@ -383,7 +649,6 @@ export function lerPlanilhaEmLinhas(buffer: Uint8Array | ArrayBuffer): {
     });
     linhas.push(linhaObj);
   }
-
   return { cabecalhos, linhas };
 }
 
@@ -394,8 +659,11 @@ export async function simularImportacaoFuncionariosRm(
   buffer: Uint8Array | ArrayBuffer,
   arquivoNome: string,
   dataReferencia: string,
-  estadoCustom?: EstadoOperacionalCompleto
+  estadoCustomOuOptions?: EstadoOperacionalCompleto | { competencia?: string; dataExtracao?: string },
+  optionsParam?: { competencia?: string; dataExtracao?: string }
 ): Promise<ResultadoSimulacaoRm> {
+  const estadoCustom = estadoCustomOuOptions && "profissionais" in estadoCustomOuOptions ? estadoCustomOuOptions : undefined;
+  const options = optionsParam || (estadoCustomOuOptions && !("profissionais" in estadoCustomOuOptions) ? estadoCustomOuOptions : undefined);
   const estado = estadoCustom || carregarEstado();
   const hash = await calcularHashSha256(buffer);
 
@@ -405,10 +673,18 @@ export async function simularImportacaoFuncionariosRm(
   );
   const arquivoDuplicado = !!loteExistente;
 
-  // 2. Leitura dos dados brutos
-  const { cabecalhos, linhas } = lerPlanilhaEmLinhas(buffer);
+  // 2. Leitura com suporte a múltiplas abas (CADASTRO e AFASTAMENTOS_FERIAS)
+  const {
+    cabecalhosCadastro,
+    linhasCadastro,
+    cabecalhosAfastamentos,
+    linhasAfastamentos,
+  } = lerPlanilhaFuncionariosComAbas(buffer);
 
-  // Mapeamento dinâmico de colunas para índices normalizados
+  const cabecalhos = cabecalhosCadastro.length > 0 ? cabecalhosCadastro : lerPlanilhaEmLinhas(buffer).cabecalhos;
+  const linhas = linhasCadastro.length > 0 ? linhasCadastro : lerPlanilhaEmLinhas(buffer).linhas;
+
+  // Mapeamento dinâmico de colunas para índices normalizados da aba CADASTRO
   const mapaColunas: Record<string, string> = {};
   cabecalhos.forEach((col) => {
     const norm = normalizarCabecalho(col);
@@ -418,11 +694,9 @@ export async function simularImportacaoFuncionariosRm(
   const getValor = (linhaObj: Record<string, unknown>, chavesPossiveis: string[]): unknown => {
     for (const chave of chavesPossiveis) {
       const norm = normalizarCabecalho(chave);
-      // matching exato
       if (mapaColunas[norm] && linhaObj[mapaColunas[norm]] !== undefined) {
         return linhaObj[mapaColunas[norm]];
       }
-      // matching parcial
       for (const k in mapaColunas) {
         if (k.includes(norm) || norm.includes(k)) {
           return linhaObj[mapaColunas[k]];
@@ -434,6 +708,8 @@ export async function simularImportacaoFuncionariosRm(
 
   const todasInconsistencias: ItemInconsistencia[] = [];
   const linhasProcessadas: LinhaFuncionarioRmProcessada[] = [];
+  const linhasRejeitadasLista: ItemLinhaRejeitada[] = [];
+  const afastamentosValidos: AfastamentoFeriasValido[] = [];
 
   let countNovos = 0;
   let countAtualizados = 0;
@@ -442,6 +718,9 @@ export async function simularImportacaoFuncionariosRm(
   let countAlertas = 0;
 
   const chapasNoArquivo = new Set<string>();
+
+  // Base REV04 para cruzamento de alocações contratuais
+  const alocacoesRev04 = estado.alocacoes && estado.alocacoes.length > 0 ? estado.alocacoes : ALOCACOES_MC_REAIS;
 
   linhas.forEach((linhaObj, idx) => {
     const numLinha = idx + 2; // Linha 1 = cabeçalho no Excel
@@ -459,15 +738,15 @@ export async function simularImportacaoFuncionariosRm(
     const rawSituacaoDesc = String(getValor(linhaObj, ["descricao da situacao", "descricao situacao", "desc situacao"])).trim();
     const rawAdmissao = getValor(linhaObj, ["data de admissao", "data admissao", "admissao"]);
     const rawDemissao = getValor(linhaObj, ["data de demissao", "data demissao", "demissao"]);
-    const rawSecaoCod = String(getValor(linhaObj, ["secao", "cod secao", "codigo secao"])).trim();
-    const rawSecaoDesc = String(getValor(linhaObj, ["descricao secao", "desc secao"])).trim();
+    const rawSecaoCod = String(getValor(linhaObj, ["secao", "cod secao", "codigo secao", "cod.secao"])).trim();
+    const rawSecaoDesc = String(getValor(linhaObj, ["descricao secao", "desc secao", "desc.secao"])).trim();
     const rawFuncao = String(getValor(linhaObj, ["nome funcao", "funcao", "cargo"])).trim();
     const rawHorarioCod = String(getValor(linhaObj, ["horario", "cod horario", "codigo horario"])).trim();
     const rawHorarioDesc = String(getValor(linhaObj, ["descricao do horario", "desc horario"])).trim();
     const rawJornada = String(getValor(linhaObj, ["jornada", "horas semanais"])).trim();
     const rawPonto = String(getValor(linhaObj, ["utiliza ponto", "ponto"])).trim();
 
-    // 1. Chapa (Normalização para 6 dígitos)
+    // 1. Chapa (Normalização estrita para 6 dígitos numéricos)
     const chapaDigitos = rawChapa.replace(/\D/g, "");
     const chapaNormalizada = chapaDigitos.length > 0 ? chapaDigitos.padStart(6, "0") : "";
     if (!chapaNormalizada) {
@@ -479,21 +758,28 @@ export async function simularImportacaoFuncionariosRm(
       });
     } else {
       chapasNoArquivo.add(chapaNormalizada);
+
+      // Verificação REV04: Chapa sem posição na REV04 -> Alerta "Pendente de alocação" (não rejeitar)
+      const temPosicaoRev04 = alocacoesRev04.some((a) => {
+        const ch = String(a.matricula || "").replace(/\D/g, "").padStart(6, "0");
+        return ch === chapaNormalizada;
+      });
+      if (!temPosicaoRev04) {
+        alertasLinha.push({
+          linha: numLinha,
+          tipo: "ALERTA",
+          coluna: "Alocação REV04",
+          chapa: chapaNormalizada,
+          nome: rawNome,
+          mensagem: "Pendente de alocação (colaborador sem posição contratual mapeada na Base REV04).",
+        });
+      }
     }
 
-    // 2. CPF (Normalização para 11 dígitos e validação de dígitos verificadores)
+    // 2. CPF (Opcional no RM ou quando informado, validado por módulo 11)
     const cpfDigitos = rawCpf.replace(/\D/g, "");
     let cpfNormalizado = "";
-    if (!cpfDigitos) {
-      errosLinha.push({
-        linha: numLinha,
-        tipo: "ERRO",
-        coluna: "CPF",
-        chapa: chapaNormalizada,
-        nome: rawNome,
-        mensagem: "CPF não informado.",
-      });
-    } else {
+    if (cpfDigitos.length > 0) {
       cpfNormalizado = cpfDigitos.padStart(11, "0");
       if (!validarCpf(cpfNormalizado)) {
         errosLinha.push({
@@ -504,23 +790,20 @@ export async function simularImportacaoFuncionariosRm(
           nome: rawNome,
           mensagem: `CPF inválido (${cpfNormalizado}) com dígitos verificadores incorretos.`,
         });
-      }
-    }
-
-    // Validação de possível readmissão (mesmo CPF, chapa diferente no sistema)
-    if (cpfNormalizado) {
-      const colaboradorComMesmoCpf = estado.profissionais.find(
-        (p) => p.cpfLimpo === cpfNormalizado && p.chapa !== chapaNormalizada
-      );
-      if (colaboradorComMesmoCpf) {
-        alertasLinha.push({
-          linha: numLinha,
-          tipo: "ALERTA",
-          coluna: "CPF / Chapa",
-          chapa: chapaNormalizada,
-          nome: rawNome,
-          mensagem: `Possível readmissão: CPF já cadastrado no sistema vinculado à chapa ${colaboradorComMesmoCpf.chapa} (${colaboradorComMesmoCpf.nome}).`,
-        });
+      } else {
+        const colaboradorComMesmoCpf = estado.profissionais.find(
+          (p) => p.cpfLimpo === cpfNormalizado && p.chapa !== chapaNormalizada
+        );
+        if (colaboradorComMesmoCpf) {
+          alertasLinha.push({
+            linha: numLinha,
+            tipo: "ALERTA",
+            coluna: "CPF / Chapa",
+            chapa: chapaNormalizada,
+            nome: rawNome,
+            mensagem: `Possível readmissão: CPF já cadastrado no sistema vinculado à chapa ${colaboradorComMesmoCpf.chapa} (${colaboradorComMesmoCpf.nome}).`,
+          });
+        }
       }
     }
 
@@ -548,22 +831,13 @@ export async function simularImportacaoFuncionariosRm(
         coluna: "Sexo",
         chapa: chapaNormalizada,
         nome: rawNome,
-        mensagem: "Sexo não informado ou inválido (aceitos: 'M' ou 'F'). Campo será gravado em branco.",
+        mensagem: "Sexo ausente ou inválido. Importado em branco.",
       });
     }
 
     // 5. Data de Nascimento
     const { iso: dataNascIso, bruto: dataNascBruta } = normalizarDataRm(rawNascimento);
-    if (!dataNascIso) {
-      alertasLinha.push({
-        linha: numLinha,
-        tipo: "ALERTA",
-        coluna: "Data de Nascimento",
-        chapa: chapaNormalizada,
-        nome: rawNome,
-        mensagem: "Data de nascimento não informada (campo obrigatório no SIFAC).",
-      });
-    } else {
+    if (dataNascIso) {
       const hoje = new Date(dataReferencia || new Date());
       const dataNascObj = new Date(dataNascIso);
 
@@ -598,6 +872,15 @@ export async function simularImportacaoFuncionariosRm(
           });
         }
       }
+    } else {
+      alertasLinha.push({
+        linha: numLinha,
+        tipo: "ALERTA",
+        coluna: "Data de Nascimento",
+        chapa: chapaNormalizada,
+        nome: rawNome,
+        mensagem: "Data de nascimento ausente.",
+      });
     }
 
     // 6. Datas de Admissão e Demissão
@@ -621,7 +904,7 @@ export async function simularImportacaoFuncionariosRm(
     ) {
       situacaoNormalizada = "AFASTADO";
     } else if (descSituacaoNorm.includes("aviso") || rawSituacaoCod === "V") {
-      situacaoNormalizada = "ATIVO"; // Aviso prévio trabalhado ainda conta como ativo
+      situacaoNormalizada = "ATIVO";
     } else if (descSituacaoNorm.includes("ativ") || rawSituacaoCod === "A") {
       situacaoNormalizada = "ATIVO";
     } else if (rawSituacaoDesc || rawSituacaoCod) {
@@ -635,19 +918,21 @@ export async function simularImportacaoFuncionariosRm(
       });
     }
 
-    // 8. Seção e Base
+    // 8. Seção e Unidade (Unidade pelo Unidade_RM da coluna DESC. SECAO, nunca pelo nome curto)
     if (rawSecaoCod) {
       registrarSecaoImportada(rawSecaoCod, rawSecaoDesc);
     }
     const baseResolvida = obterBasePorCodigoSecao(rawSecaoCod);
-    if (!baseResolvida.mapeada) {
+    const unidadeFinalNome = rawSecaoDesc || baseResolvida.unidadeNome;
+
+    if (baseResolvida.unidadeId === "NAO_MAPEADA") {
       alertasLinha.push({
         linha: numLinha,
         tipo: "ALERTA",
         coluna: "Seção",
         chapa: chapaNormalizada,
         nome: rawNome,
-        mensagem: `Seção "${rawSecaoCod}" (${rawSecaoDesc || "sem descrição"}) não possui mapeamento para base SGP. Colaborador associado como "Não mapeada".`,
+        mensagem: `Seção '${rawSecaoCod} - ${rawSecaoDesc}' não mapeada.`,
       });
     }
 
@@ -656,7 +941,7 @@ export async function simularImportacaoFuncionariosRm(
       registrarHorarioRm(rawHorarioCod, rawHorarioDesc, rawJornada);
     }
 
-    // 10. Inferência de Escala (para exibição inicial)
+    // 10. Inferência de Escala
     let escalaInferida: "5x2" | "12x36" | "6x1" | "OUTRA" = "5x2";
     const descHorarioNorm = normalizarCabecalho(rawHorarioDesc);
     if (descHorarioNorm.includes("12x36")) {
@@ -665,7 +950,6 @@ export async function simularImportacaoFuncionariosRm(
       escalaInferida = "6x1";
     }
 
-    // Status da ação: NOVO, ATUALIZADO, SEM_ALTERACAO, ERRO
     const temErro = errosLinha.length > 0;
     const temAlerta = alertasLinha.length > 0;
 
@@ -673,13 +957,22 @@ export async function simularImportacaoFuncionariosRm(
     if (temErro) {
       statusAcao = "ERRO";
       countErros++;
+      errosLinha.forEach((err) => {
+        linhasRejeitadasLista.push({
+          linha: numLinha,
+          aba: "CADASTRO",
+          chapa: chapaNormalizada || "—",
+          nome: rawNome || "—",
+          coluna: err.coluna,
+          motivo: err.mensagem,
+        });
+      });
     } else {
       const colaboradorExistente = estado.profissionais.find((p) => p.chapa === chapaNormalizada);
       if (!colaboradorExistente) {
         statusAcao = "NOVO";
         countNovos++;
       } else {
-        // Verifica se houve alteração nos campos monitorados
         const mudou =
           colaboradorExistente.nome !== rawNome ||
           colaboradorExistente.funcao !== rawFuncao ||
@@ -697,9 +990,7 @@ export async function simularImportacaoFuncionariosRm(
       }
     }
 
-    if (temAlerta) {
-      countAlertas++;
-    }
+    if (temAlerta) countAlertas++;
 
     const inconsistenciasDaLinha = [...errosLinha, ...alertasLinha];
     todasInconsistencias.push(...inconsistenciasDaLinha);
@@ -715,7 +1006,7 @@ export async function simularImportacaoFuncionariosRm(
         nome: rawNome,
         nomeSocial: rawNomeSocial || undefined,
         cpfLimpo: cpfNormalizado,
-        cpfMascarado: mascararCpf(cpfNormalizado),
+        cpfMascarado: cpfNormalizado ? mascararCpf(cpfNormalizado) : "—",
         sexo: sexoFinal,
         dataNascimento: dataNascIso || undefined,
         situacao: situacaoNormalizada,
@@ -726,7 +1017,7 @@ export async function simularImportacaoFuncionariosRm(
         secaoCodigo: rawSecaoCod,
         secaoDescricao: rawSecaoDesc,
         unidadeId: baseResolvida.unidadeId,
-        unidadeNome: baseResolvida.unidadeNome,
+        unidadeNome: unidadeFinalNome,
         funcao: rawFuncao,
         horarioCodigo: rawHorarioCod || undefined,
         horarioDescricao: rawHorarioDesc || undefined,
@@ -737,36 +1028,198 @@ export async function simularImportacaoFuncionariosRm(
     });
   });
 
-  // Alerta de colaboradores ativos no sistema que não constam no arquivo
-  const alertasNaoConstam: string[] = [];
-  estado.profissionais
-    .filter((p) => p.situacao === "ATIVO")
-    .forEach((p) => {
-      if (!chapasNoArquivo.has(p.chapa)) {
-        const msg = `Colaborador ativo ${p.nome} (Chapa ${p.chapa}) não consta na exportação do RM.`;
-        alertasNaoConstam.push(msg);
-        todasInconsistencias.push({
-          linha: 0,
-          tipo: "ALERTA",
-          coluna: "Geral",
-          chapa: p.chapa,
-          nome: p.nome,
-          mensagem: msg,
-        });
-        countAlertas++;
-      }
+  // Alerta de colaboradores da Base REV04 que não vieram no arquivo (não apagar)
+  alocacoesRev04.forEach((a) => {
+    const ch = String(a.matricula || "").replace(/\D/g, "").padStart(6, "0");
+    if (ch && !chapasNoArquivo.has(ch)) {
+      const msg = `Colaborador ${a.nome} (Chapa ${ch}) não encontrada no RM (consta na Base REV04 mas ausente no arquivo).`;
+      todasInconsistencias.push({
+        linha: 0,
+        tipo: "ALERTA",
+        coluna: "Geral",
+        chapa: ch,
+        nome: a.nome,
+        mensagem: msg,
+      });
+      countAlertas++;
+    }
+  });
+
+  // --- LEITURA DA ABA AFASTAMENTOS_FERIAS ---
+  if (linhasAfastamentos.length > 0) {
+    const mapaColunasAf: Record<string, string> = {};
+    cabecalhosAfastamentos.forEach((col) => {
+      mapaColunasAf[normalizarCabecalho(col)] = col;
     });
+
+    const getValorAf = (row: Record<string, unknown>, chavesPossiveis: string[]): unknown => {
+      for (const c of chavesPossiveis) {
+        const norm = normalizarCabecalho(c);
+        if (mapaColunasAf[norm] && row[mapaColunasAf[norm]] !== undefined) {
+          return row[mapaColunasAf[norm]];
+        }
+        for (const k in mapaColunasAf) {
+          if (k.includes(norm) || norm.includes(k)) {
+            return row[mapaColunasAf[k]];
+          }
+        }
+      }
+      return "";
+    };
+
+    const periodosAceitosPorChapa = new Map<string, Array<{ inicio: string; fim: string }>>();
+
+    linhasAfastamentos.forEach((row, idx) => {
+      const numLinhaAf = idx + 2;
+      const rawChapaAf = String(getValorAf(row, ["chapa"])).trim();
+      const chapaAf = rawChapaAf.replace(/\D/g, "").padStart(6, "0");
+      const rawTipo = String(getValorAf(row, ["tipo", "tipo afastamento", "motivo"])).trim();
+      const rawIni = getValorAf(row, ["data de inicio", "data inicio", "datainicio", "inicio", "data_inicio"]);
+      const rawFim = getValorAf(row, ["data de fim", "data fim", "datafim", "fim", "termino", "data_fim"]);
+      const rawRetorno = getValorAf(row, ["data retorno previsto", "retorno previsto", "retorno", "data_retorno_previsto"]);
+
+      const { iso: dtInicioIso } = normalizarDataRm(rawIni);
+      const { iso: dtFimIso } = normalizarDataRm(rawFim);
+      const { iso: dtRetornoIso } = normalizarDataRm(rawRetorno);
+
+      // Regra 1: Rejeitar CHAPA inexistente na aba CADASTRO
+      if (!chapaAf || !chapasNoArquivo.has(chapaAf)) {
+        countErros++;
+        const itemRej: ItemLinhaRejeitada = {
+          linha: numLinhaAf,
+          aba: "AFASTAMENTOS_FERIAS",
+          chapa: chapaAf || "—",
+          coluna: "CHAPA",
+          motivo: `Chapa ${chapaAf || "não informada"} não encontrada na aba CADASTRO.`,
+        };
+        linhasRejeitadasLista.push(itemRej);
+        todasInconsistencias.push({
+          linha: numLinhaAf,
+          tipo: "ERRO",
+          coluna: "Afastamentos - CHAPA",
+          chapa: chapaAf,
+          mensagem: itemRej.motivo,
+        });
+        return;
+      }
+
+      // Regra 2: Data de início obrigatória
+      if (!dtInicioIso) {
+        countErros++;
+        const itemRej: ItemLinhaRejeitada = {
+          linha: numLinhaAf,
+          aba: "AFASTAMENTOS_FERIAS",
+          chapa: chapaAf,
+          coluna: "DATA_INICIO",
+          motivo: "Data de início obrigatória ausente ou inválida.",
+        };
+        linhasRejeitadasLista.push(itemRej);
+        todasInconsistencias.push({
+          linha: numLinhaAf,
+          tipo: "ERRO",
+          coluna: "Afastamentos - DATA_INICIO",
+          chapa: chapaAf,
+          mensagem: itemRej.motivo,
+        });
+        return;
+      }
+
+      // Regra 3: Aceitar períodos que tocam a competência (início <= fimComp e (fim >= inícioComp ou vazio))
+      if (options?.competencia) {
+        const periodoComp = obterPeriodoCompetencia(options.competencia);
+        const tocaCompetencia = dtInicioIso <= periodoComp.dataFim && (!dtFimIso || dtFimIso >= periodoComp.dataInicio);
+        if (!tocaCompetencia) {
+          countErros++;
+          const itemRej: ItemLinhaRejeitada = {
+            linha: numLinhaAf,
+            aba: "AFASTAMENTOS_FERIAS",
+            chapa: chapaAf,
+            coluna: "Período",
+            motivo: `Período (${dtInicioIso} a ${dtFimIso || "em aberto"}) não toca a competência selecionada (${periodoComp.textoFormatado}).`,
+          };
+          linhasRejeitadasLista.push(itemRej);
+          todasInconsistencias.push({
+            linha: numLinhaAf,
+            tipo: "ERRO",
+            coluna: "Afastamentos - Competência",
+            chapa: chapaAf,
+            mensagem: itemRej.motivo,
+          });
+          return;
+        }
+      }
+
+      // Regra 4: Rejeitar períodos sobrepostos da mesma chapa
+      const fimCalculado = dtFimIso || "9999-12-31";
+      const periodosAceitos = periodosAceitosPorChapa.get(chapaAf) || [];
+      const sobreposicao = periodosAceitos.find(
+        (p) => dtInicioIso <= p.fim && p.inicio <= fimCalculado
+      );
+      if (sobreposicao) {
+        countErros++;
+        const itemRej: ItemLinhaRejeitada = {
+          linha: numLinhaAf,
+          aba: "AFASTAMENTOS_FERIAS",
+          chapa: chapaAf,
+          coluna: "Período",
+          motivo: `Período sobreposto a outro afastamento já registrado da chapa ${chapaAf} (${sobreposicao.inicio} a ${sobreposicao.fim === "9999-12-31" ? "em aberto" : sobreposicao.fim}).`,
+        };
+        linhasRejeitadasLista.push(itemRej);
+        todasInconsistencias.push({
+          linha: numLinhaAf,
+          tipo: "ERRO",
+          coluna: "Afastamentos - Sobreposição",
+          chapa: chapaAf,
+          mensagem: itemRej.motivo,
+        });
+        return;
+      }
+
+      // Regra 5: Mapear TIPO para Férias | Afastamento | Licença
+      const normTipo = normalizarCabecalho(rawTipo);
+      let tipoMapeado: "Férias" | "Afastamento" | "Licença" = "Afastamento";
+      if (normTipo.includes("feria")) {
+        tipoMapeado = "Férias";
+      } else if (
+        normTipo.includes("licen") ||
+        normTipo.includes("gala") ||
+        normTipo.includes("luto") ||
+        normTipo.includes("mater") ||
+        normTipo.includes("pater")
+      ) {
+        tipoMapeado = "Licença";
+      } else {
+        tipoMapeado = "Afastamento";
+      }
+
+      periodosAceitos.push({ inicio: dtInicioIso, fim: fimCalculado });
+      periodosAceitosPorChapa.set(chapaAf, periodosAceitos);
+
+      afastamentosValidos.push({
+        chapa: chapaAf,
+        tipoOriginal: rawTipo || tipoMapeado,
+        tipoMapeado,
+        dataInicio: dtInicioIso,
+        dataFim: dtFimIso || undefined,
+        dataRetornoPrevisto: dtRetornoIso || undefined,
+      });
+    });
+  }
+
+  const totalLinhasLidas = linhas.length + linhasAfastamentos.length;
 
   return {
     tipo: "FUNCIONARIOS_RM",
     arquivoNome,
     hashSha256: hash,
     dataReferencia,
+    competencia: options?.competencia,
+    dataExtracao: options?.dataExtracao || dataReferencia,
     arquivoDuplicado,
     loteAnteriorId: loteExistente?.id,
     loteAnteriorData: loteExistente?.dataHora,
     totais: {
-      lidos: linhas.length,
+      lidos: totalLinhasLidas,
       novos: countNovos,
       atualizados: countAtualizados,
       semAlteracao: countSemAlteracao,
@@ -775,96 +1228,118 @@ export async function simularImportacaoFuncionariosRm(
     },
     linhas: linhasProcessadas,
     inconsistencias: todasInconsistencias,
-    alertasColaboradoresNaoConstantes: alertasNaoConstam,
+    alertasColaboradoresNaoConstantes: [],
+    linhasRejeitadasLista,
+    afastamentosValidos,
   };
 }
 
 /**
- * ETAPA 4: Confirmação atômica da importação (Tudo ou Nada)
- * Grava o lote e atualiza os colaboradores no sistema, salvando o snapshot anterior para rollback.
+ * Confirma a importação de Funcionários RM gravando as alterações no estado operacional.
+ * Se já existir lote para a mesma competência, substitui o lote (desfaz o anterior e grava o novo, não somando).
  */
 export function confirmarImportacaoFuncionariosRm(
   simulacao: ResultadoSimulacaoRm,
-  usuarioNome: string = "Administrador Premier (Marcos Valério)"
+  usuarioNome: string = "Admin Premier"
 ): { sucesso: boolean; loteId: string; mensagem: string } {
-  const estadoAtual = carregarEstado();
-
-  // Verifica se o mesmo arquivo já foi importado
-  if (simulacao.arquivoDuplicado) {
-    throw new Error(
-      `Operação bloqueada: este arquivo já foi importado anteriormente no Lote ${simulacao.loteAnteriorId} em ${simulacao.loteAnteriorData}.`
-    );
+  if (simulacao.arquivoDuplicado && !simulacao.competencia) {
+    throw new Error(`este arquivo já foi importado anteriormente no lote ${simulacao.loteAnteriorId || ""}.`);
   }
 
-  // Gera o snapshot completo do estado anterior para possibilitar rollback
-  const snapshotAnterior: EstadoOperacionalCompleto = JSON.parse(JSON.stringify(estadoAtual));
+  const estadoAtual = carregarEstado();
+  const dataHoraAtual = new Date().toISOString();
+  const loteId = `lote-rm-${Date.now()}`;
 
-  const mapaExistentes = new Map<string, ProfissionalOperacional>();
-  estadoAtual.profissionais.forEach((p) => mapaExistentes.set(p.chapa, p));
+  // Se já existir lote do mesmo tipo e competência, substituir (desfaz anterior e grava o novo, não somar)
+  let lotesExistentes = estadoAtual.lotesImportacao || [];
+  let profissionaisBase = [...(estadoAtual.profissionais || [])];
+  let ocorrenciasBase = [...(estadoAtual.ocorrencias || [])];
 
-  // Aplica as linhas válidas
-  simulacao.linhas.forEach((l) => {
-    if (!l.validaParaGravacao) return; // Linhas com erro não são gravadas
+  if (simulacao.competencia) {
+    const loteAnterior = lotesExistentes.find(
+      (l) => l.tipo === "FUNCIONARIOS_RM" && l.competencia === simulacao.competencia && l.status === "CONCLUIDO"
+    );
+    if (loteAnterior && loteAnterior.snapshotAnterior) {
+      // Reverter para o snapshot anterior para não somar
+      profissionaisBase = [...(loteAnterior.snapshotAnterior.profissionais || [])];
+      ocorrenciasBase = [...(loteAnterior.snapshotAnterior.ocorrencias || [])];
+      lotesExistentes = lotesExistentes.filter((l) => l.id !== loteAnterior.id);
+    }
+  }
 
-    const d = l.dados;
-    const anterior = mapaExistentes.get(d.chapa);
+  const snapshotAnterior: EstadoOperacionalCompleto = {
+    profissionais: [...profissionaisBase],
+    ocorrencias: [...ocorrenciasBase],
+    coberturas: [...(estadoAtual.coberturas || [])],
+    alocadosSifac: [...(estadoAtual.alocadosSifac || [])],
+  } as any;
 
-    if (anterior) {
-      // Atualização
-      const mudanca = {
-        dataReferencia: simulacao.dataReferencia,
-        situacao: d.situacao,
-        funcao: d.funcao,
-        secaoCodigo: d.secaoCodigo,
-        secaoDescricao: d.secaoDescricao,
-        horarioCodigo: d.horarioCodigo,
-        horarioDescricao: d.horarioDescricao,
-      };
+  const mapaProfissionais = new Map<string, ProfissionalOperacional>();
+  profissionaisBase.forEach((p) => {
+    mapaProfissionais.set(p.chapa, p);
+  });
 
-      const historicoAtualizado = anterior.historico ? [...anterior.historico, mudanca] : [mudanca];
+  simulacao.linhas.forEach((linha) => {
+    if (!linha.validaParaGravacao) return;
+    const d = linha.dados;
+    const existente = mapaProfissionais.get(d.chapa);
 
-      const atualizado: ProfissionalOperacional = {
-        ...anterior,
+    if (existente) {
+      // Mudança de seção, função ou horário -> gravar histórico com vigência
+      const mudou =
+        existente.secaoCodigo !== d.secaoCodigo ||
+        existente.funcao !== d.funcao ||
+        existente.horarioCodigo !== d.horarioCodigo;
+
+      const historicoAtualizado: MovimentacaoHistorico[] = [...(existente.historico || [])];
+      if (mudou) {
+        historicoAtualizado.push({
+          dataReferencia: simulacao.dataExtracao || simulacao.dataReferencia || dataHoraAtual.substring(0, 10),
+          situacao: d.situacao,
+          funcao: d.funcao,
+          secaoCodigo: d.secaoCodigo,
+          secaoDescricao: d.secaoDescricao,
+          horarioCodigo: d.horarioCodigo,
+          horarioDescricao: d.horarioDescricao,
+        });
+      }
+
+      mapaProfissionais.set(d.chapa, {
+        ...existente,
         nome: d.nome,
         nomeSocial: d.nomeSocial,
-        cpfLimpo: d.cpfLimpo,
-        cpfMascarado: d.cpfMascarado,
-        sexo: d.sexo || anterior.sexo,
-        dataNascimento: d.dataNascimento || anterior.dataNascimento,
-        funcao: d.funcao,
+        cpfLimpo: d.cpfLimpo || existente.cpfLimpo,
+        cpfMascarado: d.cpfMascarado || existente.cpfMascarado,
+        sexo: d.sexo || existente.sexo,
+        dataNascimento: d.dataNascimento || existente.dataNascimento,
         situacao: d.situacao,
-        situacaoCodigo: d.situacaoCodigo,
-        situacaoDescricao: d.situacaoDescricao,
-        dataAdmissao: d.dataAdmissao || anterior.dataAdmissao,
-        dataDesligamento: d.dataDesligamento || anterior.dataDesligamento,
+        situacaoCodigo: d.situacaoCodigo || existente.situacaoCodigo,
+        situacaoDescricao: d.situacaoDescricao || existente.situacaoDescricao,
+        dataAdmissao: d.dataAdmissao || existente.dataAdmissao,
+        dataDesligamento: d.dataDesligamento || existente.dataDesligamento,
         secaoCodigo: d.secaoCodigo,
         secaoDescricao: d.secaoDescricao,
-        unidadeId: d.unidadeId !== "NAO_MAPEADA" ? d.unidadeId : anterior.unidadeId,
-        unidadeNome: d.unidadeNome !== "Não mapeada" ? d.unidadeNome : anterior.unidadeNome,
+        unidadeId: d.unidadeId,
+        unidadeNome: d.unidadeNome,
+        funcao: d.funcao,
         horarioCodigo: d.horarioCodigo,
         horarioDescricao: d.horarioDescricao,
         jornadaDescricao: d.jornadaDescricao,
         utilizaPonto: d.utilizaPonto,
         escala: d.escala,
         historico: historicoAtualizado,
-      };
-      mapaExistentes.set(d.chapa, atualizado);
+      });
     } else {
-      // Criação de novo colaborador
-      const novo: ProfissionalOperacional = {
-        id: `prf-${Date.now()}-${d.chapa}`,
+      mapaProfissionais.set(d.chapa, {
+        id: `prof-${d.chapa}`,
         chapa: d.chapa,
         matricula: d.matricula,
         nome: d.nome,
         nomeSocial: d.nomeSocial,
-        cpfLimpo: d.cpfLimpo,
-        cpfMascarado: d.cpfMascarado,
+        cpfLimpo: d.cpfLimpo || "",
+        cpfMascarado: d.cpfMascarado || "—",
         sexo: d.sexo,
         dataNascimento: d.dataNascimento,
-        funcao: d.funcao,
-        unidadeId: d.unidadeId,
-        unidadeNome: d.unidadeNome,
-        escala: d.escala,
         situacao: d.situacao,
         situacaoCodigo: d.situacaoCodigo,
         situacaoDescricao: d.situacaoDescricao,
@@ -872,70 +1347,126 @@ export function confirmarImportacaoFuncionariosRm(
         dataDesligamento: d.dataDesligamento,
         secaoCodigo: d.secaoCodigo,
         secaoDescricao: d.secaoDescricao,
+        unidadeId: d.unidadeId,
+        unidadeNome: d.unidadeNome,
+        funcao: d.funcao,
         horarioCodigo: d.horarioCodigo,
         horarioDescricao: d.horarioDescricao,
         jornadaDescricao: d.jornadaDescricao,
         utilizaPonto: d.utilizaPonto,
-        historico: [
-          {
-            dataReferencia: simulacao.dataReferencia,
-            situacao: d.situacao,
-            funcao: d.funcao,
-            secaoCodigo: d.secaoCodigo,
-            secaoDescricao: d.secaoDescricao,
-            horarioCodigo: d.horarioCodigo,
-            horarioDescricao: d.horarioDescricao,
-          },
-        ],
-      };
-      mapaExistentes.set(d.chapa, novo);
+        escala: d.escala,
+      });
     }
   });
 
-  const novaListaProfissionais = Array.from(mapaExistentes.values());
+  // Grava afastamentos e férias na base de ocorrências
+  const mapaOcorrencias = new Map<string, OcorrenciaOperacional>();
+  ocorrenciasBase.forEach((o) => {
+    mapaOcorrencias.set(`${o.matricula}_${o.dataInicio}_${o.tipoOcorrencia}`, o);
+  });
 
-  // Criação do Lote
-  const dataHoraIso = new Date().toISOString();
-  const stamp = dataHoraIso.replace(/[-:T.]/g, "").substring(0, 14);
-  const loteId = `LOTE-RM-${stamp}`;
+  if (simulacao.afastamentosValidos && simulacao.afastamentosValidos.length > 0) {
+    simulacao.afastamentosValidos.forEach((af) => {
+      const chave = `${af.chapa}_${af.dataInicio}_${af.tipoMapeado}`;
+      const tipoOcorr: "FERIAS" | "OUTROS" = af.tipoMapeado === "Férias" ? "FERIAS" : "OUTROS";
+      mapaOcorrencias.set(chave, {
+        id: `ocorr-rm-${af.chapa}-${af.dataInicio.replace(/-/g, "")}`,
+        matricula: af.chapa,
+        profissionalNome: af.chapa,
+        dataInicio: af.dataInicio,
+        dataFim: af.dataFim || af.dataInicio,
+        diasAfetados: 1,
+        tipoOcorrencia: tipoOcorr,
+        categoriaAusencia: af.tipoMapeado,
+        observacaoPublica: `Afastamento/Férias importado do RM (${af.tipoOriginal})`,
+        criadoEm: dataHoraAtual,
+        status: "VALIDADA",
+      });
+    });
+  }
+
+  // Gera ocorrências para colaboradores cuja situação no CADASTRO seja Férias, Afastamento ou Licença
+  const compPeriodo = simulacao.competencia ? obterPeriodoCompetencia(simulacao.competencia) : null;
+  const dataIniComp = compPeriodo?.dataInicio || "2026-08-10";
+  const dataFimComp = compPeriodo?.dataFim || "2026-09-09";
+
+  simulacao.linhas.forEach((linha) => {
+    if (!linha.validaParaGravacao) return;
+    const d = linha.dados;
+    const ehFerias = d.situacao === "FERIAS" || d.situacaoCodigo === "F" || d.situacaoDescricao?.toLowerCase().includes("feria");
+    const ehAfastado = d.situacao === "AFASTADO" || d.situacaoCodigo === "P" || d.situacaoDescricao?.toLowerCase().includes("previd") || d.situacaoDescricao?.toLowerCase().includes("afast");
+    const ehLicenca = d.situacaoCodigo === "E" || d.situacaoDescricao?.toLowerCase().includes("licen");
+
+    if (ehFerias || ehAfastado || ehLicenca) {
+      const cat = ehFerias ? "Férias" : ehAfastado ? "Afastamento" : "Licença";
+      const tipoOcorr: OcorrenciaOperacional["tipoOcorrencia"] = ehFerias ? "FERIAS" : ehAfastado ? "ATESTADO_MEDICO" : "FALTA_JUSTIFICADA";
+      const chave = `${d.chapa}_${dataIniComp}_${tipoOcorr}`;
+      if (!mapaOcorrencias.has(chave)) {
+        mapaOcorrencias.set(chave, {
+          id: `ocorr-rm-cad-${d.chapa}-${dataIniComp.replace(/-/g, "")}`,
+          matricula: d.chapa,
+          profissionalNome: d.nome || `Colaborador ${d.chapa}`,
+          postoCodigo: estadoAtual.profissionais.find((p) => p.chapa === d.chapa)?.postoCodigo,
+          dataInicio: dataIniComp,
+          dataFim: dataFimComp,
+          diasAfetados: compPeriodo?.datas?.length || 31,
+          tipoOcorrencia: tipoOcorr,
+          categoriaAusencia: cat,
+          observacaoPublica: `Ausência RM: ${cat} (${d.situacaoDescricao || cat})`,
+          criadoEm: dataHoraAtual,
+          status: "VALIDADA",
+        });
+      }
+    }
+  });
 
   const novoLote: LoteImportacaoOperacional = {
     id: loteId,
     tipo: "FUNCIONARIOS_RM",
+    competencia: simulacao.competencia,
+    dataExtracao: simulacao.dataExtracao,
+    linhasRejeitadas: simulacao.linhasRejeitadasLista ? simulacao.linhasRejeitadasLista.length : simulacao.totais.erros,
     arquivoNome: simulacao.arquivoNome,
     hashSha256: simulacao.hashSha256,
     dataReferencia: simulacao.dataReferencia,
     usuario: usuarioNome,
-    dataHora: dataHoraIso.replace("T", " ").substring(0, 19),
-    totais: simulacao.totais,
+    dataHora: dataHoraAtual,
+    totais: { ...simulacao.totais },
     status: "CONCLUIDO",
     snapshotAnterior,
     diasRetencao: 90,
   };
 
-  const novoLog = {
-    id: `log-importacao-${Date.now()}`,
-    timestamp: dataHoraIso.replace("T", " ").substring(0, 19),
+  const novoLog: LogAuditoriaOperacional = {
+    id: `log-rm-${Date.now()}`,
+    timestamp: dataHoraAtual,
     usuario: usuarioNome,
     perfil: "PREMIER_ADMIN",
     acao: "IMPORTAR_FUNCIONARIOS_RM",
     entidade: `Lote (${loteId})`,
-    detalhes: `Importação de Funcionários RM/TOTVS confirmada no lote ${loteId} (${simulacao.arquivoNome}): ${simulacao.totais.novos} novos, ${simulacao.totais.atualizados} atualizados, ${simulacao.totais.semAlteracao} sem alteração, ${simulacao.totais.erros} erros ignorados, ${simulacao.totais.alertas} alertas.`,
+    detalhes: `Importação de Funcionários RM confirmada no lote ${loteId} (${simulacao.arquivoNome})${simulacao.competencia ? ` - Competência ${simulacao.competencia}` : ""}: ${simulacao.totais.novos} novos, ${simulacao.totais.atualizados} atualizados, ${simulacao.totais.erros} erros.`,
     ip: "189.120.45.12",
   };
 
   salvarEstado({
-    profissionais: novaListaProfissionais,
-    lotesImportacao: [novoLote, ...(estadoAtual.lotesImportacao || [])],
+    profissionais: Array.from(mapaProfissionais.values()),
+    ocorrencias: Array.from(mapaOcorrencias.values()),
+    lotesImportacao: [novoLote, ...lotesExistentes],
     logsAuditoria: [novoLog, ...(estadoAtual.logsAuditoria || [])],
   });
+
+  if (simulacao.competencia) {
+    marcarCalendarioDesatualizado(simulacao.competencia);
+  }
 
   return {
     sucesso: true,
     loteId,
-    mensagem: `Importação confirmada com sucesso! Lote ${loteId} registrado com ${simulacao.totais.novos} novos colaboradores e ${simulacao.totais.atualizados} atualizações.`,
+    mensagem: `Importação de Funcionários confirmada com sucesso! Lote ${loteId} processado.${simulacao.competencia ? ` Competência: ${simulacao.competencia}.` : ""}`,
   };
 }
+
+
 
 /**
  * Gera relatório de validação em formato XLSX binário para download do usuário
@@ -992,6 +1523,27 @@ export function gerarRelatorioValidacaoXlsx(simulacao: ResultadoSimulacaoRm): Ui
   const wsLinhas = XLSX.utils.json_to_sheet(itensLinhas);
   XLSX.utils.book_append_sheet(wb, wsLinhas, "Dados Analisados");
 
+  const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  return new Uint8Array(wbOut);
+}
+
+/**
+ * Gera arquivo XLSX exclusivo contendo as linhas rejeitadas e seus respectivos motivos
+ */
+export function gerarPlanilhaLinhasRejeitadasXlsx(linhasRejeitadas: ItemLinhaRejeitada[]): Uint8Array {
+  const wb = XLSX.utils.book_new();
+  const dados = linhasRejeitadas.map((r) => ({
+    Linha: r.linha,
+    Aba: r.aba || "Principal",
+    Chapa: r.chapa || "—",
+    Colaborador: r.nome || "—",
+    Coluna: r.coluna || "—",
+    "Motivo da Rejeição": r.motivo,
+  }));
+  const ws = XLSX.utils.json_to_sheet(
+    dados.length > 0 ? dados : [{ Linha: "—", Motivo: "Nenhuma linha rejeitada." }]
+  );
+  XLSX.utils.book_append_sheet(wb, ws, "Rejeitadas");
   const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
   return new Uint8Array(wbOut);
 }

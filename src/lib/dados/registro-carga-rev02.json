@@ -1,0 +1,16 @@
+{
+  "arquivo": "Base_Estruturada_SGP_Petrobras_REV04.xlsx",
+  "dataImportacao": "2026-09-30T19:03:24.396Z",
+  "usuario": "Administrador Premier",
+  "versao": "REV04",
+  "totalPostos": 244,
+  "totalPosicoesEstruturais": 311,
+  "totalPosicoesExcedentesPlanilha": 9,
+  "totalAlocacoes": 322,
+  "totalFeristas": 23,
+  "totalEscalas": 311,
+  "totalPendenciasEscala": 101,
+  "totalPendentesRM": 11,
+  "totalValidacoes": 29,
+  "totalConflitosAValidar": 19
+}

@@ -48,9 +48,9 @@ export default function ConformidadePage() {
       literal:
         "Apurar e evidenciar a alocação dos empregados na efetiva execução dos serviços previstos no Anexo 1-A",
       comoAtende:
-        "Mapa de Ocupação Diária do Posto + Espelho de Ocupação mensal com apuração de presenças reais, abonos e folgas do sistema RM.",
+        "Mapa de Cobertura Diária do Posto + Espelho de Ocupação mensal com apuração de presenças reais, abonos e folgas do sistema RM.",
       linkHref: "/mapa-ocupacao",
-      linkTexto: "Mapa de Ocupação Diária",
+      linkTexto: "Mapa de Cobertura Diária",
       status: "CONFORME",
     },
     {

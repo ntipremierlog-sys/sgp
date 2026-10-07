@@ -195,7 +195,7 @@ export default function ApontamentosPage() {
             href="/mapa-ocupacao"
             className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-200 shadow-sm transition-all"
           >
-            <span>Mapa de Ocupação</span>
+            <span>Mapa de Cobertura</span>
             <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
           </Link>
 

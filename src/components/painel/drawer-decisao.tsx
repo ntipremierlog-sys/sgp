@@ -57,7 +57,7 @@ export function DrawerDecisao({
           {/* Topo do Drawer */}
           <div className="p-6 border-b border-[#E3E6EB] space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+              <span className="text-xs font-semibold text-[#5B6474]">
                 {decisao.baseNome}
               </span>
 
@@ -80,13 +80,14 @@ export function DrawerDecisao({
                 </span>
                 <span className="text-slate-300">·</span>
                 <span
-                  className={`text-[10px] font-bold px-2 py-0.2 rounded-full ${
+                  className={`text-xs font-semibold inline-flex items-center gap-1.5 ${
                     decisao.seloCor === "vermelho"
-                      ? "bg-[#FEF3F2] text-[#B42318] border border-[#FECDCA]"
-                      : "bg-[#FFFAEB] text-[#B54708] border border-[#FEDF89]"
+                      ? "text-[#B42318]"
+                      : "text-[#B54708]"
                   }`}
                 >
-                  {decisao.seloTexto}
+                  <span className={`w-1.5 h-1.5 rounded-full ${decisao.seloCor === "vermelho" ? "bg-[#B42318]" : "bg-[#B54708]"}`} />
+                  <span>{decisao.seloTexto}</span>
                 </span>
               </div>
             </div>
@@ -95,7 +96,7 @@ export function DrawerDecisao({
           {/* Corpo do Drawer (conteúdo rolável) */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {/* Bloco 1: Raio-X da Situação do Posto */}
-            <div className="bg-[#F8F9FC] rounded-xl border border-[#E3E6EB] p-4 space-y-3 text-xs">
+            <div className="bg-white rounded-xl border border-[#E3E6EB] p-4 space-y-3 text-xs">
               <h3 className="font-bold text-[#1A2230] flex items-center gap-1.5 text-xs">
                 <Clock className="w-3.5 h-3.5 text-[#1F4FD1]" />
                 <span>Situação Atual do Posto</span>
@@ -127,10 +128,17 @@ export function DrawerDecisao({
                   </div>
                 )}
 
-                <div className="flex justify-between items-center py-1">
+                <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                   <span className="text-[#667085]">Cobertura alocada:</span>
                   <span className="font-medium text-[#344054]">
                     {decisao.coberturaAtual || "Nenhuma cobertura ativa"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-[#667085]">Cumprimento de presença:</span>
+                  <span className="font-mono font-medium text-[#1A2230] text-right">
+                    {decisao.percentualCumprimentoFormatado || "—"}
                   </span>
                 </div>
               </div>
@@ -143,7 +151,7 @@ export function DrawerDecisao({
                   Pendências Agrupadas ({decisao.pendencias.length})
                 </h3>
                 {ehFiscal && (
-                  <span className="text-[11px] font-semibold text-[#0F7B4F] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  <span className="text-[11px] font-semibold text-[#0F7B4F] bg-white px-2 py-0.5 rounded border border-emerald-300">
                     Visualização de Fiscalização
                   </span>
                 )}
@@ -166,7 +174,7 @@ export function DrawerDecisao({
                       </div>
 
                       {pend.prazoTexto && (
-                        <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
+                        <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded bg-white text-amber-800 border border-amber-300 whitespace-nowrap">
                           {pend.prazoTexto}
                         </span>
                       )}
@@ -196,7 +204,7 @@ export function DrawerDecisao({
               className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-[#1A2230] text-xs font-semibold border border-[#D0D5DD] shadow-xs transition-all"
             >
               <Calendar className="w-4 h-4 text-[#1F4FD1]" />
-              <span>Ver no mapa de ocupação →</span>
+              <span>Ver no mapa de cobertura →</span>
             </Link>
 
             <button

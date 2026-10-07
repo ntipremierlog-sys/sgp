@@ -34,7 +34,7 @@ export const MATRIZ_PERMISSOES: RegraPermissao[] = [
   },
   {
     recurso: "MAPA_OCUPACAO",
-    nomeRecurso: "Mapa de Ocupação dos Postos",
+    nomeRecurso: "Mapa de Cobertura dos Postos",
     descricao: "Grade diária de alocação de profissionais nos postos contratuais",
     acoes: {
       PREMIER_ADMIN: ["LER", "EDITAR", "EXPORTAR", "GERENCIAR"],
@@ -166,13 +166,13 @@ export const MATRIZ_PERMISSOES: RegraPermissao[] = [
     descricao: "Log imutável de transações do sistema",
     acoes: {
       PREMIER_ADMIN: ["LER", "EXPORTAR", "GERENCIAR"],
-      PREMIER_GESTOR: ["LER", "EXPORTAR"],
-      PREMIER_GESTOR_CONTRATO: ["LER", "EXPORTAR"],
+      PREMIER_GESTOR: [],
+      PREMIER_GESTOR_CONTRATO: [],
       PREMIER_SUPERVISOR: [],
       PREMIER_RH: [],
-      PETROBRAS_FISCAL: ["LER"],
-      PETROBRAS_GESTOR: ["LER"],
-      AUDITOR: ["LER", "EXPORTAR"],
+      PETROBRAS_FISCAL: [],
+      PETROBRAS_GESTOR: [],
+      AUDITOR: [],
       PENDENTE_PERFIL: [],
     },
   },

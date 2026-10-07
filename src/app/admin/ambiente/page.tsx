@@ -34,7 +34,7 @@ export default function AmbienteAdminPage() {
 
         <Link
           href="/admin"
-          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-sm transition-all"
+          className="h-8 inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-[#D0D5DD] rounded-lg shadow-2xs transition-all"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Voltar para administração</span>
@@ -44,12 +44,12 @@ export default function AmbienteAdminPage() {
       {/* Cards de Infraestrutura Principal */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {/* Card 1: Banco Neon PostgreSQL */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 text-emerald-600 flex items-center justify-center shadow-2xs">
               <Database className="w-5 h-5" />
             </div>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-white text-emerald-700 border border-slate-200 shadow-2xs">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               Operacional
             </span>
@@ -79,13 +79,13 @@ export default function AmbienteAdminPage() {
         </div>
 
         {/* Card 2: Hospedagem Vercel Edge */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 text-[#1F4FD1] flex items-center justify-center shadow-2xs">
               <Server className="w-5 h-5" />
             </div>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-white text-slate-800 border border-slate-200 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#1F4FD1]" />
               Vercel Pro
             </span>
           </div>
@@ -114,13 +114,13 @@ export default function AmbienteAdminPage() {
         </div>
 
         {/* Card 3: Governança LGPD */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white border border-slate-200 text-slate-700 flex items-center justify-center shadow-2xs">
               <ShieldCheck className="w-5 h-5" />
             </div>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-100 text-purple-800 border border-purple-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-white text-slate-800 border border-slate-200 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-700" />
               Conforme
             </span>
           </div>
@@ -150,13 +150,13 @@ export default function AmbienteAdminPage() {
       </div>
 
       {/* Detalhamento de Conformidade e Políticas */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs space-y-5">
         <h2 className="text-base font-bold text-slate-900">
           Diretrizes de Segurança e Isolamento por Perfil (RBAC)
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-          <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+          <div className="p-4 rounded-lg bg-white border border-slate-200 space-y-2 shadow-2xs">
             <div className="flex items-center gap-2 font-bold text-slate-800">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               <span>Perfil Fiscalização Petrobras (PETROBRAS_FISCAL)</span>
@@ -168,7 +168,7 @@ export default function AmbienteAdminPage() {
             </p>
           </div>
 
-          <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+          <div className="p-4 rounded-lg bg-white border border-slate-200 space-y-2 shadow-2xs">
             <div className="flex items-center gap-2 font-bold text-slate-800">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               <span>Perfil Gestão Contratual Premier (PREMIER_GESTOR)</span>
@@ -180,8 +180,8 @@ export default function AmbienteAdminPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900">
-          <Lock className="w-4 h-4 text-blue-700 shrink-0" />
+        <div className="flex items-center gap-2 p-3 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 shadow-2xs">
+          <Lock className="w-4 h-4 text-slate-700 shrink-0" />
           <span>
             Todas as transações, consultas analíticas e modificações de titularidade são registradas de forma
             auditável com IP, perfil e identificador do usuário responsável.

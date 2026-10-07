@@ -1,0 +1,343 @@
+{
+  "dataValidacao": "2026-10-02T13:59:49.664Z",
+  "totaisGlobais": [
+    {
+      "Metrica": "Unidades Distintas",
+      "Planilha": 29,
+      "Banco": 29,
+      "Status": "OK"
+    },
+    {
+      "Metrica": "Postos de Serviço",
+      "Planilha": 244,
+      "Banco": 244,
+      "Status": "OK"
+    },
+    {
+      "Metrica": "Posições Totais",
+      "Planilha": 311,
+      "Banco": 311,
+      "Status": "OK"
+    },
+    {
+      "Metrica": "  - Posições Ocupadas",
+      "Planilha": 292,
+      "Banco": 292,
+      "Status": "OK"
+    },
+    {
+      "Metrica": "  - Posições Vagas",
+      "Planilha": 19,
+      "Banco": 19,
+      "Status": "OK"
+    },
+    {
+      "Metrica": "Alocações Totais",
+      "Planilha": 322,
+      "Banco": 322,
+      "Status": "OK"
+    },
+    {
+      "Metrica": "  - Titulares",
+      "Planilha": 297,
+      "Banco": 297,
+      "Status": "OK"
+    },
+    {
+      "Metrica": "  - Feristas",
+      "Planilha": 23,
+      "Banco": 23,
+      "Status": "OK"
+    },
+    {
+      "Metrica": "  - Substitutos",
+      "Planilha": 2,
+      "Banco": 2,
+      "Status": "OK"
+    },
+    {
+      "Metrica": "Feristas de Cobertura (Aba 07)",
+      "Planilha": 23,
+      "Banco": 23,
+      "Status": "OK"
+    },
+    {
+      "Metrica": "Escalas de Posições (Aba 08)",
+      "Planilha": 311,
+      "Banco": 311,
+      "Status": "OK"
+    }
+  ],
+  "conferenciaUnidades": [
+    {
+      "Item": 1,
+      "Unidade": "BASE TAQUIPE",
+      "Alocações Planilha": 1,
+      "Alocações Banco": 1,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 2,
+      "Unidade": "BOAVENTURA",
+      "Alocações Planilha": 15,
+      "Alocações Banco": 15,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 3,
+      "Unidade": "CABIUNAS",
+      "Alocações Planilha": 5,
+      "Alocações Banco": 5,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 4,
+      "Unidade": "CENPES",
+      "Alocações Planilha": 9,
+      "Alocações Banco": 9,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 5,
+      "Unidade": "EDIBRA",
+      "Alocações Planilha": 19,
+      "Alocações Banco": 19,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 6,
+      "Unidade": "EDIHB",
+      "Alocações Planilha": 84,
+      "Alocações Banco": 84,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 7,
+      "Unidade": "EDIRN",
+      "Alocações Planilha": 1,
+      "Alocações Banco": 1,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 8,
+      "Unidade": "EDISA",
+      "Alocações Planilha": 4,
+      "Alocações Banco": 4,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 9,
+      "Unidade": "EDISEN",
+      "Alocações Planilha": 5,
+      "Alocações Banco": 5,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 10,
+      "Unidade": "EDISER",
+      "Alocações Planilha": 4,
+      "Alocações Banco": 4,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 11,
+      "Unidade": "EDIVIT",
+      "Alocações Planilha": 2,
+      "Alocações Banco": 2,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 12,
+      "Unidade": "EDMAN",
+      "Alocações Planilha": 1,
+      "Alocações Banco": 1,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 13,
+      "Unidade": "FAROL DE SÃO TOMÉ",
+      "Alocações Planilha": 4,
+      "Alocações Banco": 4,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 14,
+      "Unidade": "FRONAPE",
+      "Alocações Planilha": 2,
+      "Alocações Banco": 2,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 15,
+      "Unidade": "IMBETIBA",
+      "Alocações Planilha": 8,
+      "Alocações Banco": 8,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 16,
+      "Unidade": "IMBOASSICA",
+      "Alocações Planilha": 4,
+      "Alocações Banco": 4,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 17,
+      "Unidade": "LUBNOR",
+      "Alocações Planilha": 2,
+      "Alocações Banco": 2,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 18,
+      "Unidade": "PITUBA",
+      "Alocações Planilha": 12,
+      "Alocações Banco": 12,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 19,
+      "Unidade": "RECAP",
+      "Alocações Planilha": 17,
+      "Alocações Banco": 17,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 20,
+      "Unidade": "REDUC",
+      "Alocações Planilha": 23,
+      "Alocações Banco": 23,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 21,
+      "Unidade": "REFAP",
+      "Alocações Planilha": 9,
+      "Alocações Banco": 9,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 22,
+      "Unidade": "REGAP",
+      "Alocações Planilha": 11,
+      "Alocações Banco": 11,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 23,
+      "Unidade": "REPAR",
+      "Alocações Planilha": 11,
+      "Alocações Banco": 11,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 24,
+      "Unidade": "REPLAN",
+      "Alocações Planilha": 12,
+      "Alocações Banco": 12,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 25,
+      "Unidade": "REVAP",
+      "Alocações Planilha": 11,
+      "Alocações Banco": 11,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 26,
+      "Unidade": "RNEST",
+      "Alocações Planilha": 20,
+      "Alocações Banco": 20,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 27,
+      "Unidade": "RPBC",
+      "Alocações Planilha": 22,
+      "Alocações Banco": 22,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 28,
+      "Unidade": "UFN-III",
+      "Alocações Planilha": 3,
+      "Alocações Banco": 3,
+      "Diferença": "0",
+      "Status": "OK"
+    },
+    {
+      "Item": 29,
+      "Unidade": "UTG-CA",
+      "Alocações Planilha": 1,
+      "Alocações Banco": 1,
+      "Diferença": "0",
+      "Status": "OK"
+    }
+  ],
+  "verificacoesEspeciais": {
+    "edihb": {
+      "esperado": 84,
+      "obtido": 84,
+      "ok": true
+    },
+    "reduc": {
+      "esperado": 23,
+      "obtido": 23,
+      "ok": true
+    },
+    "vagasConfirmadas": {
+      "esperado": 19,
+      "obtido": 19,
+      "ok": true
+    },
+    "ocupadasConfirmadas": {
+      "esperado": 292,
+      "obtido": 292,
+      "ok": true
+    },
+    "titularesConfirmados": {
+      "esperado": 297,
+      "obtido": 297,
+      "ok": true
+    },
+    "feristasConfirmados": {
+      "esperado": 23,
+      "obtido": 23,
+      "ok": true
+    },
+    "substitutosConfirmados": {
+      "esperado": 2,
+      "obtido": 2,
+      "ok": true
+    },
+    "semDivergenciaGeral": true
+  }
+}

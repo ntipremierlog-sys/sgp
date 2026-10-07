@@ -112,10 +112,28 @@ export function EvolucaoCompetenciaCard({
   };
 
   const ultimoPontoReal = pontosReais[pontosReais.length - 1];
+  const valorReferencia = ultimoPontoReal?.slaAcumulado ?? projecaoFechamento ?? 95;
+  const corLinha =
+    valorReferencia >= metaSla
+      ? "#0F7B4F"
+      : valorReferencia >= 85.0
+      ? "#D97706"
+      : "#D92D20";
+
+  const pathAreaReal = useMemo(() => {
+    if (pontosReais.length < 2) return "";
+    const pPrimeiro = pontosReais[0];
+    const pUltimo = pontosReais[pontosReais.length - 1];
+    const yBase = paddingTop + chartHeight;
+    const xInicio = getX(pPrimeiro.dia);
+    const xFim = getX(pUltimo.dia);
+    return `${pathReal} L ${xFim.toFixed(1)} ${yBase.toFixed(1)} L ${xInicio.toFixed(1)} ${yBase.toFixed(1)} Z`;
+  }, [pathReal, pontosReais, chartHeight, paddingTop]);
 
   return (
     <div
-      className={`bg-white p-5 rounded-[12px] border border-[#E3E6EB] shadow-xs flex flex-col justify-between ${className}`}
+      id="grafico-evolucao-sla"
+      className={`bg-white p-5 rounded-[12px] border border-[#E3E6EB] shadow-xs flex flex-col justify-between scroll-mt-6 ${className}`}
     >
       {/* Cabeçalho do Card */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F1F3F5]">
@@ -132,7 +150,7 @@ export function EvolucaoCompetenciaCard({
         </div>
 
         {/* Bloco de Projeção de Fechamento */}
-        <div className="flex items-center gap-2.5 shrink-0 bg-[#F8FAFC] px-3 py-1.5 rounded-lg border border-[#E3E6EB]">
+        <div className="flex items-center gap-2.5 shrink-0 px-3 py-1.5 rounded-lg border border-[#E3E6EB] bg-white">
           <span className="text-xs font-semibold text-[#5B6474]">
             Projeção de fechamento:
           </span>
@@ -142,8 +160,8 @@ export function EvolucaoCompetenciaCard({
                 {projecaoFechamento.toFixed(1).replace(".", ",")}%
               </span>
               {projecaoFechamento < metaSla && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#FEF4E6] text-[#B54708] border border-[#FED7AA]">
-                  <AlertCircle className="w-3 h-3" />
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#B54708]">
+                  <AlertCircle className="w-3.5 h-3.5" />
                   <span>Abaixo da meta</span>
                 </span>
               )}
@@ -162,6 +180,16 @@ export function EvolucaoCompetenciaCard({
           viewBox={`0 0 ${width} ${height}`}
           className="w-full h-auto max-h-[260px] overflow-visible"
         >
+          <defs>
+            <linearGradient id="areaGradientSlaCard" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={corLinha} stopOpacity="0.22" />
+              <stop offset="100%" stopColor={corLinha} stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+
+          {/* Área sombreada com gradiente suave sob a curva apurada */}
+          {pathAreaReal && <path d={pathAreaReal} fill="url(#areaGradientSlaCard)" />}
+
           {/* Linhas de Grade Horizontais (Eixo Y) */}
           {ticksY.map((tick) => {
             const y = getY(tick);
@@ -196,7 +224,7 @@ export function EvolucaoCompetenciaCard({
             y1={yMeta}
             x2={width - paddingRight}
             y2={yMeta}
-            stroke="#B42318"
+            stroke="#D97706"
             strokeWidth={1.5}
             strokeDasharray="4 4"
           />
@@ -204,7 +232,7 @@ export function EvolucaoCompetenciaCard({
             x={width - paddingRight + 6}
             y={yMeta + 3}
             fontSize={10}
-            fill="#B42318"
+            fill="#D97706"
             fontWeight="bold"
             fontFamily="var(--font-ibm-sans), sans-serif"
           >
@@ -222,12 +250,12 @@ export function EvolucaoCompetenciaCard({
             />
           )}
 
-          {/* Linha Sólida Azul Realizada */}
+          {/* Linha Sólida Realizada com cor conforme SLA */}
           {pathReal && (
             <path
               d={pathReal}
               fill="none"
-              stroke="#1F4FD1"
+              stroke={corLinha}
               strokeWidth={2.5}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -246,8 +274,8 @@ export function EvolucaoCompetenciaCard({
                   cx={x}
                   cy={y}
                   r={isHoje ? 4.5 : 2.5}
-                  fill={isHoje ? "#1F4FD1" : "#FFFFFF"}
-                  stroke="#1F4FD1"
+                  fill={isHoje ? corLinha : "#FFFFFF"}
+                  stroke={corLinha}
                   strokeWidth={isHoje ? 2 : 1.5}
                 />
               </g>

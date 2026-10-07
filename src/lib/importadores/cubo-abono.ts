@@ -13,6 +13,10 @@ import {
   OcorrenciaOperacional,
 } from "@/lib/dados/estado-operacional";
 import { ItemInconsistencia } from "@/lib/importadores/rm-funcionarios";
+import {
+  obterPeriodoCompetencia,
+  marcarCalendarioDesatualizado,
+} from "@/lib/servicos/calendario-competencia";
 
 export const COLUNAS_OBRIGATORIAS_ABONO = [
   "chapa",
@@ -40,9 +44,22 @@ export interface LinhaAbonoProcessada {
     data: string;
     diaSemana: string;
     descricaoAbono: string;
+    categoriaAusencia: string;
+    categoriaItem5?: string;
+    quantidadeHoras?: number;
+    quantidadeDias?: number;
+    classificacaoPonto?: "Sem horas" | "Parcial" | "Dia inteiro";
     tipoOcorrencia: OcorrenciaOperacional["tipoOcorrencia"];
     postoCodigo?: string;
   };
+}
+
+export interface ItemRejeitadoAbono {
+  linha: number;
+  chapa?: string;
+  nome?: string;
+  coluna?: string;
+  motivo: string;
 }
 
 export interface ResultadoSimulacaoAbono {
@@ -50,6 +67,8 @@ export interface ResultadoSimulacaoAbono {
   arquivoNome: string;
   hashSha256: string;
   dataReferencia: string;
+  competencia?: string;
+  dataExtracao?: string;
   arquivoDuplicado: boolean;
   loteAnteriorId?: string;
   loteAnteriorData?: string;
@@ -63,6 +82,7 @@ export interface ResultadoSimulacaoAbono {
   };
   linhas: LinhaAbonoProcessada[];
   inconsistencias: ItemInconsistencia[];
+  linhasRejeitadasLista?: ItemRejeitadoAbono[];
 }
 
 export async function calcularHashSha256(buffer: Uint8Array | ArrayBuffer): Promise<string> {
@@ -125,12 +145,154 @@ export function identificarArquivoAbono(cabecalhosBrutos: string[]): ResultadoId
   };
 }
 
+/**
+ * Extrai a quantidade de horas e dias informados na linha do Cubo de Abono
+ */
+export function extrairQuantidadeHorasDias(valorRaw: unknown): { horas?: number; dias: number } {
+  if (valorRaw === null || valorRaw === undefined || valorRaw === "") {
+    return { dias: 1 };
+  }
+  let horas: number | undefined;
+  let dias = 1;
+
+  if (typeof valorRaw === "number") {
+    if (valorRaw > 0 && valorRaw <= 1) {
+      // Fração de 24h no Excel (ex: 0.3680555555555555 * 24 = 8.83h)
+      horas = Math.round(valorRaw * 24 * 100) / 100;
+    } else {
+      horas = valorRaw;
+    }
+  } else if (typeof valorRaw === "string" && valorRaw.trim() !== "") {
+    const s = valorRaw.trim();
+    if (s.includes(":")) {
+      const parts = s.split(":");
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      horas = Math.round((h + m / 60) * 100) / 100;
+    } else {
+      const parsed = parseFloat(s.replace(",", "."));
+      if (!isNaN(parsed)) {
+        if (parsed > 0 && parsed <= 1) {
+          horas = Math.round(parsed * 24 * 100) / 100;
+        } else {
+          horas = parsed;
+        }
+      }
+    }
+  }
+
+  if (horas !== undefined && horas >= 8) {
+    dias = Math.max(1, Math.round(horas / 8));
+  }
+
+  return { horas, dias };
+}
+
+/**
+ * Categorização estrita sem dados médicos (LGPD Item 11.3)
+ * Mapeia apenas para categorias contratuais: Férias, Falta, Afastamento, Licença, Folga compensatória, etc.
+ * NUNCA CID, diagnóstico ou texto de atestado.
+ */
+export function categorizarAusencia(descAbono: string): {
+  categoria: string;
+  tipoOcorrencia: OcorrenciaOperacional["tipoOcorrencia"];
+} {
+  const d = (descAbono || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (d.includes("FERIAS")) {
+    return { categoria: "Férias", tipoOcorrencia: "FERIAS" };
+  }
+  if (
+    d.includes("ATESTADO MEDICO") ||
+    d.includes("DOENCA") ||
+    d.includes("SAUDE") ||
+    d.includes("INSS") ||
+    d.includes("ACIDENTE") ||
+    d.includes("AFASTAMENTO")
+  ) {
+    return { categoria: "Afastamento", tipoOcorrencia: "ATESTADO_MEDICO" };
+  }
+  if (
+    d.includes("COMPARECIMENTO") ||
+    d.includes("ACOMPANHAMENTO") ||
+    d.includes("DECLARACAO") ||
+    d.includes("CONSULTA") ||
+    d.includes("LICENCA") ||
+    d.includes("MATERNIDADE") ||
+    d.includes("PATERNIDADE") ||
+    d.includes("LUTO") ||
+    d.includes("CASAMENTO") ||
+    d.includes("GALA")
+  ) {
+    return { categoria: "Licença", tipoOcorrencia: "FALTA_JUSTIFICADA" };
+  }
+  if (
+    d.includes("ABONADO") ||
+    d.includes("SANGUE") ||
+    d.includes("ELEITORAL") ||
+    d.includes("JURADO") ||
+    d.includes("TRE")
+  ) {
+    return { categoria: "Folga compensatória", tipoOcorrencia: "ABONO_LEGAL" };
+  }
+  if (
+    d.includes("FALTA") ||
+    d.includes("INJUSTIFICADA") ||
+    d.includes("SUSPENSAO")
+  ) {
+    return { categoria: "Falta", tipoOcorrencia: "FALTA_INJUSTIFICADA" };
+  }
+  if (
+    d.includes("FOLGA") ||
+    d.includes("COMPENSACAO") ||
+    d.includes("DSR") ||
+    d.includes("BANCO")
+  ) {
+    return { categoria: "Folga compensatória", tipoOcorrencia: "FOLGA_ESCALA" };
+  }
+  return { categoria: "Outros", tipoOcorrencia: "OUTROS" };
+}
+
+export function categorizarAbonoItem5(descAbono: string): {
+  categoria: string;
+  tipoOcorrencia: OcorrenciaOperacional["tipoOcorrencia"];
+  ehConhecido: boolean;
+} {
+  const d = (descAbono || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
+  if (d.includes("ATESTADO MEDICO") || d.includes("DOENCA") || d.includes("INSS") || d.includes("MEDICO")) {
+    return { categoria: "ATESTADO MEDICO", tipoOcorrencia: "ATESTADO_MEDICO", ehConhecido: true };
+  }
+  if (d.includes("ACOMPANHAMENTO")) {
+    return { categoria: "ATESTADO DE ACOMPANHAMENTO", tipoOcorrencia: "FALTA_JUSTIFICADA", ehConhecido: true };
+  }
+  if (d.includes("COMPARECIMENTO") || d.includes("DECLARACAO") || d.includes("CONSULTA")) {
+    return { categoria: "DECLARACAO COMPARECIMENTO", tipoOcorrencia: "FALTA_JUSTIFICADA", ehConhecido: true };
+  }
+  if (d.includes("ABONADO") || d.includes("SUPERIOR") || d.includes("GESTOR")) {
+    return { categoria: "ABONADO PELO SUPERIOR", tipoOcorrencia: "ABONO_LEGAL", ehConhecido: true };
+  }
+  if (d.includes("ELEITORAL") || d.includes("TRE") || d.includes("JURADO") || d.includes("SANGUE")) {
+    return { categoria: "ATESTADO COMP ELEITORAL", tipoOcorrencia: "ABONO_LEGAL", ehConhecido: true };
+  }
+  if (d.includes("FERIAS")) {
+    return { categoria: "Férias", tipoOcorrencia: "FERIAS", ehConhecido: true };
+  }
+  if (d.includes("LICENCA") || d.includes("MATERNIDADE") || d.includes("PATERNIDADE") || d.includes("LUTO") || d.includes("CASAMENTO") || d.includes("GALA")) {
+    return { categoria: "DECLARACAO COMPARECIMENTO", tipoOcorrencia: "FALTA_JUSTIFICADA", ehConhecido: true };
+  }
+
+  return { categoria: "Outros", tipoOcorrencia: "OUTROS", ehConhecido: false };
+}
+
 export async function simularImportacaoAbono(
   buffer: Uint8Array | ArrayBuffer,
   arquivoNome: string,
   dataReferencia: string,
-  estadoCustom?: EstadoOperacionalCompleto
+  estadoCustomOuOptions?: EstadoOperacionalCompleto | { competencia?: string; dataExtracao?: string },
+  optionsParam?: { competencia?: string; dataExtracao?: string }
 ): Promise<ResultadoSimulacaoAbono> {
+  const estadoCustom = estadoCustomOuOptions && "profissionais" in estadoCustomOuOptions ? estadoCustomOuOptions : undefined;
+  const options = optionsParam || (estadoCustomOuOptions && !("profissionais" in estadoCustomOuOptions) ? estadoCustomOuOptions : undefined);
   const estado = estadoCustom || carregarEstado();
   const hash = await calcularHashSha256(buffer);
 
@@ -148,14 +310,23 @@ export async function simularImportacaoAbono(
     throw new Error("Planilha de Cubo de Abono não contém dados suficientes.");
   }
 
-  const cabecalhos = (dados[0] as string[]).map((c) => String(c || "").trim());
+  // Cabeçalho na linha 1; ignorar as colunas "Total Geral", SITUACAO, DATAADMISSAO e DTDEMISSAO
+  const colunasIgnorar = new Set(["TOTAL GERAL", "SITUACAO", "DATAADMISSAO", "DTDEMISSAO", "DATA ADMISSAO", "DATA DEMISSAO"]);
+  const cabecalhosBrutos = (dados[0] as string[]).map((c) => String(c || "").trim());
+
   const linhasRaw: Record<string, unknown>[] = [];
   for (let i = 1; i < dados.length; i++) {
     const row = dados[i] as unknown[];
     if (!row || row.length === 0 || row.every((c) => c === "" || c === null || c === undefined)) continue;
+    // Ignora linha "Total Geral"
+    if (row.some((c) => String(c || "").toUpperCase().includes("TOTAL GERAL"))) continue;
+
     const obj: Record<string, unknown> = {};
-    cabecalhos.forEach((col, idx) => {
-      obj[col] = row[idx] !== undefined ? row[idx] : "";
+    cabecalhosBrutos.forEach((col, idx) => {
+      const colUpper = col.toUpperCase().trim();
+      if (!colunasIgnorar.has(colUpper)) {
+        obj[col] = row[idx] !== undefined ? row[idx] : "";
+      }
     });
     linhasRaw.push(obj);
   }
@@ -172,8 +343,10 @@ export async function simularImportacaoAbono(
 
   const todasInconsistencias: ItemInconsistencia[] = [];
   const linhasProcessadas: LinhaAbonoProcessada[] = [];
+  const linhasRejeitadasLista: ItemRejeitadoAbono[] = [];
 
   let countNovos = 0;
+  let countAtualizados = 0;
   let countErros = 0;
   let countAlertas = 0;
 
@@ -182,13 +355,13 @@ export async function simularImportacaoAbono(
     const errosLinha: ItemInconsistencia[] = [];
     const alertasLinha: ItemInconsistencia[] = [];
 
-    const rawChapa = String(row["CHAPA"] || "").trim();
-    const nome = String(row["NOME_FUNCIONARIO"] || "").trim();
-    const secaoCod = String(row["COD.SECÃO"] || row["COD.SEÇÃO"] || "").trim();
+    const rawChapa = String(row["CHAPA"] || row["chapa"] || "").trim();
+    const nome = String(row["NOME_FUNCIONARIO"] || row["NOME"] || "").trim();
+    const secaoCod = String(row["COD.SECÃO"] || row["COD.SEÇÃO"] || row["COD.SECAO"] || "").trim();
     const secaoDesc = String(row["DESC. SECAO"] || row["DESC. SEÇÃO"] || "").trim();
     const rawData = String(row["DATA"] || "").trim();
-    const diaSemana = String(row["DIA SEMANA"] || "").trim();
-    const descAbono = String(row["DESCRICAO ABONO"] || "OUTROS").trim().toUpperCase();
+    const diaSemana = String(row["DIA SEMANA"] || row["DIA_SEMANA"] || "").trim();
+    const descAbono = String(row["DESCRICAO ABONO"] || row["DESCRICAO"] || "OUTROS").trim().toUpperCase();
 
     // 1. Chapa
     const chapa = rawChapa.replace(/\D/g, "").padStart(6, "0");
@@ -219,6 +392,20 @@ export async function simularImportacaoAbono(
       });
     }
 
+    // Regra: Linhas com data fora da competência -> rejeitar
+    if (options?.competencia && dataIso && /^\d{4}-\d{2}-\d{2}$/.test(dataIso)) {
+      const periodoComp = obterPeriodoCompetencia(options.competencia);
+      if (dataIso < periodoComp.dataInicio || dataIso > periodoComp.dataFim) {
+        errosLinha.push({
+          linha: numLinha,
+          tipo: "ERRO",
+          coluna: "DATA",
+          chapa,
+          mensagem: `Data ${dataIso} fora da competência selecionada (${periodoComp.textoFormatado}).`,
+        });
+      }
+    }
+
     // Match com RM (somente se chapa for informada)
     const funcRm = chapa && chapa !== "000000" ? mapaRmPorChapa.get(chapa) : undefined;
     if (chapa && chapa !== "000000" && !funcRm) {
@@ -234,24 +421,94 @@ export async function simularImportacaoAbono(
     const postoDoTitular = mapaPostoPorTitular.get(chapa);
     const postoCodigo = funcRm?.postoCodigo || postoDoTitular?.codigoPosto || undefined;
 
-    // Categorização dos 6 tipos reais de abono/atestado
-    let tipoOcorrencia: OcorrenciaOperacional["tipoOcorrencia"] = "OUTROS";
-    if (descAbono.includes("ATESTADO MEDICO")) {
-      tipoOcorrencia = "ATESTADO_MEDICO";
-    } else if (descAbono.includes("ABONADO")) {
-      tipoOcorrencia = "ABONO_LEGAL";
-    } else if (descAbono.includes("COMPARECIMENTO") || descAbono.includes("ACOMPANHAMENTO")) {
-      tipoOcorrencia = "FALTA_JUSTIFICADA";
-    } else if (descAbono.includes("SANGUE") || descAbono.includes("ELEITORAL")) {
-      tipoOcorrencia = "ABONO_LEGAL";
-    } else if (descAbono.includes("FERIAS")) {
-      tipoOcorrencia = "FERIAS";
+    // Extração de quantidade de horas decimais e dias (ABONO2, HORAS, QUANTIDADE, DIAS)
+    const rawQtd =
+      row["ABONO2"] !== undefined && row["ABONO2"] !== ""
+        ? row["ABONO2"]
+        : row["HORAS"] !== undefined && row["HORAS"] !== ""
+        ? row["HORAS"]
+        : row["QUANTIDADE"] !== undefined && row["QUANTIDADE"] !== ""
+        ? row["QUANTIDADE"]
+        : row["DIAS"] !== undefined && row["DIAS"] !== ""
+        ? row["DIAS"]
+        : row["ABONO"];
+    const { horas: quantidadeHoras, dias: quantidadeDias } = extrairQuantidadeHorasDias(rawQtd);
+
+    // Classificação cruzando com o Ponto da competência:
+    // horas = 0 → "Sem horas"; dia com ponto → "Parcial"; dia sem ponto → "Dia inteiro"
+    const pontosNoDia = (estado.marcacoesPonto || []).filter(
+      (m) => (m.chapa === chapa || m.cpfLimpo === funcRm?.cpfLimpo) && m.dataLocal === dataIso
+    );
+    let classificacaoPonto: "Sem horas" | "Parcial" | "Dia inteiro" = "Dia inteiro";
+    if (quantidadeHoras === 0 || !quantidadeHoras) {
+      classificacaoPonto = "Sem horas";
+    } else if (pontosNoDia.length > 0) {
+      classificacaoPonto = "Parcial";
+    } else {
+      classificacaoPonto = "Dia inteiro";
     }
+
+    // Categorias: ATESTADO MEDICO, ATESTADO DE ACOMPANHAMENTO, DECLARACAO COMPARECIMENTO,
+    // ABONADO PELO SUPERIOR, ATESTADO COMP ELEITORAL. Valor desconhecido → "Outros" + alerta.
+    const catItem5 = categorizarAbonoItem5(descAbono);
+    const catAusencia = categorizarAusencia(descAbono);
+    const categoriaAusencia = catAusencia.categoria;
+    const tipoOcorrencia = catAusencia.tipoOcorrencia;
+    if (!catItem5.ehConhecido) {
+      alertasLinha.push({
+        linha: numLinha,
+        tipo: "ALERTA",
+        coluna: "DESCRICAO ABONO",
+        chapa,
+        mensagem: `Tipo de abono não reconhecido no catálogo padrão: "${descAbono}". Mapeado para Outros.`,
+      });
+    }
+
+    // Alerta: abono dentro de período de férias ou afastamento
+    const temAfastamentoNoDia = (estado.ocorrencias || []).some(
+      (o) =>
+        o.matricula === chapa &&
+        dataIso >= o.dataInicio &&
+        dataIso <= (o.dataFim || o.dataInicio) &&
+        (o.tipoOcorrencia === "FERIAS" ||
+          o.categoriaAusencia === "Férias" ||
+          o.categoriaAusencia === "Afastamento" ||
+          o.categoriaAusencia === "Licença")
+    );
+    if (temAfastamentoNoDia) {
+      alertasLinha.push({
+        linha: numLinha,
+        tipo: "ALERTA",
+        coluna: "DATA / ABONO",
+        chapa,
+        mensagem: `Abono registrado dentro de período de férias ou afastamento do colaborador.`,
+      });
+    }
+
+    // Chave única: CHAPA + DATA + DESCRICAO ABONO
+    const chaveUpsert = `${chapa}_${dataIso}_${tipoOcorrencia}`;
+    const jaExiste = (estado.ocorrencias || []).some(
+      (o) => `${o.matricula}_${o.dataInicio}_${o.tipoOcorrencia}` === chaveUpsert
+    );
 
     const temErro = errosLinha.length > 0;
     const temAlerta = alertasLinha.length > 0;
-    if (temErro) countErros++;
-    else countNovos++;
+    if (temErro) {
+      countErros++;
+      errosLinha.forEach((err) => {
+        linhasRejeitadasLista.push({
+          linha: numLinha,
+          chapa: chapa || "—",
+          nome: nome || funcRm?.nome || "—",
+          coluna: err.coluna,
+          motivo: err.mensagem,
+        });
+      });
+    } else if (jaExiste) {
+      countAtualizados++;
+    } else {
+      countNovos++;
+    }
     if (temAlerta) countAlertas++;
 
     const inconsistenciasLinha = [...errosLinha, ...alertasLinha];
@@ -260,7 +517,7 @@ export async function simularImportacaoAbono(
     linhasProcessadas.push({
       linha: numLinha,
       validaParaGravacao: !temErro,
-      statusAcao: temErro ? "ERRO" : "NOVO",
+      statusAcao: temErro ? "ERRO" : jaExiste ? "ATUALIZADO" : "NOVO",
       inconsistencias: inconsistenciasLinha,
       dados: {
         chapa,
@@ -270,6 +527,11 @@ export async function simularImportacaoAbono(
         data: dataIso,
         diaSemana,
         descricaoAbono: descAbono,
+        categoriaAusencia,
+        categoriaItem5: catItem5.categoria,
+        quantidadeHoras,
+        quantidadeDias,
+        classificacaoPonto,
         tipoOcorrencia,
         postoCodigo,
       },
@@ -281,19 +543,22 @@ export async function simularImportacaoAbono(
     arquivoNome,
     hashSha256: hash,
     dataReferencia,
+    competencia: options?.competencia,
+    dataExtracao: options?.dataExtracao || dataReferencia,
     arquivoDuplicado,
     loteAnteriorId: loteExistente?.id,
     loteAnteriorData: loteExistente?.dataHora,
     totais: {
       lidos: linhasRaw.length,
       novos: countNovos,
-      atualizados: 0,
+      atualizados: countAtualizados,
       semAlteracao: 0,
       erros: countErros,
       alertas: countAlertas,
     },
     linhas: linhasProcessadas,
     inconsistencias: todasInconsistencias,
+    linhasRejeitadasLista,
   };
 }
 
@@ -303,14 +568,30 @@ export function confirmarImportacaoAbono(
 ): { sucesso: boolean; loteId: string; mensagem: string } {
   const estadoAtual = carregarEstado();
 
-  if (simulacao.arquivoDuplicado) {
+  if (simulacao.arquivoDuplicado && !simulacao.competencia) {
     throw new Error(`Este arquivo já foi importado no lote ${simulacao.loteAnteriorId}.`);
   }
 
-  const snapshotAnterior: EstadoOperacionalCompleto = JSON.parse(JSON.stringify(estadoAtual));
+  const snapshotAnterior: EstadoOperacionalCompleto = {
+    profissionais: [...(estadoAtual.profissionais || [])],
+    ocorrencias: [...(estadoAtual.ocorrencias || [])],
+    coberturas: [...(estadoAtual.coberturas || [])],
+    alocadosSifac: [...(estadoAtual.alocadosSifac || [])],
+  } as any;
   const dataHoraAtual = new Date().toISOString().replace("T", " ").substring(0, 19);
   const stamp = dataHoraAtual.replace(/[-: ]/g, "").substring(0, 14);
   const loteId = `LOTE-ABONO-${stamp}`;
+
+  // Se houver lote de abono da mesma competência, substitui o anterior (marca como DESFEITO)
+  let lotesExistentes = estadoAtual.lotesImportacao || [];
+  if (simulacao.competencia) {
+    lotesExistentes = lotesExistentes.map((l) => {
+      if (l.tipo === "ABONO_RM" && l.competencia === simulacao.competencia && l.status === "CONCLUIDO") {
+        return { ...l, status: "DESFEITO" as const };
+      }
+      return l;
+    });
+  }
 
   const novasOcorrencias: OcorrenciaOperacional[] = simulacao.linhas
     .filter((l) => l.validaParaGravacao)
@@ -320,23 +601,54 @@ export function confirmarImportacaoAbono(
       profissionalNome: l.dados.nomeFuncionario,
       postoCodigo: l.dados.postoCodigo,
       tipoOcorrencia: l.dados.tipoOcorrencia,
+      categoriaAusencia: l.dados.categoriaAusencia,
+      tipoAbono: l.dados.categoriaItem5 || l.dados.descricaoAbono,
+      quantidadeHoras: l.dados.quantidadeHoras,
+      quantidadeDias: l.dados.quantidadeDias,
       dataInicio: l.dados.data,
       dataFim: l.dados.data,
-      diasAfetados: 1,
+      diasAfetados: l.dados.quantidadeDias || 1,
       status: "VALIDADA" as const,
-      observacaoPublica: `Abono/Ocorrência: ${l.dados.descricaoAbono} (${l.dados.diaSemana || ""}) - ${l.dados.secaoDescricao || ""}`,
+      observacaoPublica: `Ausência RM: ${l.dados.categoriaAusencia}`,
       criadoEm: dataHoraAtual,
     }));
 
-  // Deduplicação: substitui ocorrência prévia da mesma matrícula e mesma data para evitar duplicidade
-  const chavesNovas = new Set(novasOcorrencias.map((o) => `${o.matricula}_${o.dataInicio}`));
-  const ocorrenciasFiltradas = (estadoAtual.ocorrencias || []).filter(
-    (o) => !chavesNovas.has(`${o.matricula}_${o.dataInicio}`)
-  );
+  // Upsert por chapa + data + tipo
+  const mapaOcorrencias = new Map<string, OcorrenciaOperacional>();
+  (estadoAtual.ocorrencias || []).forEach((o) => {
+    const k = `${o.matricula}_${o.dataInicio}_${o.tipoOcorrencia}`;
+    mapaOcorrencias.set(k, o);
+  });
+
+  novasOcorrencias.forEach((nova) => {
+    const k = `${nova.matricula}_${nova.dataInicio}_${nova.tipoOcorrencia}`;
+    const existente = mapaOcorrencias.get(k);
+    if (existente) {
+      mapaOcorrencias.set(k, {
+        ...existente,
+        profissionalNome: nova.profissionalNome,
+        postoCodigo: nova.postoCodigo || existente.postoCodigo,
+        categoriaAusencia: nova.categoriaAusencia,
+        tipoAbono: nova.tipoAbono,
+        quantidadeHoras: nova.quantidadeHoras || existente.quantidadeHoras,
+        quantidadeDias: nova.quantidadeDias || existente.quantidadeDias,
+        status: "VALIDADA",
+        observacaoPublica: nova.observacaoPublica,
+        dadoSensivel: undefined,
+      });
+    } else {
+      mapaOcorrencias.set(k, nova);
+    }
+  });
+
+  const ocorrenciasFiltradas = Array.from(mapaOcorrencias.values());
 
   const novoLote: LoteImportacaoOperacional = {
     id: loteId,
     tipo: "ABONO_RM",
+    competencia: simulacao.competencia,
+    dataExtracao: simulacao.dataExtracao,
+    linhasRejeitadas: simulacao.linhasRejeitadasLista ? simulacao.linhasRejeitadasLista.length : simulacao.totais.erros,
     arquivoNome: simulacao.arquivoNome,
     hashSha256: simulacao.hashSha256,
     dataReferencia: simulacao.dataReferencia,
@@ -349,26 +661,30 @@ export function confirmarImportacaoAbono(
   };
 
   const novoLog: LogAuditoriaOperacional = {
-    id: `log-${Date.now()}`,
+    id: `log-abono-${Date.now()}`,
     timestamp: dataHoraAtual,
     usuario: usuarioNome,
     perfil: "PREMIER_ADMIN",
-    acao: "IMPORTACAO_CUBO_ABONO",
+    acao: "IMPORTAR_CUBO_ABONO",
     entidade: `Lote (${loteId})`,
-    detalhes: `Importação de ocorrências do Cubo de Abono confirmada: ${novasOcorrencias.length} justificativas legais inseridas na competência.`,
+    detalhes: `Importação de Cubo de Abono e Ocorrências confirmada no lote ${loteId} (${simulacao.arquivoNome})${simulacao.competencia ? ` - Competência ${simulacao.competencia}` : ""}: ${simulacao.totais.novos} novos, ${simulacao.totais.atualizados} atualizados, ${simulacao.totais.erros} erros.`,
     ip: "189.120.45.12",
   };
 
   salvarEstado({
-    ocorrencias: [...novasOcorrencias, ...ocorrenciasFiltradas],
-    lotesImportacao: [novoLote, ...(estadoAtual.lotesImportacao || [])],
-    logsAuditoria: [novoLog, ...estadoAtual.logsAuditoria],
+    ocorrencias: ocorrenciasFiltradas,
+    lotesImportacao: [novoLote, ...lotesExistentes],
+    logsAuditoria: [novoLog, ...(estadoAtual.logsAuditoria || [])],
   });
+
+  if (simulacao.competencia) {
+    marcarCalendarioDesatualizado(simulacao.competencia);
+  }
 
   return {
     sucesso: true,
     loteId,
-    mensagem: `Importação de Abonos confirmada com sucesso! Lote ${loteId} gravado com ${novasOcorrencias.length} ocorrências validadas.`,
+    mensagem: `Importação de Abonos confirmada com sucesso! Lote ${loteId} com ${simulacao.totais.novos} novos registros e ${simulacao.totais.atualizados} atualizações.${simulacao.competencia ? ` Competência: ${simulacao.competencia}.` : ""}`,
   };
 }
 
@@ -401,6 +717,8 @@ export function gerarRelatorioValidacaoAbonoXlsx(simulacao: ResultadoSimulacaoAb
     Data: l.dados.data,
     "Dia Semana": l.dados.diaSemana,
     "Descrição Abono": l.dados.descricaoAbono,
+    "Categoria Ausência": l.dados.categoriaAusencia,
+    "Horas": l.dados.quantidadeHoras || "—",
     "Tipo Mapeado": l.dados.tipoOcorrencia,
     "Posto Vinculado": l.dados.postoCodigo || "Reserva Técnica / Sem Posto",
     Status: l.validaParaGravacao ? "Válida" : "Erro",

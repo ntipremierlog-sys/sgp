@@ -11,6 +11,8 @@ export type PerfilUsuario =
 
 export type StatusUsuario = "ATIVO" | "INATIVO" | "BLOQUEADO" | "PENDENTE";
 
+export const TIMEOUT_INATIVIDADE_MS = 30 * 60 * 1000; // 30 minutos de inatividade máxima
+
 export type TipoConta = "SSO_MICROSOFT" | "LOCAL";
 
 export type Acao = "LER" | "CRIAR" | "EDITAR" | "EXCLUIR" | "EXPORTAR" | "GERENCIAR";

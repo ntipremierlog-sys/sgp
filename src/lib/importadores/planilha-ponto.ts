@@ -19,7 +19,11 @@ import {
   obterFusoHorarioBase,
   converterLocalParaUtc,
 } from "@/lib/dados/secoes-horarios";
-import { salvarLotePonto } from "@/lib/dados/estado-operacional";
+import { salvarLotePonto, carregarEstado } from "@/lib/dados/estado-operacional";
+import {
+  obterPeriodoCompetencia,
+  marcarCalendarioDesatualizado,
+} from "../servicos/calendario-competencia";
 
 export interface ColaboradorReferenciaPonto {
   id: string;
@@ -41,6 +45,8 @@ export interface OpcoesImportacaoPlanilhaPonto {
   modeloIdForcado?: string;
   basePadraoId?: string;
   marcaçõesExistentes?: MarcacaoPontoOriginal[];
+  competencia?: string;
+  dataExtracao?: string;
 }
 
 /**
@@ -341,7 +347,26 @@ export async function processarPlanilhaPonto(
     return resultado;
   }
 
-  const cabecalho = (linhasMatriz[0] || []).map((c) => String(c || "").trim());
+  let idxLinhaCabecalho = 0;
+  let cabecalho = (linhasMatriz[0] || []).map((c) => String(c || "").trim());
+
+  // Se a linha 1 não contém termos de cabeçalho comuns mas a linha 2 contém (ex: cabeçalho na linha 2 do RM Chronus):
+  const temTermosCabecalhoL1 = cabecalho.some((c) => {
+    const n = c.toUpperCase();
+    return n.includes("CHAPA") || n.includes("CPF") || n.includes("DATA");
+  });
+
+  if (!temTermosCabecalhoL1 && linhasMatriz.length > 1) {
+    const cabL2 = (linhasMatriz[1] || []).map((c) => String(c || "").trim());
+    const temTermosCabecalhoL2 = cabL2.some((c) => {
+      const n = c.toUpperCase();
+      return n.includes("CHAPA") || n.includes("CPF") || n.includes("DATA");
+    });
+    if (temTermosCabecalhoL2) {
+      idxLinhaCabecalho = 1;
+      cabecalho = cabL2;
+    }
+  }
 
   // Localiza ou detecta o modelo
   let modelo: MapeamentoColunasPonto | null = null;
@@ -354,7 +379,7 @@ export async function processarPlanilhaPonto(
 
   if (!modelo) {
     resultado.inconsistencias.push({
-      linha: 1,
+      linha: idxLinhaCabecalho + 1,
       motivo:
         "Cabeçalhos da planilha não reconhecidos automaticamente por nenhum modelo cadastrado. Configure um modelo em Administração.",
       gravidade: "ERRO",
@@ -376,7 +401,7 @@ export async function processarPlanilhaPonto(
 
   if (idxId === undefined || idxData === undefined) {
     resultado.inconsistencias.push({
-      linha: 1,
+      linha: idxLinhaCabecalho + 1,
       motivo: `Colunas obrigatórias ('${modelo.colunaIdentificador}' ou '${modelo.colunaData}') não encontradas na planilha.`,
       gravidade: "ERRO",
     });
@@ -408,13 +433,18 @@ export async function processarPlanilhaPonto(
   let dataHoraMaisRecenteMs = 0;
   let dataHoraMaisRecenteStr = "";
 
-  // Itera linhas de dados (começando na linha 2, índice 1)
-  for (let i = 1; i < linhasMatriz.length; i++) {
+  const estadoOcorrencias = carregarEstado().ocorrencias || [];
+
+  // Itera linhas de dados (começando após a linha de cabeçalho)
+  for (let i = idxLinhaCabecalho + 1; i < linhasMatriz.length; i++) {
     const linha = linhasMatriz[i];
     const numLinha = i + 1;
 
-    // Linha vazia
+    // Linha vazia ou com "Total Geral"
     if (!linha || linha.every((cel) => cel === "" || cel === undefined || cel === null)) {
+      continue;
+    }
+    if (linha.some((cel) => String(cel || "").toUpperCase().includes("TOTAL GERAL"))) {
       continue;
     }
 
@@ -435,6 +465,21 @@ export async function processarPlanilhaPonto(
         gravidade: "ALERTA",
       });
       continue;
+    }
+
+    // Regra: Linhas com data fora da competência -> rejeitar
+    if (opcoes.competencia) {
+      const periodo = obterPeriodoCompetencia(opcoes.competencia);
+      if (dataFormatada < periodo.dataInicio || dataFormatada > periodo.dataFim) {
+        resultado.inconsistencias.push({
+          linha: numLinha,
+          identificador: String(valId),
+          motivo: `Data ${dataFormatada} fora da competência selecionada (${periodo.textoFormatado}).`,
+          gravidade: "ERRO",
+        });
+        resultado.totais.inconsistenciasEstruturais++;
+        continue;
+      }
     }
 
     // Identificação do colaborador
@@ -458,11 +503,12 @@ export async function processarPlanilhaPonto(
       }
     }
 
+    // Regra: Rejeitar CHAPA que não esteja no cadastro da competência
     if (!colaboradorEncontrado) {
       resultado.inconsistencias.push({
         linha: numLinha,
         identificador: String(valId),
-        motivo: `Colaborador com identificador '${valId}' não encontrado no cadastro RM.`,
+        motivo: `Colaborador com chapa/identificador '${valId}' não encontrado no cadastro RM da competência.`,
         gravidade: "ERRO",
       });
       resultado.totais.colaboradoresNaoEncontrados++;
@@ -509,6 +555,52 @@ export async function processarPlanilhaPonto(
         horasParaProcessar.push({
           hora: horaFormatada,
           nsrComp: valNsr,
+        });
+      }
+    }
+
+    // Alertas (não rejeitar):
+    // 1. Marcação ímpar
+    if (horasParaProcessar.length > 0 && horasParaProcessar.length % 2 !== 0) {
+      resultado.inconsistencias.push({
+        linha: numLinha,
+        identificador: colaboradorEncontrado.chapa,
+        motivo: `Marcação ímpar detectada (${horasParaProcessar.length} batidas registradas no dia).`,
+        gravidade: "ALERTA",
+      });
+    }
+
+    // 2. Trabalho em dia com HORA_BASE = 0
+    if (idxHoraBase !== undefined && horasParaProcessar.length > 0) {
+      const rawHb = String(linha[idxHoraBase] || "").trim();
+      if (rawHb === "0" || rawHb === "0,0" || rawHb === "00:00" || rawHb === "0.0") {
+        resultado.inconsistencias.push({
+          linha: numLinha,
+          identificador: colaboradorEncontrado.chapa,
+          motivo: `Trabalho registrado em dia com HORA_BASE = 0.`,
+          gravidade: "ALERTA",
+        });
+      }
+    }
+
+    // 3. Ponto dentro de período de férias ou afastamento
+    if (horasParaProcessar.length > 0) {
+      const temAfastamentoNoDia = estadoOcorrencias.some(
+        (o) =>
+          o.matricula === colaboradorEncontrado!.chapa &&
+          dataFormatada >= o.dataInicio &&
+          dataFormatada <= (o.dataFim || o.dataInicio) &&
+          (o.tipoOcorrencia === "FERIAS" ||
+            o.categoriaAusencia === "Férias" ||
+            o.categoriaAusencia === "Afastamento" ||
+            o.categoriaAusencia === "Licença")
+      );
+      if (temAfastamentoNoDia) {
+        resultado.inconsistencias.push({
+          linha: numLinha,
+          identificador: colaboradorEncontrado.chapa,
+          motivo: `Ponto registrado dentro de período de férias ou afastamento do colaborador.`,
+          gravidade: "ALERTA",
         });
       }
     }
@@ -668,6 +760,8 @@ export interface ResultadoSimulacaoPonto {
   modeloUtilizado?: string;
   hashSha256: string;
   dataReferencia: string;
+  competencia?: string;
+  dataExtracao?: string;
   arquivoDuplicado: boolean;
   loteAnteriorId?: string;
   loteAnteriorData?: string;
@@ -679,6 +773,7 @@ export interface ResultadoSimulacaoPonto {
     erros: number;
     alertas: number;
   };
+  linhas?: any[];
   marcacoesExtraidas: MarcacaoPontoOriginal[];
   diasSemJornadaPrevista?: string[];
   inconsistencias: ItemInconsistencia[];
@@ -691,7 +786,8 @@ export interface ResultadoSimulacaoPonto {
 export async function simularImportacaoPonto(
   buffer: ArrayBuffer | Uint8Array,
   arquivoNome: string,
-  dataReferencia: string = "2026-08-31"
+  dataReferencia: string = "2026-08-31",
+  opcoes?: { competencia?: string; dataExtracao?: string }
 ): Promise<ResultadoSimulacaoPonto> {
   const { carregarEstado } = await import("@/lib/dados/estado-operacional");
   const estado = carregarEstado();
@@ -730,6 +826,8 @@ export async function simularImportacaoPonto(
       bufferOuArray: buffer,
       colaboradores: colaboradoresRef,
       marcaçõesExistentes: marcacoesExistentes,
+      competencia: opcoes?.competencia,
+      dataExtracao: opcoes?.dataExtracao,
     });
   }
 
@@ -746,6 +844,8 @@ export async function simularImportacaoPonto(
     modeloUtilizado: resPonto.modeloUtilizado,
     hashSha256: resPonto.hashSha256,
     dataReferencia: resPonto.dataReferenciaLote || dataReferencia,
+    competencia: opcoes?.competencia,
+    dataExtracao: opcoes?.dataExtracao || dataReferencia,
     arquivoDuplicado: !!loteDuplicado,
     loteAnteriorId: loteDuplicado?.id,
     loteAnteriorData: loteDuplicado?.dataHora,
@@ -757,6 +857,16 @@ export async function simularImportacaoPonto(
       erros: resPonto.totais.colaboradoresNaoEncontrados + resPonto.totais.inconsistenciasEstruturais,
       alertas: resPonto.totais.alertasDemitidos,
     },
+    linhas: resPonto.marcacoesImportadas.map((m, idx) => ({
+      linha: idx + 1,
+      validaParaGravacao: true,
+      dados: {
+        chapa: m.chapa,
+        nome: m.chapa,
+        secaoDescricao: m.equipamentoOrigem || "Ponto",
+        funcao: `${m.dataLocal} ${m.horaLocal}`,
+      },
+    })),
     marcacoesExtraidas: resPonto.marcacoesImportadas,
     diasSemJornadaPrevista: resPonto.diasSemJornadaPrevista,
     inconsistencias: resPonto.inconsistencias.map((inc) => ({
@@ -787,6 +897,9 @@ export function confirmarImportacaoPonto(
   const loteObj = {
     id: loteId,
     tipo: simulacao.tipo,
+    competencia: simulacao.competencia,
+    dataExtracao: simulacao.dataExtracao,
+    linhasRejeitadas: simulacao.totais.erros,
     arquivoNome: simulacao.arquivoNome,
     hashSha256: simulacao.hashSha256,
     dataReferencia: simulacao.dataReferencia,
@@ -803,6 +916,10 @@ export function confirmarImportacaoPonto(
     [],
     simulacao.resultadoPontoCompleto?.diasSemJornadaPrevista || []
   );
+
+  if (simulacao.competencia) {
+    marcarCalendarioDesatualizado(simulacao.competencia);
+  }
 
   return {
     sucesso: true,

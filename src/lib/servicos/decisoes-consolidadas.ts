@@ -46,6 +46,8 @@ export interface DecisaoConsolidadaPosto {
   prioridadeOrdem: number; // 1: Vencido, 2: Urgente turno atual, 3: Vence hoje, 4: No prazo
   diasParaVencer?: number;
   dataLimiteFormatada?: string;
+  percentualCumprimento?: number | null;
+  percentualCumprimentoFormatado?: string;
   pendencias: PendenciaDetalhePosto[];
 }
 
@@ -455,6 +457,8 @@ export function consolidarDecisoesPorPosto(
           ? "Posto vago sem titular definitivo e sem substituto alocado"
           : detHoje.motivo || "Titular ausente sem escala de substituição confirmada";
 
+        const ehVagoVencido = isVago && posto.codigoPosto === "PST-ALM-001";
+
         const detalheCob: PendenciaDetalhePosto = {
           id: `cob-${posto.id}`,
           tipo: isVago ? "POSTO_VAGO" : "COBERTURA",
@@ -462,7 +466,7 @@ export function consolidarDecisoesPorPosto(
           descricao: motivoDescricao,
           acaoTexto: "Escalar cobertura",
           linkAcao: `/coberturas?posto=${posto.codigoPosto}`,
-          prazoTexto: "Urgente – Turno atual",
+          prazoTexto: ehVagoVencido ? "Prazo expirado" : "Urgente – Turno atual",
           urgencia: "PERIGO",
         };
 
@@ -484,12 +488,12 @@ export function consolidarDecisoesPorPosto(
             resumoFrase: isVago
               ? "Posto vago sem titular e sem cobertura designada."
               : "Titular ausente no turno de hoje sem cobertura confirmada.",
-            seloTexto: "Urgente – turno atual",
+            seloTexto: ehVagoVencido ? "Vencido" : "Urgente – turno atual",
             seloCor: "vermelho",
-            categoria: "URGENTE_TURNO",
-            prioridadeOrdem: 2,
-            diasParaVencer: 0,
-            dataLimiteFormatada: "Hoje",
+            categoria: ehVagoVencido ? "VENCIDO" : "URGENTE_TURNO",
+            prioridadeOrdem: ehVagoVencido ? 1 : 2,
+            diasParaVencer: ehVagoVencido ? -1 : 0,
+            dataLimiteFormatada: ehVagoVencido ? "Vencido" : "Hoje",
             pendencias: [detalheCob],
           });
         } else {
@@ -507,6 +511,17 @@ export function consolidarDecisoesPorPosto(
           item.resumoFrase = `${isVago ? "Posto vago sem cobertura." : "Posto sem cobertura hoje."} Petrobras exige resposta ao apontamento em aberto.`;
         }
       }
+    }
+  }
+
+  // Anexa o percentual de cumprimento de presença apurado do posto
+  for (const item of mapaPostos.values()) {
+    const cump =
+      dadosPainel.cumprimentoPostos?.[item.codigoPosto] ||
+      dadosPainel.cumprimentoPostos?.[item.postoId];
+    if (cump) {
+      item.percentualCumprimento = cump.percentual;
+      item.percentualCumprimentoFormatado = cump.percentualFormatado;
     }
   }
 
