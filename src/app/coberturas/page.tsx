@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   UserCheck2,
+  UserPlus,
   Search,
   Plus,
   ShieldCheck,
@@ -555,15 +556,21 @@ export default function CoberturasPage() {
     });
   };
 
-  const abrirModalIncluir = (postoPadrao?: string, dataPadrao?: string, vagaPadrao?: string) => {
+  const abrirModalIncluir = (
+    postoPadrao?: string,
+    dataPadrao?: string,
+    vagaPadrao?: string,
+    dataFimPadrao?: string,
+    justificativaPadrao?: string
+  ) => {
     setCoberturaEmEdicao(null);
     setFormPostoCodigo(postoPadrao || "");
     setFormVagaId(vagaPadrao || "");
     setFormSubstitutoMatricula("");
     setFormDataInicio(dataPadrao || hojeISO());
-    setFormDataFim(dataPadrao || hojeISO());
+    setFormDataFim(dataFimPadrao || dataPadrao || hojeISO());
     setFormTipo("SUBSTITUICAO_INTERNA");
-    setFormJustificativa("");
+    setFormJustificativa(justificativaPadrao ? `Cobertura de ausência: ${justificativaPadrao}` : "");
     setEfetivarTrocaPermanente(false);
     setCienciaInterjornada(false);
     setModalAberto(true);
@@ -920,7 +927,7 @@ export default function CoberturasPage() {
 
   // Indicador 3: Uso da Reserva Técnica (Pessoas físicas alocadas no mês / pessoas disponíveis)
   const profissionaisRtTotal = useMemo(() => {
-    const matriculasFeristas = new Set(FERISTAS_REV04.map((f) => f.matricula || f.chapaRM));
+    const matriculasFeristas = new Set(FERISTAS_REV04.map((f) => f.chapaRM).filter(Boolean) as string[]);
     const daLista = profissionais.filter((p) => matriculasFeristas.has(p.matricula) || matriculasFeristas.has(p.chapa));
     return daLista.length > 0 ? daLista : (FERISTAS_REV04 as unknown as ProfissionalOperacional[]);
   }, [profissionais]);
@@ -2079,9 +2086,9 @@ export default function CoberturasPage() {
             </div>
           ) : (
             <div className="overflow-x-auto pb-1">
-              <div className="min-w-[860px]">
+              <div className="min-w-[920px]">
                 {/* Cabeçalho dos Dias da Competência - Sticky para rolagem suave */}
-                <div className="sticky top-0 bg-white z-10 grid grid-cols-[180px_repeat(31,minmax(20px,1fr))] gap-1 items-center py-1.5 border-b border-slate-100 text-[10px] font-mono text-slate-400 text-center font-bold">
+                <div className="sticky top-0 bg-white z-10 grid grid-cols-[220px_repeat(31,minmax(20px,1fr))] gap-1 items-center py-1.5 border-b border-slate-100 text-[10px] font-mono text-slate-400 text-center font-bold">
                   <div className="text-left font-sans text-slate-500 font-semibold uppercase tracking-wider pl-1">
                     Posto
                   </div>
@@ -2097,15 +2104,34 @@ export default function CoberturasPage() {
                   {heatmapPostos.map((hp) => (
                     <div
                       key={hp.codigoPosto}
-                      className="grid grid-cols-[180px_repeat(31,minmax(20px,1fr))] gap-1 items-center hover:bg-slate-50/60 p-0.5 rounded-lg transition-colors"
+                      className="grid grid-cols-[220px_repeat(31,minmax(20px,1fr))] gap-1 items-center hover:bg-slate-50/60 p-0.5 rounded-lg transition-colors group"
                     >
-                      <div className="truncate pr-2">
-                        <div className="font-mono font-semibold text-slate-900 text-xs truncate" title={hp.codigoPosto}>
-                          {hp.codigoPosto}
+                      <div className="flex items-center justify-between pr-2 min-w-0">
+                        <div className="truncate min-w-0">
+                          <div className="font-mono font-semibold text-slate-900 text-xs truncate" title={hp.codigoPosto}>
+                            {hp.codigoPosto}
+                          </div>
+                          <div className="text-[10px] text-slate-400 truncate" title={`${hp.base} • ${hp.funcaoPosto}`}>
+                            {hp.base}
+                          </div>
                         </div>
-                        <div className="text-[10px] text-slate-400 truncate" title={`${hp.base} • ${hp.funcaoPosto}`}>
-                          {hp.base}
-                        </div>
+                        {hp.totalDiasDescobertos > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const primeiraDataDesc = datasCompetencia.find((d) => hp.descDias.has(d));
+                              const descItem = primeiraDataDesc ? hp.descDias.get(primeiraDataDesc) : undefined;
+                              const todasDatas = datasCompetencia.filter((d) => hp.descDias.has(d));
+                              const ultimaDataDesc = todasDatas[todasDatas.length - 1];
+                              abrirModalIncluir(hp.codigoPosto, primeiraDataDesc, descItem?.vagaId, ultimaDataDesc, descItem?.motivo);
+                            }}
+                            className="ml-1.5 shrink-0 px-2 py-0.5 text-[10px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 active:scale-95 border border-rose-200/90 rounded-md transition-all flex items-center gap-1 shadow-2xs hover:border-rose-400 cursor-pointer"
+                            title={`Designar cobertura para ${hp.codigoPosto} (${hp.totalDiasDescobertos} dia(s) descoberto(s))`}>
+                            <UserPlus className="w-3 h-3 text-rose-600" />
+                            <span>Designar</span>
+                          </button>
+                        )}
                       </div>
 
                       {/* Células diárias */}
@@ -2148,17 +2174,17 @@ export default function CoberturasPage() {
                               if (cob) {
                                 setCoberturaPainel(cob);
                               } else if (desc) {
-                                abrirModalIncluir(hp.codigoPosto, isoDia, desc.vagaId);
+                                abrirModalIncluir(hp.codigoPosto, isoDia, desc.vagaId, isoDia, desc.motivo);
                               }
                             }}
                             className={`h-6 rounded transition-all cursor-pointer flex items-center justify-center text-[9px] font-mono font-bold ${
                               status === "COBERTO"
                                 ? "bg-emerald-500 text-white shadow-2xs hover:scale-110"
                                 : status === "DESCOBERTO"
-                                ? "bg-rose-500 text-white shadow-2xs hover:scale-110 cursor-pointer animate-pulse"
+                                ? "bg-rose-500 text-white shadow-2xs hover:scale-110 cursor-pointer animate-pulse ring-1 ring-rose-600/30"
                                 : "bg-slate-100 hover:bg-slate-200 text-transparent"
                             }`}
-                            title={status === "DESCOBERTO" ? "Posto Descoberto! Clique para designar cobertura." : undefined}
+                            title={status === "DESCOBERTO" ? "Posto Descoberto! Clique para designar cobertura nesta data." : undefined}
                           >
                             {status === "COBERTO" ? "C" : status === "DESCOBERTO" ? "D" : ""}
                           </div>
@@ -2426,6 +2452,17 @@ export default function CoberturasPage() {
               {tooltipHeatmap.motivo && (
                 <div>Motivo: <span className="text-blue-300">{tooltipHeatmap.motivo}</span></div>
               )}
+            </div>
+          )}
+          {tooltipHeatmap.status === "DESCOBERTO" && (
+            <div className="text-[11px] text-rose-200 space-y-0.5 pt-0.5 border-t border-slate-800">
+              <div>Titular Ausente: <strong className="text-white">{tooltipHeatmap.titular}</strong></div>
+              {tooltipHeatmap.motivo && (
+                <div>Motivo: <span className="text-rose-300">{tooltipHeatmap.motivo}</span></div>
+              )}
+              <div className="pt-1 text-[10px] font-semibold text-rose-400">
+                👉 Clique nesta célula para designar cobertura
+              </div>
             </div>
           )}
         </div>
@@ -3507,6 +3544,16 @@ export default function CoberturasPage() {
                         {coberturaEmEdicao?.substitutoNome || formSubstitutoMatricula} ({formSubstitutoMatricula}) [Atual]
                       </option>
                   )}
+                  <optgroup label="⚡ Feristas Dedicados do Contrato (Equipe de Cobertura)">
+                    {FERISTAS_REV04.filter((f) => f.chapaRM).map((f) => {
+                      const mat = f.chapaRM!;
+                      return (
+                        <option key={mat} value={mat}>
+                          ⚡ {f.colaborador} ({mat}) — Base {f.unidade}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
                   <optgroup label="Reserva Técnica">
                     {profissionais
                       .filter(
