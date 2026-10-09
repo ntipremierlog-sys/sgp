@@ -1,13 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
-  Users,
   Search,
   Plus,
   Lock,
-  Phone,
   X,
   CheckCircle2,
   ArrowRight,
@@ -24,10 +22,13 @@ import {
   Calendar,
   UserCheck,
   UserMinus,
-  MapPin,
-  ChevronRight,
+  Download,
   SlidersHorizontal,
-  Sparkles,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  MoreHorizontal,
+  ExternalLink,
 } from "lucide-react";
 import {
   carregarEstado,
@@ -70,26 +71,28 @@ import posicoesRev04Json from "@/lib/dados/posicoes-rev04.json";
 import feristasRev04Json from "@/lib/dados/feristas-rev04.json";
 
 const FUNCOES_PADRAO: Record<string, string> = {
-  "almoxarife lider": "Almoxarife Líder",
-  "almoxarife líder": "Almoxarife Líder",
-  "auxiliar de almoxarifado i": "Auxiliar de Almoxarifado I",
-  "auxiliar de almoxarifado ii": "Auxiliar de Almoxarifado II",
-  "auxiliar de almoxarifado iii": "Auxiliar de Almoxarifado III",
-  "operador de empilhadeira lider": "Operador de Empilhadeira Líder",
-  "operador de empilhadeira líder": "Operador de Empilhadeira Líder",
-  "operador de empilhadeira folguista": "Operador de Empilhadeira Folguista",
-  "auxiliar de logistica": "Auxiliar de Logística",
-  "auxiliar de logística": "Auxiliar de Logística",
-  "assistente de logistica": "Assistente de Logística",
-  "assistente de logística": "Assistente de Logística",
-  "conferente de carga": "Conferente de Carga",
-  "motorista de veiculo pesado": "Motorista de Veículo Pesado",
-  "motorista operador de munck": "Motorista Operador de Munck",
+  "almoxarife lider": "Almoxarife líder",
+  "almoxarife líder": "Almoxarife líder",
+  "auxiliar de almoxarifado i": "Auxiliar de almoxarifado I",
+  "auxiliar de almoxarifado ii": "Auxiliar de almoxarifado II",
+  "auxiliar de almoxarifado iii": "Auxiliar de almoxarifado III",
+  "operador de empilhadeira lider": "Operador de empilhadeira líder",
+  "operador de empilhadeira líder": "Operador de empilhadeira líder",
+  "operador de empilhadeira folguista": "Operador de empilhadeira folguista",
+  "auxiliar de logistica": "Auxiliar de logística",
+  "auxiliar de logística": "Auxiliar de logística",
+  "assistente de logistica": "Assistente de logística",
+  "assistente de logística": "Assistente de logística",
+  "conferente de carga": "Conferente de carga",
+  "motorista de veiculo pesado": "Motorista de veículo pesado",
+  "motorista operador de munck": "Motorista operador de munck",
+  "analista de riscos": "Analista de riscos",
+  "supervisor operacional": "Supervisor operacional",
+  "auxiliar operacional": "Auxiliar operacional",
 };
 
 /**
- * Unificação de estilos de texto: formata strings em Title Case,
- * mantendo preposições minúsculas, numerais romanos e códigos contratuais.
+ * Formata texto mantendo regras contratuais e Title Case limpo
  */
 function formatarTexto(str?: string): string {
   if (!str) return "—";
@@ -108,12 +111,12 @@ function formatarTexto(str?: string): string {
     .map((palavra, idx) => {
       if (romanos.has(palavra)) return palavra.toUpperCase();
       if (idx > 0 && preposicoes.has(palavra)) return palavra;
-      if (palavra === "lider") return "Líder";
-      if (palavra === "logistica") return "Logística";
-      if (palavra === "veiculo") return "Veículo";
-      if (palavra === "operacoes") return "Operações";
-      if (palavra === "tecnico") return "Técnico";
-      if (palavra === "seguranca") return "Segurança";
+      if (palavra === "lider") return "líder";
+      if (palavra === "logistica") return "logística";
+      if (palavra === "veiculo") return "veículo";
+      if (palavra === "operacoes") return "operações";
+      if (palavra === "tecnico") return "técnico";
+      if (palavra === "seguranca") return "segurança";
       return palavra.charAt(0).toUpperCase() + palavra.slice(1);
     })
     .join(" ");
@@ -137,7 +140,7 @@ function formatarSituacao(sit?: string): string {
   if (s === "ATIVO") return "Ativo";
   if (s === "AFASTADO") return "Afastado";
   if (s === "FERIAS") return "Férias";
-  if (s === "DESLIGADO") return "Desligado";
+  if (s === "DESLIGADO" || s === "DEMITIDO") return "Demitido";
   return formatarTexto(sit);
 }
 
@@ -161,15 +164,51 @@ function calcularTempoCasa(dataAdmissaoStr?: string): string {
   return `${anos}a ${meses}m`;
 }
 
-function formatarHorario(horario?: string): string {
-  if (!horario) return "Horário Operacional Padrão";
-  let clean = horario.replace(/^PETROBRAS\s*-\s*/i, "").trim();
-  clean = clean.replace(/\s*-\s*ESCALA\s+[0-9X]+/i, "").trim();
-  clean = clean.replace(/\bAS\b/i, "às");
-  clean = clean.replace(/SEG\/DOM/i, "Seg a Dom");
-  clean = clean.replace(/SEG\/SEX/i, "Seg a Sex");
-  clean = clean.replace(/SEG\/SAB/i, "Seg a Sáb");
-  return clean || horario;
+function formatarEscalaMultiplicacao(escala?: string, horarioDesc?: string): string {
+  const tipo = identificarTipoEscala(horarioDesc);
+  const esc = (escala || "").toUpperCase();
+  const raw = tipo !== "Não identificado" ? tipo : esc;
+  if (/5[xX]2/.test(raw) || raw === "SEG/SEX") return "5 × 2";
+  if (/12[xX]36/.test(raw)) return "12 × 36";
+  if (/4[xX]4/.test(raw)) return "4 × 4";
+  if (/4[xX]2/.test(raw)) return "4 × 2";
+  if (/6[xX]1/.test(raw)) return "6 × 1";
+  return raw || "5 × 2";
+}
+
+function normalizarBase(texto?: string): string {
+  if (!texto) return "—";
+  const t = texto.toUpperCase();
+  if (t.includes("UFN-III") || t.includes("UFN III") || t.includes("TRÊS LAGOAS") || t.includes("TRES LAGOAS")) return "UFN-III";
+  if (t.includes("REDUC")) return "REDUC";
+  if (t.includes("RNEST")) return "RNEST";
+  if (t.includes("REVAP")) return "REVAP";
+  if (t.includes("REGAP")) return "REGAP";
+  if (t.includes("RECAP")) return "RECAP";
+  if (t.includes("REPLAN")) return "REPLAN";
+  if (t.includes("REFAP")) return "REFAP";
+  if (t.includes("RPBC")) return "RPBC";
+  if (t.includes("LUBNOR")) return "LUBNOR";
+  if (t.includes("EDISA")) return "EDISA";
+  if (t.includes("EDIHB")) return "EDIHB";
+  if (t.includes("EDIBRA")) return "EDIBRA";
+  if (t.includes("CABIUNAS") || t.includes("CABIÚNAS")) return "CABIUNAS";
+  if (t.includes("BOAVENTURA")) return "BOAVENTURA";
+  if (t.includes("CENPES")) return "CENPES";
+  if (t.includes("IMBETIBA")) return "IMBETIBA";
+  if (t.includes("IMBOASSICA")) return "IMBOASSICA";
+  if (t.includes("FAROL")) return "FAROL DE SÃO TOMÉ";
+  if (t.includes("TAQUIPE")) return "BASE TAQUIPE";
+  if (t.includes("PITUBA")) return "PITUBA";
+  if (t.includes("REPAR")) return "REPAR";
+  if (t.includes("EDISEN")) return "EDISEN";
+  if (t.includes("EDISER")) return "EDISER";
+  if (t.includes("FRONAPE")) return "FRONAPE";
+  if (t.includes("EDIRN")) return "EDIRN";
+  if (t.includes("EDMAN")) return "EDMAN";
+  if (t.includes("UTG")) return "UTG";
+  if (t.includes("EDIVIT")) return "EDIVIT";
+  return texto.split(/[-–(]/)[0].trim().toUpperCase();
 }
 
 function obterIniciais(nome: string): string {
@@ -179,22 +218,6 @@ function obterIniciais(nome: string): string {
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
 }
 
-function obterGradienteAvatar(identificador: string): string {
-  const gradientes = [
-    "from-indigo-600 to-purple-800 text-white",
-    "from-slate-700 to-slate-900 text-white",
-    "from-blue-600 to-indigo-800 text-white",
-    "from-teal-600 to-emerald-800 text-white",
-    "from-violet-600 to-purple-900 text-white",
-    "from-cyan-700 to-blue-900 text-white",
-  ];
-  let hash = 0;
-  for (let i = 0; i < identificador.length; i++) {
-    hash = identificador.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return gradientes[Math.abs(hash) % gradientes.length];
-}
-
 export type TipoAbaProfissional = "TODOS" | "TITULARES" | "FERISTAS" | "RESERVA";
 
 export default function ProfissionaisPage() {
@@ -202,16 +225,31 @@ export default function ProfissionaisPage() {
   const [postos, setPostos] = useState<PostoOperacional[]>([]);
   const [marcacoesPonto, setMarcacoesPonto] = useState<MarcacaoPontoOriginal[]>([]);
   const [sessao, setSessao] = useState<UsuarioSessao | null>(null);
+
+  // Filtros principais
   const [busca, setBusca] = useState("");
   const [abaProfissionais, setAbaProfissionais] = useState<TipoAbaProfissional>("TODOS");
+  const [filtroBase, setFiltroBase] = useState("TODAS");
+  const [filtroSituacao, setFiltroSituacao] = useState("TODAS");
 
-  // Filtros oficiais
+  // Filtros secundários ("Mais filtros")
+  const [mostrarMaisFiltros, setMostrarMaisFiltros] = useState(false);
   const [filtroSecao, setFiltroSecao] = useState("TODAS");
   const [filtroHorario, setFiltroHorario] = useState("TODOS");
   const [filtroFuncao, setFiltroFuncao] = useState("TODAS");
-  const [filtroSituacao, setFiltroSituacao] = useState("TODAS");
   const [filtroSexo, setFiltroSexo] = useState("TODOS");
   const [filtroTipoEscala, setFiltroTipoEscala] = useState("TODAS");
+
+  // Paginação
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(10);
+
+  // Seleção de linhas (Checkboxes)
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+
+  // Menu de ações da linha (...)
+  const [menuAbertoId, setMenuAbertoId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   // Modais e seleções
   const [modalAberto, setModalAberto] = useState(false);
@@ -225,7 +263,7 @@ export default function ProfissionaisPage() {
   const [moverParaReserva, setMoverParaReserva] = useState(false);
   const [cienteInterjornadaTransferencia, setCienciaInterjornadaTransferencia] = useState(false);
   const [abaFicha, setAbaFicha] = useState<"CONTRATO" | "PONTO" | "DOCUMENTOS">("CONTRATO");
-  const [copiadoCpfId, setCopiadoCpfId] = useState<string | null>(null);
+  const [copiadoFeedback, setCopiadoFeedback] = useState<string | null>(null);
   const [ocorrencias, setOcorrencias] = useState<OcorrenciaOperacional[]>([]);
 
   // Formulário novo profissional
@@ -272,6 +310,17 @@ export default function ProfissionaisPage() {
     return () => window.removeEventListener("sgp-dados-atualizados", handleAtualizacao);
   }, []);
 
+  // Fechar dropdown de ações ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuAbertoId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const perfilEfetivo: string | null = sessao?.perfil ?? null;
   const ehGestor = perfilEfetivo === "PREMIER_GESTOR" || perfilEfetivo === "PREMIER_GESTOR_CONTRATO";
   const ehPerfilPetrobras = !podeVerDadosPessoaisCompletos(perfilEfetivo);
@@ -282,7 +331,7 @@ export default function ProfissionaisPage() {
     return basesPermitidas.includes(unidadeId);
   };
 
-  // Mapeamentos da REV04 para cruzamento de titulares e feristas
+  // Mapeamentos REV04 para cruzamento exato de titulares e feristas
   const mapaTitularesREV04 = useMemo(() => {
     const map = new Map<string, { postoIdSGP: string; posicaoIdSGP: string; unidade: string; postoDeServico?: string }>();
     (posicoesRev04Json as any[]).forEach((p) => {
@@ -320,7 +369,7 @@ export default function ProfissionaisPage() {
     return map;
   }, []);
 
-  // Enriquecimento dos profissionais com alocação REV04
+  // Enriquecimento dos profissionais
   const profissionaisEnriquecidos = useMemo(() => {
     return profissionais.map((p) => {
       const chapa = (p.chapa || p.matricula || "").trim();
@@ -332,17 +381,16 @@ export default function ProfissionaisPage() {
       let tipoAlocacao: "TITULAR" | "FERISTA" | "RESERVA_TECNICA" = "RESERVA_TECNICA";
       let postoCodigoEfetivo = p.postoCodigo;
       let posicaoCodigoEfetivo: string | undefined;
-      let imovelEfetivo = p.unidadeNome || p.unidadeId || "—";
+      const rawBase = titular?.unidade || ferista?.unidade || p.unidadeNome || p.unidadeId || p.secaoDescricao;
+      const baseNormalizada = normalizarBase(rawBase);
 
       if (titular) {
         tipoAlocacao = "TITULAR";
         postoCodigoEfetivo = p.postoCodigo || titular.postoIdSGP;
         posicaoCodigoEfetivo = titular.posicaoIdSGP;
-        imovelEfetivo = titular.unidade || imovelEfetivo;
       } else if (ferista) {
         tipoAlocacao = "FERISTA";
         postoCodigoEfetivo = p.postoCodigo || ferista.postoIdSGP;
-        imovelEfetivo = ferista.unidade || imovelEfetivo;
       } else if (p.postoCodigo) {
         tipoAlocacao = "TITULAR";
         postoCodigoEfetivo = p.postoCodigo;
@@ -353,14 +401,14 @@ export default function ProfissionaisPage() {
         postoCodigo: postoCodigoEfetivo,
         posicaoCodigo: posicaoCodigoEfetivo,
         tipoAlocacao,
-        imovelEfetivo,
+        baseNormalizada,
         titularInfo: titular,
         feristaInfo: ferista,
       };
     });
   }, [profissionais, mapaTitularesREV04, mapaFeristasREV04]);
 
-  // Totais do Quadro
+  // Contadores oficiais
   const totalGeral = profissionaisEnriquecidos.length;
   const totalTitulares = useMemo(
     () => profissionaisEnriquecidos.filter((p) => p.tipoAlocacao === "TITULAR").length,
@@ -375,7 +423,21 @@ export default function ProfissionaisPage() {
     [profissionaisEnriquecidos]
   );
 
-  // Listas de opções derivadas dos cadastros oficiais
+  // Lista de bases únicas disponíveis para o filtro
+  const basesDisponiveis = useMemo(() => {
+    const mapa = new Map<string, number>();
+    profissionaisEnriquecidos.forEach((p) => {
+      const b = p.baseNormalizada;
+      if (b && b !== "—") {
+        mapa.set(b, (mapa.get(b) || 0) + 1);
+      }
+    });
+    return Array.from(mapa.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([nome, count]) => ({ nome, count }));
+  }, [profissionaisEnriquecidos]);
+
+  // Listas de opções secundárias
   const secoesDisponiveis = useMemo(() => {
     const mapa = new Map<string, { codigo: string; descricao: string }>();
     obterTodasSecoesRm().forEach((s) => mapa.set(s.codigo, { codigo: s.codigo, descricao: s.descricao }));
@@ -415,22 +477,161 @@ export default function ProfissionaisPage() {
 
   const situacoesDisponiveis = useMemo(() => {
     const mapa = new Map<string, string>();
-    obterTodasSituacoesRm().forEach((s) => mapa.set(s.codigo, `${s.codigo} - ${s.descricao}`));
+    obterTodasSituacoesRm().forEach((s) => mapa.set(s.codigo, `${s.descricao}`));
     profissionais.forEach((p) => {
       if (p.situacaoCodigo && p.situacaoDescricao) {
-        mapa.set(p.situacaoCodigo, `${p.situacaoCodigo} - ${p.situacaoDescricao}`);
+        mapa.set(p.situacaoCodigo, p.situacaoDescricao);
       } else if (p.situacao) {
-        mapa.set(p.situacao, p.situacao);
+        mapa.set(p.situacao, formatarSituacao(p.situacao));
       }
     });
     return Array.from(mapa.entries()).map(([codigo, label]) => ({ codigo, label }));
   }, [profissionais]);
 
-  const handleCopiarCpf = (cpfTexto: string, id: string) => {
+  // Filtragem
+  const profissionaisFiltrados = useMemo(() => {
+    return profissionaisEnriquecidos.filter((pr) => {
+      const q = busca.trim().toLowerCase();
+      const qNum = q.replace(/\D/g, "");
+
+      const matchTexto =
+        !q ||
+        pr.nome.toLowerCase().includes(q) ||
+        (pr.nomeSocial && pr.nomeSocial.toLowerCase().includes(q)) ||
+        (pr.chapa && pr.chapa.toLowerCase().includes(q)) ||
+        pr.matricula.toLowerCase().includes(q) ||
+        pr.funcao.toLowerCase().includes(q) ||
+        (pr.postoCodigo && pr.postoCodigo.toLowerCase().includes(q)) ||
+        (pr.baseNormalizada && pr.baseNormalizada.toLowerCase().includes(q)) ||
+        (qNum.length >= 3 && pr.cpfLimpo.includes(qNum));
+
+      // Aba / Segmento
+      const matchAba =
+        abaProfissionais === "TODOS"
+          ? true
+          : abaProfissionais === "TITULARES"
+          ? pr.tipoAlocacao === "TITULAR"
+          : abaProfissionais === "FERISTAS"
+          ? pr.tipoAlocacao === "FERISTA"
+          : pr.tipoAlocacao === "RESERVA_TECNICA";
+
+      // Filtro Base
+      const matchBase = filtroBase === "TODAS" || pr.baseNormalizada === filtroBase;
+
+      // Filtro Situação
+      const matchSituacao =
+        filtroSituacao === "TODAS" ||
+        pr.situacaoCodigo === filtroSituacao ||
+        pr.situacao === filtroSituacao ||
+        (filtroSituacao === "ATIVO" && pr.situacao === "ATIVO") ||
+        (filtroSituacao === "FERIAS" && (pr.situacao === "FERIAS" || pr.situacaoCodigo === "F")) ||
+        (filtroSituacao === "AFASTADO" && (pr.situacao === "AFASTADO" || pr.situacaoCodigo === "P" || pr.situacaoCodigo === "E")) ||
+        (filtroSituacao === "DESLIGADO" && (pr.situacao === "DESLIGADO" || pr.situacaoCodigo === "D"));
+
+      // Filtros secundários
+      const matchSecao = filtroSecao === "TODAS" || pr.secaoCodigo === filtroSecao;
+      const matchHorario = filtroHorario === "TODOS" || pr.horarioCodigo === filtroHorario;
+      const matchFuncao = filtroFuncao === "TODAS" || pr.funcao.toUpperCase() === filtroFuncao.toUpperCase();
+      const matchSexo = filtroSexo === "TODOS" || pr.sexo === filtroSexo;
+
+      const tipoEscalaCalc = identificarTipoEscala(pr.horarioDescricao);
+      const matchTipoEscala = filtroTipoEscala === "TODAS" || tipoEscalaCalc === filtroTipoEscala;
+
+      const matchAcessoBase = podeAcessarBase(pr.unidadeId);
+
+      return (
+        matchTexto &&
+        matchAba &&
+        matchBase &&
+        matchSituacao &&
+        matchSecao &&
+        matchHorario &&
+        matchFuncao &&
+        matchSexo &&
+        matchTipoEscala &&
+        matchAcessoBase
+      );
+    });
+  }, [
+    profissionaisEnriquecidos,
+    busca,
+    abaProfissionais,
+    filtroBase,
+    filtroSituacao,
+    filtroSecao,
+    filtroHorario,
+    filtroFuncao,
+    filtroSexo,
+    filtroTipoEscala,
+    basesPermitidas,
+  ]);
+
+  // Resetar página quando filtros mudam
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [busca, abaProfissionais, filtroBase, filtroSituacao, filtroSecao, filtroHorario, filtroFuncao, filtroSexo, filtroTipoEscala]);
+
+  // Paginação dos itens visíveis
+  const totalPaginas = Math.max(1, Math.ceil(profissionaisFiltrados.length / itensPorPagina));
+  const inicioIndice = (paginaAtual - 1) * itensPorPagina;
+  const fimIndice = Math.min(inicioIndice + itensPorPagina, profissionaisFiltrados.length);
+  const itensVisiveis = useMemo(() => {
+    return profissionaisFiltrados.slice(inicioIndice, fimIndice);
+  }, [profissionaisFiltrados, inicioIndice, fimIndice]);
+
+  // Seleção de linhas
+  const todosSelecionados = itensVisiveis.length > 0 && itensVisiveis.every((p) => selecionados.has(p.id));
+  const toggleSelecionarTodos = () => {
+    if (todosSelecionados) {
+      setSelecionados(new Set());
+    } else {
+      const novo = new Set(selecionados);
+      itensVisiveis.forEach((p) => novo.add(p.id));
+      setSelecionados(novo);
+    }
+  };
+
+  const toggleSelecionarLinha = (id: string) => {
+    const novo = new Set(selecionados);
+    if (novo.has(id)) {
+      novo.delete(id);
+    } else {
+      novo.add(id);
+    }
+    setSelecionados(novo);
+  };
+
+  // Exportar lista atual para CSV
+  const handleExportarCsv = () => {
+    const cabecalho = ["Chapa", "Nome", "CPF", "Funcao", "Base", "Alocacao", "Escala", "Situacao", "Horario"];
+    const linhas = profissionaisFiltrados.map((p) => [
+      `"${p.chapa || p.matricula}"`,
+      `"${p.nome}"`,
+      `"${p.cpfLimpo}"`,
+      `"${formatarFuncao(p.funcao)}"`,
+      `"${p.baseNormalizada}"`,
+      `"${p.tipoAlocacao === "RESERVA_TECNICA" ? "Reserva técnica" : p.postoCodigo || "—"}"`,
+      `"${formatarEscalaMultiplicacao(p.escala, p.horarioDescricao)}"`,
+      `"${p.situacaoDescricao || formatarSituacao(p.situacao)}"`,
+      `"${p.horarioDescricao || "—"}"`,
+    ]);
+
+    const csvConteudo = "\uFEFF" + [cabecalho.join(";"), ...linhas.map((l) => l.join(";"))].join("\n");
+    const blob = new Blob([csvConteudo], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Profissionais_SGP_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCopiarTexto = (texto: string, label: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(cpfTexto);
-      setCopiadoCpfId(id);
-      setTimeout(() => setCopiadoCpfId(null), 2000);
+      navigator.clipboard.writeText(texto);
+      setCopiadoFeedback(label);
+      setTimeout(() => setCopiadoFeedback(null), 2000);
     }
   };
 
@@ -445,7 +646,7 @@ export default function ProfissionaisPage() {
           "CONSULTAR_CADASTRO_INDIVIDUAL",
           "PROFISSIONAL",
           prof.chapa || prof.matricula,
-          `Usuário ${sessao.nome} (${sessao.perfil}) visualizou cadastro de ${prof.nomeSocial || prof.nome} (Chapa: ${prof.chapa || prof.matricula})`,
+          `Usuário ${sessao.nome} (${sessao.perfil}) visualizou ficha de ${prof.nomeSocial || prof.nome} (Chapa: ${prof.chapa || prof.matricula})`,
           null,
           `Base: ${prof.unidadeId}`
         );
@@ -466,110 +667,7 @@ export default function ProfissionaisPage() {
     setModalTransferenciaAberto(true);
   };
 
-  // Filtragem combinada
-  const profissionaisFiltrados = useMemo(() => {
-    return profissionaisEnriquecidos.filter((pr) => {
-      const q = busca.trim().toLowerCase();
-      const qNum = q.replace(/\D/g, "");
-
-      const matchTexto =
-        !q ||
-        pr.nome.toLowerCase().includes(q) ||
-        (pr.nomeSocial && pr.nomeSocial.toLowerCase().includes(q)) ||
-        (pr.chapa && pr.chapa.toLowerCase().includes(q)) ||
-        pr.matricula.toLowerCase().includes(q) ||
-        pr.funcao.toLowerCase().includes(q) ||
-        (pr.secaoCodigo && pr.secaoCodigo.toLowerCase().includes(q)) ||
-        (pr.secaoDescricao && pr.secaoDescricao.toLowerCase().includes(q)) ||
-        (pr.horarioCodigo && pr.horarioCodigo.toLowerCase().includes(q)) ||
-        (pr.horarioDescricao && pr.horarioDescricao.toLowerCase().includes(q)) ||
-        (pr.postoCodigo && pr.postoCodigo.toLowerCase().includes(q)) ||
-        (pr.imovelEfetivo && pr.imovelEfetivo.toLowerCase().includes(q)) ||
-        (qNum.length >= 3 && pr.cpfLimpo.includes(qNum));
-
-      // Aba / Segmento
-      const matchAba =
-        abaProfissionais === "TODOS"
-          ? true
-          : abaProfissionais === "TITULARES"
-          ? pr.tipoAlocacao === "TITULAR"
-          : abaProfissionais === "FERISTAS"
-          ? pr.tipoAlocacao === "FERISTA"
-          : pr.tipoAlocacao === "RESERVA_TECNICA";
-
-      const matchSecao = filtroSecao === "TODAS" || pr.secaoCodigo === filtroSecao;
-      const matchHorario = filtroHorario === "TODOS" || pr.horarioCodigo === filtroHorario;
-      const matchFuncao = filtroFuncao === "TODAS" || pr.funcao.toUpperCase() === filtroFuncao.toUpperCase();
-      const matchSituacao =
-        filtroSituacao === "TODAS" ||
-        pr.situacaoCodigo === filtroSituacao ||
-        pr.situacao === filtroSituacao;
-      const matchSexo = filtroSexo === "TODOS" || pr.sexo === filtroSexo;
-
-      const tipoEscalaCalc = identificarTipoEscala(pr.horarioDescricao);
-      const matchTipoEscala = filtroTipoEscala === "TODAS" || tipoEscalaCalc === filtroTipoEscala;
-
-      const matchBase = podeAcessarBase(pr.unidadeId);
-
-      return (
-        matchTexto &&
-        matchAba &&
-        matchSecao &&
-        matchHorario &&
-        matchFuncao &&
-        matchSituacao &&
-        matchSexo &&
-        matchTipoEscala &&
-        matchBase
-      );
-    });
-  }, [
-    profissionaisEnriquecidos,
-    busca,
-    abaProfissionais,
-    filtroSecao,
-    filtroHorario,
-    filtroFuncao,
-    filtroSituacao,
-    filtroSexo,
-    filtroTipoEscala,
-    basesPermitidas,
-  ]);
-
-  const filtrosAtivosCount = useMemo(() => {
-    let count = 0;
-    if (busca) count++;
-    if (abaProfissionais !== "TODOS") count++;
-    if (filtroSecao !== "TODAS") count++;
-    if (filtroHorario !== "TODOS") count++;
-    if (filtroFuncao !== "TODAS") count++;
-    if (filtroSituacao !== "TODAS") count++;
-    if (filtroSexo !== "TODOS") count++;
-    if (filtroTipoEscala !== "TODAS") count++;
-    return count;
-  }, [
-    busca,
-    abaProfissionais,
-    filtroSecao,
-    filtroHorario,
-    filtroFuncao,
-    filtroSituacao,
-    filtroSexo,
-    filtroTipoEscala,
-  ]);
-
-  const limparTodosFiltros = () => {
-    setBusca("");
-    setAbaProfissionais("TODOS");
-    setFiltroSecao("TODAS");
-    setFiltroHorario("TODOS");
-    setFiltroFuncao("TODAS");
-    setFiltroSituacao("TODAS");
-    setFiltroSexo("TODOS");
-    setFiltroTipoEscala("TODAS");
-  };
-
-  // Candidatos para substituição com busca aberta
+  // Candidatos para substituição
   const candidatosSubstitutos = useMemo(() => {
     if (!colaboradorParaTransferir) return [];
     const q = buscaSubstituto.trim().toLowerCase();
@@ -727,169 +825,40 @@ export default function ProfissionaisPage() {
   };
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto pb-10">
-      {/* 1. Cabeçalho Executivo Moderno */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs print:hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                <Sparkles className="w-3 h-3 text-indigo-500" />
-                Base Oficial RM TOTVS
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                REV04 • 29 Unidades Petrobras
-              </span>
-            </div>
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-              Quadro de Profissionais
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 max-w-2xl">
-              Gestão integrada da força de trabalho, alocações ativas em postos do Anexo 1-A e monitoramento da reserva técnica.
-            </p>
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* 1. Breadcrumbs e Cabeçalho Principal */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
+        <div className="space-y-1">
+          <div className="text-xs text-slate-500 font-medium">
+            Operação <span className="mx-1 text-slate-400">/</span> <span className="text-slate-800 font-semibold">Profissionais</span>
           </div>
-
-          <div className="flex items-center gap-2.5 self-start lg:self-center shrink-0">
-            <Link
-              href="/mapa-ocupacao"
-              className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 shadow-2xs transition-all cursor-pointer"
-            >
-              <span>Ver no Mapa</span>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
-            </Link>
-            <button
-              onClick={() => setModalAberto(true)}
-              className="inline-flex items-center gap-2 bg-[#28185A] hover:bg-[#1B1745] text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-xs hover:shadow transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4 text-[#D8C7A0]" />
-              <span>Novo Profissional</span>
-            </button>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Profissionais
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500">
+            Gerencie os colaboradores e suas alocações.
+          </p>
         </div>
 
-        {/* 2. Cards Executivos de Resumo (KPIs Interativos) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mt-6 pt-6 border-t border-slate-100">
-          {/* Card 1: Total */}
-          <div
-            onClick={() => setAbaProfissionais("TODOS")}
-            className={`p-4 rounded-xl border transition-all cursor-pointer select-none group relative overflow-hidden ${
-              abaProfissionais === "TODOS"
-                ? "bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-slate-900/10"
-                : "bg-slate-50/60 hover:bg-slate-100/70 border-slate-200/80 text-slate-800"
-            }`}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={handleExportarCsv}
+            className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs transition-all cursor-pointer"
+            title="Exportar dados para CSV"
           >
-            <div className="flex items-center justify-between">
-              <span className={`text-xs font-semibold uppercase tracking-wider ${abaProfissionais === "TODOS" ? "text-slate-300" : "text-slate-500"}`}>
-                Total Geral
-              </span>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${abaProfissionais === "TODOS" ? "bg-white/10 text-white" : "bg-white text-slate-700 shadow-2xs"}`}>
-                <Users className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black tracking-tight">{totalGeral}</span>
-              <span className={`text-[11px] font-medium ${abaProfissionais === "TODOS" ? "text-slate-300" : "text-slate-500"}`}>
-                colaboradores
-              </span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-[11px]">
-              <span className={abaProfissionais === "TODOS" ? "text-slate-300" : "text-slate-500"}>Base RM completa</span>
-              <span className={`font-semibold ${abaProfissionais === "TODOS" ? "text-emerald-400" : "text-emerald-700"}`}>100%</span>
-            </div>
-          </div>
+            <Download className="w-4 h-4 text-slate-600" />
+            <span>Exportar</span>
+          </button>
 
-          {/* Card 2: Titulares em Postos */}
-          <div
-            onClick={() => setAbaProfissionais("TITULARES")}
-            className={`p-4 rounded-xl border transition-all cursor-pointer select-none group relative overflow-hidden ${
-              abaProfissionais === "TITULARES"
-                ? "bg-emerald-900 text-white border-emerald-900 shadow-md ring-2 ring-emerald-500/20"
-                : "bg-emerald-50/40 hover:bg-emerald-50/80 border-emerald-200/60 text-slate-800"
-            }`}
+          <button
+            type="button"
+            onClick={() => setModalAberto(true)}
+            className="inline-flex items-center gap-2 bg-[#0B132B] hover:bg-[#1C2541] text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-xs hover:shadow transition-all cursor-pointer"
           >
-            <div className="flex items-center justify-between">
-              <span className={`text-xs font-semibold uppercase tracking-wider ${abaProfissionais === "TITULARES" ? "text-emerald-200" : "text-emerald-800"}`}>
-                Titulares em Postos
-              </span>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${abaProfissionais === "TITULARES" ? "bg-white/10 text-emerald-200" : "bg-white text-emerald-700 shadow-2xs"}`}>
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black tracking-tight">{totalTitulares}</span>
-              <span className={`text-[11px] font-medium ${abaProfissionais === "TITULARES" ? "text-emerald-200" : "text-emerald-700"}`}>
-                alocados
-              </span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-[11px]">
-              <span className={abaProfissionais === "TITULARES" ? "text-emerald-200" : "text-slate-500"}>Postos contratuais</span>
-              <span className={`font-semibold ${abaProfissionais === "TITULARES" ? "text-emerald-300" : "text-emerald-700"}`}>
-                {((totalTitulares / (totalGeral || 1)) * 100).toFixed(1)}%
-              </span>
-            </div>
-          </div>
-
-          {/* Card 3: Equipe de Feristas */}
-          <div
-            onClick={() => setAbaProfissionais("FERISTAS")}
-            className={`p-4 rounded-xl border transition-all cursor-pointer select-none group relative overflow-hidden ${
-              abaProfissionais === "FERISTAS"
-                ? "bg-indigo-950 text-white border-indigo-900 shadow-md ring-2 ring-indigo-500/20"
-                : "bg-indigo-50/40 hover:bg-indigo-50/80 border-indigo-200/60 text-slate-800"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className={`text-xs font-semibold uppercase tracking-wider ${abaProfissionais === "FERISTAS" ? "text-indigo-200" : "text-indigo-800"}`}>
-                Equipe de Feristas
-              </span>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${abaProfissionais === "FERISTAS" ? "bg-white/10 text-indigo-200" : "bg-white text-indigo-700 shadow-2xs"}`}>
-                <RefreshCw className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black tracking-tight">{totalFeristas}</span>
-              <span className={`text-[11px] font-medium ${abaProfissionais === "FERISTAS" ? "text-indigo-200" : "text-indigo-700"}`}>
-                cobertura
-              </span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-[11px]">
-              <span className={abaProfissionais === "FERISTAS" ? "text-indigo-200" : "text-slate-500"}>Férias e folgas</span>
-              <span className={`font-semibold ${abaProfissionais === "FERISTAS" ? "text-indigo-300" : "text-indigo-700"}`}>
-                {((totalFeristas / (totalGeral || 1)) * 100).toFixed(1)}%
-              </span>
-            </div>
-          </div>
-
-          {/* Card 4: Reserva Técnica */}
-          <div
-            onClick={() => setAbaProfissionais("RESERVA")}
-            className={`p-4 rounded-xl border transition-all cursor-pointer select-none group relative overflow-hidden ${
-              abaProfissionais === "RESERVA"
-                ? "bg-amber-950 text-white border-amber-900 shadow-md ring-2 ring-amber-500/20"
-                : "bg-amber-50/40 hover:bg-amber-50/80 border-amber-200/60 text-slate-800"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className={`text-xs font-semibold uppercase tracking-wider ${abaProfissionais === "RESERVA" ? "text-amber-200" : "text-amber-800"}`}>
-                Reserva Técnica
-              </span>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${abaProfissionais === "RESERVA" ? "bg-white/10 text-amber-200" : "bg-white text-amber-700 shadow-2xs"}`}>
-                <Briefcase className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black tracking-tight">{totalReserva}</span>
-              <span className={`text-[11px] font-medium ${abaProfissionais === "RESERVA" ? "text-amber-200" : "text-amber-700"}`}>
-                disponíveis
-              </span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-[11px]">
-              <span className={abaProfissionais === "RESERVA" ? "text-amber-200" : "text-slate-500"}>Aptos para alocação</span>
-              <span className={`font-semibold ${abaProfissionais === "RESERVA" ? "text-amber-300" : "text-amber-700"}`}>
-                {((totalReserva / (totalGeral || 1)) * 100).toFixed(1)}%
-              </span>
-            </div>
-          </div>
+            <Plus className="w-4 h-4 text-white" />
+            <span>Novo profissional</span>
+          </button>
         </div>
       </div>
 
@@ -906,462 +875,452 @@ export default function ProfissionaisPage() {
         </div>
       )}
 
-      {/* 3. Barra de Abas e Filtros Avançados */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs space-y-4 print:hidden">
-        {/* Linha 1: Segmented Control + Barra de Busca */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5">
-          {/* Segmented Control */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80 overflow-x-auto">
-            <button
-              onClick={() => setAbaProfissionais("TODOS")}
-              className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                abaProfissionais === "TODOS"
-                  ? "bg-white text-slate-900 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-              }`}
-            >
-              <span>Todos</span>
-              <span className="text-[11px] font-mono px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-600">
-                {totalGeral}
-              </span>
-            </button>
+      {/* 2. Abas com Underline (Todos, Titulares, Feristas, Reserva Técnica) */}
+      <div className="border-b border-slate-200 flex items-center gap-6 sm:gap-8 overflow-x-auto print:hidden">
+        <button
+          type="button"
+          onClick={() => setAbaProfissionais("TODOS")}
+          className={`pb-3 inline-flex items-center gap-2 text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+            abaProfissionais === "TODOS"
+              ? "font-bold text-slate-900 border-b-2 border-slate-900 -mb-px"
+              : "font-medium text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <span>Todos</span>
+          <span className={`text-xs ${abaProfissionais === "TODOS" ? "font-bold text-slate-900" : "font-semibold text-slate-600"}`}>
+            {totalGeral}
+          </span>
+        </button>
 
-            <button
-              onClick={() => setAbaProfissionais("TITULARES")}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                abaProfissionais === "TITULARES"
-                  ? "bg-white text-emerald-900 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-              <span>Titulares</span>
-              <span className="text-[11px] font-mono px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 font-bold">
-                {totalTitulares}
-              </span>
-            </button>
+        <button
+          type="button"
+          onClick={() => setAbaProfissionais("TITULARES")}
+          className={`pb-3 inline-flex items-center gap-2 text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+            abaProfissionais === "TITULARES"
+              ? "font-bold text-slate-900 border-b-2 border-slate-900 -mb-px"
+              : "font-medium text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <span>Titulares</span>
+          <span className="text-xs font-bold text-emerald-600">
+            {totalTitulares}
+          </span>
+        </button>
 
-            <button
-              onClick={() => setAbaProfissionais("FERISTAS")}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                abaProfissionais === "FERISTAS"
-                  ? "bg-white text-indigo-900 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
-              <span>Feristas</span>
-              <span className="text-[11px] font-mono px-1.5 py-0.2 rounded-md bg-indigo-50 text-indigo-700 font-bold">
-                {totalFeristas}
-              </span>
-            </button>
+        <button
+          type="button"
+          onClick={() => setAbaProfissionais("FERISTAS")}
+          className={`pb-3 inline-flex items-center gap-2 text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+            abaProfissionais === "FERISTAS"
+              ? "font-bold text-slate-900 border-b-2 border-slate-900 -mb-px"
+              : "font-medium text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <span>Feristas</span>
+          <span className="text-xs font-bold text-indigo-600">
+            {totalFeristas}
+          </span>
+        </button>
 
-            <button
-              onClick={() => setAbaProfissionais("RESERVA")}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                abaProfissionais === "RESERVA"
-                  ? "bg-white text-amber-900 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-              <span>Reserva Técnica</span>
-              <span className="text-[11px] font-mono px-1.5 py-0.2 rounded-md bg-amber-50 text-amber-800 font-bold">
-                {totalReserva}
-              </span>
-            </button>
-          </div>
+        <button
+          type="button"
+          onClick={() => setAbaProfissionais("RESERVA")}
+          className={`pb-3 inline-flex items-center gap-2 text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+            abaProfissionais === "RESERVA"
+              ? "font-bold text-slate-900 border-b-2 border-slate-900 -mb-px"
+              : "font-medium text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <span>Reserva técnica</span>
+          <span className="text-xs font-semibold text-slate-600">
+            {totalReserva}
+          </span>
+        </button>
+      </div>
 
-          {/* Busca Rápida */}
-          <div className="flex items-center gap-2 flex-1 lg:max-w-md">
-            <div className="relative w-full">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por colaborador, chapa, CPF, seção ou posto..."
-                className="w-full pl-9 pr-9 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#28185A]/20 focus:border-[#28185A] transition-all shadow-2xs"
-              />
-              {busca && (
-                <button
-                  onClick={() => setBusca("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {filtrosAtivosCount > 0 && (
+      {/* 3. Barra de Busca e Filtros Rápidos */}
+      <div className="space-y-3 print:hidden">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          {/* Busca por nome ou chapa */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por nome ou chapa"
+              className="w-full pl-10 pr-9 py-2.5 bg-white border border-slate-200/90 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 transition-all shadow-2xs"
+            />
+            {busca && (
               <button
                 type="button"
-                onClick={limparTodosFiltros}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 transition-all cursor-pointer shrink-0"
-                title="Limpar todos os filtros ativos"
+                onClick={() => setBusca("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
               >
-                <span>Limpar</span>
-                <span className="w-4 h-4 rounded-full bg-rose-200 text-rose-800 text-[10px] flex items-center justify-center font-bold">
-                  {filtrosAtivosCount}
-                </span>
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
-        </div>
 
-        {/* Linha 2: Dropdowns de Filtro em Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-2 border-t border-slate-100 text-xs">
-          {/* 1. Filtro por Seção */}
-          <div>
-            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Seção / Base</label>
+          {/* Dropdown 1: Todas as bases */}
+          <div className="relative min-w-[190px]">
             <select
-              value={filtroSecao}
-              onChange={(e) => setFiltroSecao(e.target.value)}
-              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs truncate"
-              title="Filtrar por Seção RM"
+              value={filtroBase}
+              onChange={(e) => setFiltroBase(e.target.value)}
+              className="w-full appearance-none border border-slate-200/90 rounded-xl px-3.5 py-2.5 bg-white text-slate-700 text-xs font-medium outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 cursor-pointer shadow-2xs pr-8"
             >
-              <option value="TODAS">Todas as Seções ({secoesDisponiveis.length})</option>
-              {secoesDisponiveis.map((s) => (
-                <option key={s.codigo} value={s.codigo}>
-                  {formatarSecaoExibicao(s.codigo, s.descricao)}
+              <option value="TODAS">Todas as bases</option>
+              {basesDisponiveis.map((b) => (
+                <option key={b.nome} value={b.nome}>
+                  {b.nome} ({b.count})
                 </option>
               ))}
             </select>
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
 
-          {/* 2. Filtro por Horário */}
-          <div>
-            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Horário Oficial</label>
-            <select
-              value={filtroHorario}
-              onChange={(e) => setFiltroHorario(e.target.value)}
-              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs truncate"
-              title="Filtrar por Horário RM"
-            >
-              <option value="TODOS">Todos os Horários ({horariosDisponiveis.length})</option>
-              {horariosDisponiveis.map((h) => (
-                <option key={h.codigo} value={h.codigo}>
-                  {formatarHorarioExibicao(h.codigo, h.descricao)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 3. Filtro por Função */}
-          <div>
-            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Função Contratual</label>
-            <select
-              value={filtroFuncao}
-              onChange={(e) => setFiltroFuncao(e.target.value)}
-              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs truncate"
-              title="Filtrar por Função"
-            >
-              <option value="TODAS">Todas as Funções ({funcoesDisponiveis.length})</option>
-              {funcoesDisponiveis.map((f) => (
-                <option key={f} value={f}>
-                  {formatarFuncao(f)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 4. Filtro por Situação */}
-          <div>
-            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Situação RM</label>
+          {/* Dropdown 2: Todas as situações */}
+          <div className="relative min-w-[190px]">
             <select
               value={filtroSituacao}
               onChange={(e) => setFiltroSituacao(e.target.value)}
-              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs truncate"
-              title="Filtrar por Situação"
+              className="w-full appearance-none border border-slate-200/90 rounded-xl px-3.5 py-2.5 bg-white text-slate-700 text-xs font-medium outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 cursor-pointer shadow-2xs pr-8"
             >
-              <option value="TODAS">Todas as Situações</option>
-              {situacoesDisponiveis.map((s) => (
-                <option key={s.codigo} value={s.codigo}>
-                  {s.label}
-                </option>
-              ))}
+              <option value="TODAS">Todas as situações</option>
+              <option value="ATIVO">Ativo</option>
+              <option value="FERIAS">Férias</option>
+              <option value="AFASTADO">Afastado</option>
+              <option value="DESLIGADO">Demitido</option>
             </select>
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
 
-          {/* 5. Filtro por Sexo */}
-          <div>
-            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Sexo / Gênero</label>
-            <select
-              value={filtroSexo}
-              onChange={(e) => setFiltroSexo(e.target.value)}
-              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs"
-              title="Filtrar por Sexo"
-            >
-              <option value="TODOS">Todos os Sexos</option>
-              <option value="M">M — Masculino</option>
-              <option value="F">F — Feminino</option>
-            </select>
-          </div>
-
-          {/* 6. Tipo de Escala */}
-          <div>
-            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Tipo de Escala</label>
-            <select
-              value={filtroTipoEscala}
-              onChange={(e) => setFiltroTipoEscala(e.target.value)}
-              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs"
-              title="Tipo de escala apurado do horário"
-            >
-              <option value="TODAS">Tipo Escala: Todas</option>
-              {LISTA_TIPOS_ESCALA_FILTRO.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Botão: Mais filtros */}
+          <button
+            type="button"
+            onClick={() => setMostrarMaisFiltros(!mostrarMaisFiltros)}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0 shadow-2xs ${
+              mostrarMaisFiltros ||
+              filtroSecao !== "TODAS" ||
+              filtroHorario !== "TODOS" ||
+              filtroFuncao !== "TODAS" ||
+              filtroSexo !== "TODOS" ||
+              filtroTipoEscala !== "TODAS"
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200/90"
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            <span>Mais filtros</span>
+            {(filtroSecao !== "TODAS" ||
+              filtroHorario !== "TODOS" ||
+              filtroFuncao !== "TODAS" ||
+              filtroSexo !== "TODOS" ||
+              filtroTipoEscala !== "TODAS") && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            )}
+          </button>
         </div>
+
+        {/* Expansor de "Mais filtros" */}
+        {mostrarMaisFiltros && (
+          <div className="p-4 bg-slate-50/70 border border-slate-200/80 rounded-2xl grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs animate-fadeIn">
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Seção RM</label>
+              <select
+                value={filtroSecao}
+                onChange={(e) => setFiltroSecao(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 text-xs outline-none"
+              >
+                <option value="TODAS">Todas as Seções ({secoesDisponiveis.length})</option>
+                {secoesDisponiveis.map((s) => (
+                  <option key={s.codigo} value={s.codigo}>
+                    {formatarSecaoExibicao(s.codigo, s.descricao)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Horário RM</label>
+              <select
+                value={filtroHorario}
+                onChange={(e) => setFiltroHorario(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 text-xs outline-none"
+              >
+                <option value="TODOS">Todos os Horários ({horariosDisponiveis.length})</option>
+                {horariosDisponiveis.map((h) => (
+                  <option key={h.codigo} value={h.codigo}>
+                    {formatarHorarioExibicao(h.codigo, h.descricao)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Função</label>
+              <select
+                value={filtroFuncao}
+                onChange={(e) => setFiltroFuncao(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 text-xs outline-none"
+              >
+                <option value="TODAS">Todas as Funções ({funcoesDisponiveis.length})</option>
+                {funcoesDisponiveis.map((f) => (
+                  <option key={f} value={f}>
+                    {formatarFuncao(f)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Sexo / Gênero</label>
+              <select
+                value={filtroSexo}
+                onChange={(e) => setFiltroSexo(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 text-xs outline-none"
+              >
+                <option value="TODOS">Todos os Sexos</option>
+                <option value="M">M — Masculino</option>
+                <option value="F">F — Feminino</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 block mb-1">Tipo de Escala</label>
+              <select
+                value={filtroTipoEscala}
+                onChange={(e) => setFiltroTipoEscala(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 text-xs outline-none"
+              >
+                <option value="TODAS">Tipo Escala: Todas</option>
+                {LISTA_TIPOS_ESCALA_FILTRO.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 4. Tabela Executiva Moderna */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs">
+      {/* 4. Tabela Executiva no Padrão da Imagem */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50/90 text-slate-600 border-b border-slate-200 font-semibold tracking-wider uppercase text-[11px]">
-                <th className="px-4 py-3.5">Colaborador / Chapa</th>
-                <th className="px-4 py-3.5">Alocação / Posto SGP</th>
-                <th className="px-4 py-3.5">Função Contratual</th>
-                <th className="px-4 py-3.5">Seção / Base</th>
-                <th className="px-4 py-3.5">Horário & Escala</th>
-                <th className="px-3 py-3.5">CPF (LGPD)</th>
-                <th className="px-2 py-3.5 text-center">Sexo / Idade</th>
-                <th className="px-3 py-3.5 text-center">Situação</th>
-                {podeVisualizarSalario(perfilEfetivo) && (
-                  <th className="px-4 py-3.5 text-right">Salário</th>
-                )}
-                <th className="px-4 py-3.5 text-center">Ações</th>
+              <tr className="border-b border-slate-200 text-slate-600 font-semibold text-xs bg-white">
+                <th className="w-10 px-4 py-3.5 text-center">
+                  <input
+                    type="checkbox"
+                    checked={todosSelecionados}
+                    onChange={toggleSelecionarTodos}
+                    className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                  />
+                </th>
+                <th className="px-4 py-3.5">Colaborador</th>
+                <th className="px-4 py-3.5">Função</th>
+                <th className="px-4 py-3.5">Base</th>
+                <th className="px-4 py-3.5">Alocação</th>
+                <th className="px-4 py-3.5">Escala</th>
+                <th className="px-4 py-3.5">Situação</th>
+                <th className="w-28 px-4 py-3.5 text-right"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {profissionaisFiltrados.length === 0 ? (
+              {itensVisiveis.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={podeVisualizarSalario(perfilEfetivo) ? 10 : 9}
-                    className="px-6 py-14 text-center"
-                  >
+                  <td colSpan={8} className="px-6 py-14 text-center">
                     <div className="max-w-sm mx-auto space-y-2">
-                      <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                        <Users className="w-6 h-6" />
-                      </div>
-                      <h4 className="font-bold text-slate-800 text-sm">Nenhum profissional localizado</h4>
+                      <h4 className="font-bold text-slate-800 text-sm">Nenhum colaborador encontrado</h4>
                       <p className="text-xs text-slate-500">
-                        Não encontramos colaboradores com os filtros e busca informados. Tente ajustar os termos de pesquisa.
+                        Nenhum resultado corresponde aos critérios de busca ou filtros selecionados.
                       </p>
-                      <button
-                        onClick={limparTodosFiltros}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#28185A] hover:underline cursor-pointer"
-                      >
-                        Limpar todos os filtros
-                      </button>
                     </div>
                   </td>
                 </tr>
               ) : (
-                profissionaisFiltrados.map((prof) => {
+                itensVisiveis.map((prof) => {
                   const chapaFormatada = prof.chapa || prof.matricula;
-                  const temNomeSocial = !!prof.nomeSocial;
                   const nomeExibicao = prof.nomeSocial || prof.nome;
-                  const idadeCalc = prof.dataNascimento ? calcularIdadeDinamica(prof.dataNascimento) : null;
-                  const cpfFormatadoPerfil = formatarCpfPorPerfil(prof.cpfLimpo, perfilEfetivo);
                   const iniciais = obterIniciais(nomeExibicao);
-                  const gradiente = obterGradienteAvatar(chapaFormatada + nomeExibicao);
+                  const isChecked = selecionados.has(prof.id);
+                  const escalaFormatada = formatarEscalaMultiplicacao(prof.escala, prof.horarioDescricao);
 
                   return (
                     <tr
                       key={prof.id}
-                      className="hover:bg-slate-50/70 transition-colors group"
+                      className={`hover:bg-slate-50/70 transition-colors group ${
+                        isChecked ? "bg-slate-50/90" : ""
+                      }`}
                     >
-                      {/* 1. Colaborador / Chapa */}
-                      <td className="px-4 py-3">
+                      {/* Checkbox */}
+                      <td className="w-10 px-4 py-3.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleSelecionarLinha(prof.id)}
+                          className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                        />
+                      </td>
+
+                      {/* Colaborador (Avatar + Nome + Chapa) */}
+                      <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div
-                            className={`w-9 h-9 rounded-xl bg-gradient-to-br ${gradiente} flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs`}
-                          >
+                          <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-semibold text-xs flex items-center justify-center shrink-0">
                             {iniciais}
                           </div>
                           <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-slate-900 text-xs truncate max-w-[200px]" title={formatarNome(nomeExibicao)}>
-                                {formatarNome(nomeExibicao)}
-                              </span>
-                              {temNomeSocial && (
-                                <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-1 rounded font-medium">
-                                  Nome Social
-                                </span>
-                              )}
+                            <div className="font-semibold text-slate-900 text-xs truncate max-w-[220px]" title={formatarNome(nomeExibicao)}>
+                              {formatarNome(nomeExibicao)}
                             </div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="font-mono text-[11px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200/60">
-                                {chapaFormatada}
-                              </span>
-                              <span className="text-[11px] text-slate-400 hidden sm:inline">•</span>
-                              <span className="text-[11px] text-slate-500 truncate max-w-[130px]" title={prof.imovelEfetivo}>
-                                {prof.imovelEfetivo}
-                              </span>
+                            <div className="text-[11px] text-slate-400 mt-0.5 font-mono">
+                              Chapa: {chapaFormatada}
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* 2. Alocação / Posto SGP */}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {prof.tipoAlocacao === "TITULAR" && prof.postoCodigo ? (
-                          <div className="inline-flex flex-col gap-0.5 p-1.5 px-2.5 rounded-lg bg-emerald-50 border border-emerald-200/80">
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                              <span className="font-mono font-bold text-emerald-900 text-xs">
-                                {prof.postoCodigo}
-                              </span>
-                            </div>
-                            <span className="text-[10px] font-semibold text-emerald-700 truncate max-w-[170px]" title={prof.imovelEfetivo}>
-                              Titular • {prof.imovelEfetivo}
-                            </span>
-                          </div>
-                        ) : prof.tipoAlocacao === "FERISTA" ? (
-                          <div className="inline-flex flex-col gap-0.5 p-1.5 px-2.5 rounded-lg bg-indigo-50 border border-indigo-200/80">
-                            <div className="flex items-center gap-1.5">
-                              <RefreshCw className="w-3 h-3 text-indigo-600 shrink-0" />
-                              <span className="font-bold text-indigo-950 text-xs">
-                                Ferista / Cobertura
-                              </span>
-                            </div>
-                            <span className="text-[10px] font-medium text-indigo-700 truncate max-w-[170px]">
-                              {prof.postoCodigo ? `Posto: ${prof.postoCodigo}` : `Base: ${prof.imovelEfetivo}`}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="inline-flex flex-col gap-0.5 p-1.5 px-2.5 rounded-lg bg-amber-50/70 border border-amber-200/70">
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                              <span className="font-bold text-amber-900 text-xs">
-                                Reserva Técnica
-                              </span>
-                            </div>
-                            <span className="text-[10px] font-medium text-amber-700">
-                              Disponível para alocação
-                            </span>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* 3. Função Contratual */}
-                      <td className="px-4 py-3 text-slate-800 font-medium text-xs max-w-[190px]">
-                        <span className="line-clamp-2" title={formatarFuncao(prof.funcao)}>
+                      {/* Função */}
+                      <td className="px-4 py-3.5 text-slate-700 text-xs">
+                        <span className="line-clamp-1" title={formatarFuncao(prof.funcao)}>
                           {formatarFuncao(prof.funcao)}
                         </span>
                       </td>
 
-                      {/* 4. Seção / Base */}
-                      <td className="px-4 py-3 text-slate-700 text-xs max-w-[210px]" title={formatarSecaoExibicao(prof.secaoCodigo, prof.secaoDescricao || prof.unidadeNome)}>
-                        <span className="line-clamp-2 leading-relaxed">
-                          {formatarSecaoExibicao(prof.secaoCodigo, prof.secaoDescricao || prof.unidadeNome)}
-                        </span>
+                      {/* Base */}
+                      <td className="px-4 py-3.5 text-slate-800 font-medium text-xs whitespace-nowrap">
+                        {prof.baseNormalizada}
                       </td>
 
-                      {/* 5. Horário & Escala */}
-                      <td className="px-4 py-3 text-slate-700 text-xs max-w-[230px]" title={formatarHorarioExibicao(prof.horarioCodigo, prof.horarioDescricao)}>
-                        <div className="space-y-1">
-                          <span className="line-clamp-2 font-medium text-[11px] leading-relaxed">
-                            {formatarHorarioExibicao(prof.horarioCodigo, prof.horarioDescricao)}
+                      {/* Alocação */}
+                      <td className="px-4 py-3.5 text-xs whitespace-nowrap">
+                        {prof.tipoAlocacao === "RESERVA_TECNICA" ? (
+                          <span className="inline-flex items-center gap-1.5 text-slate-700 font-normal">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                            <span>Reserva técnica</span>
                           </span>
-                          <span className="inline-block text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
-                            Escala: {identificarTipoEscala(prof.horarioDescricao)}
+                        ) : prof.tipoAlocacao === "FERISTA" ? (
+                          <span className="inline-flex items-center gap-1.5 font-mono text-slate-800 text-xs">
+                            <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+                            <span>{prof.postoCodigo || "Ferista"}</span>
                           </span>
-                        </div>
+                        ) : (
+                          <span className="font-mono text-slate-800 text-xs">
+                            {prof.postoCodigo || "—"}
+                          </span>
+                        )}
                       </td>
 
-                      {/* 6. CPF (LGPD) */}
-                      <td className="px-3 py-3 font-mono text-slate-700 text-[11px] whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1.5">
-                          <span>{cpfFormatadoPerfil}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopiarCpf(cpfFormatadoPerfil, prof.id)}
-                            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors cursor-pointer"
-                            title="Copiar CPF"
-                          >
-                            {copiadoCpfId === prof.id ? (
-                              <Check className="w-3.5 h-3.5 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </div>
+                      {/* Escala */}
+                      <td className="px-4 py-3.5 text-slate-700 text-xs whitespace-nowrap">
+                        {escalaFormatada}
                       </td>
 
-                      {/* 7. Sexo / Idade */}
-                      <td className="px-2 py-3 text-center whitespace-nowrap">
-                        <span className="font-medium text-slate-700 text-xs">
-                          {prof.sexo || "—"}
-                        </span>
-                        <span className="text-slate-400 mx-1">•</span>
-                        <span className="font-semibold text-slate-800 text-xs">
-                          {idadeCalc !== null ? `${idadeCalc}a` : "—"}
-                        </span>
+                      {/* Situação */}
+                      <td className="px-4 py-3.5 whitespace-nowrap text-xs">
+                        {prof.situacao === "ATIVO" || prof.situacaoCodigo === "A" ? (
+                          <span className="inline-flex items-center gap-1.5 text-emerald-700 font-medium">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                            <span>Ativo</span>
+                          </span>
+                        ) : prof.situacao === "FERIAS" || prof.situacaoCodigo === "F" ? (
+                          <span className="inline-flex items-center gap-1.5 text-indigo-700 font-medium">
+                            <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+                            <span>Férias</span>
+                          </span>
+                        ) : prof.situacao === "AFASTADO" || prof.situacaoCodigo === "P" || prof.situacaoCodigo === "E" ? (
+                          <span className="inline-flex items-center gap-1.5 text-amber-700 font-medium">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                            <span>Afastado</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-slate-500 font-medium">
+                            <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
+                            <span>Demitido</span>
+                          </span>
+                        )}
                       </td>
 
-                      {/* 8. Situação */}
-                      <td className="px-3 py-3 text-center whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            prof.situacao === "ATIVO" || prof.situacaoCodigo === "A"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : prof.situacao === "FERIAS" || prof.situacaoCodigo === "F"
-                              ? "bg-blue-50 text-blue-700 border border-blue-200"
-                              : prof.situacao === "AFASTADO" || prof.situacaoCodigo === "P" || prof.situacaoCodigo === "E"
-                              ? "bg-amber-50 text-amber-700 border border-amber-200"
-                              : "bg-slate-100 text-slate-600 border border-slate-200"
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              prof.situacao === "ATIVO" || prof.situacaoCodigo === "A"
-                                ? "bg-emerald-500"
-                                : prof.situacao === "FERIAS" || prof.situacaoCodigo === "F"
-                                ? "bg-blue-500"
-                                : prof.situacao === "AFASTADO" || prof.situacaoCodigo === "P" || prof.situacaoCodigo === "E"
-                                ? "bg-amber-500"
-                                : "bg-slate-400"
-                            }`}
-                          />
-                          <span>{prof.situacaoDescricao || formatarSituacao(prof.situacao)}</span>
-                        </span>
-                      </td>
-
-                      {/* 9. Salário (Admin Only) */}
-                      {podeVisualizarSalario(perfilEfetivo) && (
-                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-900 text-xs whitespace-nowrap">
-                          {formatarSalarioPorPerfil(prof.dadosRestritos?.salario, perfilEfetivo)}
-                        </td>
-                      )}
-
-                      {/* 10. Ações Rápidas */}
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1.5">
+                      {/* Ações (Botão Ver perfil + Menu ...) */}
+                      <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-1.5 relative">
                           <button
                             type="button"
                             onClick={() => handleAbrirFicha(prof)}
-                            className="h-7.5 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 hover:text-indigo-900 text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
-                            title="Ver Dossiê do Colaborador"
+                            className="h-7 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-950 text-xs font-medium shadow-2xs transition-all cursor-pointer"
                           >
-                            <FileText className="w-3.5 h-3.5 text-slate-400" />
-                            <span>Ficha</span>
+                            Ver perfil
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => abrirModalTransferencia(prof)}
-                            className="h-7.5 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 hover:text-indigo-900 text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer group/btn"
-                            title="Trocar ou alocar posto"
-                          >
-                            <RefreshCw className="w-3 h-3 text-slate-400 group-hover/btn:rotate-90 transition-transform duration-300" />
-                            <span>Trocar Posto</span>
-                          </button>
+
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMenuAbertoId(menuAbertoId === prof.id ? null : prof.id);
+                              }}
+                              className="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+                              title="Opções adicionais"
+                            >
+                              <MoreHorizontal className="w-4 h-4" />
+                            </button>
+
+                            {/* Dropdown de Ações */}
+                            {menuAbertoId === prof.id && (
+                              <div
+                                ref={menuRef}
+                                className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-30 text-xs text-left animate-fadeIn"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleAbrirFicha(prof);
+                                    setMenuAbertoId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer font-medium"
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>Dossiê completo</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    abrirModalTransferencia(prof);
+                                    setMenuAbertoId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer font-medium"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>Trocar posto</span>
+                                </button>
+                                <div className="my-1 border-t border-slate-100" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleCopiarTexto(chapaFormatada, "Chapa");
+                                    setMenuAbertoId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Copy className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>Copiar chapa</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleCopiarTexto(formatarCpfPorPerfil(prof.cpfLimpo, perfilEfetivo), "CPF");
+                                    setMenuAbertoId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Copy className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>Copiar CPF</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -1372,19 +1331,98 @@ export default function ProfissionaisPage() {
           </table>
         </div>
 
-        {/* Rodapé Executivo Dinâmico */}
-        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200/90 text-xs text-slate-600 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+        {/* 5. Rodapé com Paginação */}
+        <div className="px-6 py-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-600 print:hidden">
+          <div>
+            Exibindo{" "}
             <span className="font-semibold text-slate-800">
-              Exibindo {profissionaisFiltrados.length} de {totalGeral} colaboradores
-            </span>
-            <span className="text-slate-300">•</span>
-            <span className="text-slate-500">
-              {totalTitulares} Titulares, {totalFeristas} Feristas, {totalReserva} Reserva Técnica
-            </span>
+              {profissionaisFiltrados.length === 0 ? "0" : `${inicioIndice + 1}–${fimIndice}`}
+            </span>{" "}
+            de <span className="font-semibold text-slate-800">{profissionaisFiltrados.length}</span> profissionais
+            {copiadoFeedback && (
+              <span className="ml-3 font-semibold text-emerald-600 animate-fadeIn">
+                {copiadoFeedback} copiado para a área de transferência!
+              </span>
+            )}
           </div>
-          <div className="text-[11px] font-medium text-slate-500">
-            Âmbito Contratual: 29 Unidades / 244 Postos Ativos (REV04)
+
+          <div className="flex items-center gap-3">
+            {/* Seletor de itens por página */}
+            <div className="relative">
+              <select
+                value={itensPorPagina}
+                onChange={(e) => {
+                  setItensPorPagina(Number(e.target.value));
+                  setPaginaAtual(1);
+                }}
+                className="appearance-none border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 text-xs font-medium outline-none pr-7 cursor-pointer hover:border-slate-300"
+              >
+                <option value={10}>10 por página</option>
+                <option value={25}>25 por página</option>
+                <option value={50}>50 por página</option>
+                <option value={100}>100 por página</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            {/* Controles de Navegação */}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+                disabled={paginaAtual <= 1}
+                className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                title="Página anterior"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Botões numéricos de página */}
+              {Array.from({ length: Math.min(5, totalPaginas) }).map((_, i) => {
+                let num = i + 1;
+                if (totalPaginas > 5 && paginaAtual > 3) {
+                  num = paginaAtual - 2 + i;
+                  if (num > totalPaginas) num = totalPaginas - (4 - i);
+                }
+                return (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => setPaginaAtual(num)}
+                    className={`w-7 h-7 rounded-lg text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
+                      paginaAtual === num
+                        ? "bg-[#0B132B] text-white"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {num}
+                  </button>
+                );
+              })}
+
+              {totalPaginas > 5 && paginaAtual < totalPaginas - 2 && (
+                <>
+                  <span className="text-slate-400 px-1">...</span>
+                  <button
+                    type="button"
+                    onClick={() => setPaginaAtual(totalPaginas)}
+                    className="w-7 h-7 rounded-lg text-xs font-semibold flex items-center justify-center text-slate-600 hover:bg-slate-100 cursor-pointer"
+                  >
+                    {totalPaginas}
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setPaginaAtual((p) => Math.min(totalPaginas, p + 1))}
+                disabled={paginaAtual >= totalPaginas}
+                className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                title="Próxima página"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1394,7 +1432,6 @@ export default function ProfissionaisPage() {
         const idadeCalculada = profissionalSelecionado.dataNascimento
           ? calcularIdade(profissionalSelecionado.dataNascimento)
           : null;
-        const faixaEtaria = idadeCalculada !== null ? obterFaixaEtaria(idadeCalculada) : null;
         const cpfFormatado = profissionalSelecionado.cpfLimpo.replace(
           /(\d{3})(\d{3})(\d{3})(\d{2})/,
           "$1.$2.$3-$4"
@@ -1432,7 +1469,7 @@ export default function ProfissionaisPage() {
             />
 
             <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden flex flex-col max-h-[92vh] z-10 animate-scaleIn ficha-rh-drawer print:hidden">
-              {/* Cabeçalho Hero Executivo */}
+              {/* Topo do Modal */}
               <div className="bg-gradient-to-r from-[#1B1745] via-[#28185A] to-slate-900 text-white p-5 sm:p-6 relative shrink-0">
                 <div className="flex items-center justify-between pb-3 border-b border-white/10">
                   <div className="flex items-center gap-2 text-xs">
@@ -1463,7 +1500,7 @@ export default function ProfissionaisPage() {
                             profissionalSelecionado.situacao === "ATIVO"
                               ? "bg-emerald-500"
                               : profissionalSelecionado.situacao === "FERIAS"
-                              ? "bg-blue-500"
+                              ? "bg-indigo-500"
                               : profissionalSelecionado.situacao === "AFASTADO"
                               ? "bg-amber-500"
                               : "bg-slate-400"
@@ -1487,7 +1524,7 @@ export default function ProfissionaisPage() {
                             profissionalSelecionado.situacao === "ATIVO"
                               ? "bg-emerald-500/20 text-emerald-300"
                               : profissionalSelecionado.situacao === "FERIAS"
-                              ? "bg-blue-500/20 text-blue-300"
+                              ? "bg-indigo-500/20 text-indigo-300"
                               : profissionalSelecionado.situacao === "AFASTADO"
                               ? "bg-amber-500/20 text-amber-300"
                               : "bg-white/10 text-slate-300"
@@ -1503,21 +1540,21 @@ export default function ProfissionaisPage() {
                       <div className="flex items-center gap-2 mt-1 text-xs text-slate-300 font-mono">
                         <span>Chapa: {chapaCodigo}</span>
                         <span>•</span>
-                        <span>Base: {profissionalSelecionado.unidadeNome || profissionalSelecionado.unidadeId || "—"}</span>
+                        <span>Base: {normalizarBase(profissionalSelecionado.unidadeNome || profissionalSelecionado.unidadeId)}</span>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Abas do Modal */}
+              {/* Abas da Ficha */}
               <div className="flex items-center gap-2 px-6 bg-slate-50 border-b border-slate-200 shrink-0">
                 <button
                   type="button"
                   onClick={() => setAbaFicha("CONTRATO")}
                   className={`inline-flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-semibold transition-all border-b-2 cursor-pointer ${
                     abaFicha === "CONTRATO"
-                      ? "border-[#28185A] text-[#28185A] bg-white shadow-2xs font-bold"
+                      ? "border-slate-900 text-slate-900 bg-white shadow-2xs font-bold"
                       : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                   }`}
                 >
@@ -1530,7 +1567,7 @@ export default function ProfissionaisPage() {
                   onClick={() => setAbaFicha("PONTO")}
                   className={`inline-flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-semibold transition-all border-b-2 cursor-pointer ${
                     abaFicha === "PONTO"
-                      ? "border-[#28185A] text-[#28185A] bg-white shadow-2xs font-bold"
+                      ? "border-slate-900 text-slate-900 bg-white shadow-2xs font-bold"
                       : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                   }`}
                 >
@@ -1548,7 +1585,7 @@ export default function ProfissionaisPage() {
                   onClick={() => setAbaFicha("DOCUMENTOS")}
                   className={`inline-flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-semibold transition-all border-b-2 cursor-pointer ${
                     abaFicha === "DOCUMENTOS"
-                      ? "border-[#28185A] text-[#28185A] bg-white shadow-2xs font-bold"
+                      ? "border-slate-900 text-slate-900 bg-white shadow-2xs font-bold"
                       : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                   }`}
                 >
@@ -1565,7 +1602,7 @@ export default function ProfissionaisPage() {
                       {/* Vínculo Contratual */}
                       <div className="p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs space-y-3">
                         <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                          <Briefcase className="w-4 h-4 text-[#28185A]" />
+                          <Briefcase className="w-4 h-4 text-slate-900" />
                           <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wide">
                             Vínculo Contratual
                           </h4>
@@ -1592,7 +1629,7 @@ export default function ProfissionaisPage() {
                                   ? profissionalSelecionado.dataAdmissao.split("-").reverse().join("/")
                                   : "—"}
                               </span>
-                              <span className="text-[11px] text-[#28185A] font-semibold ml-1.5">
+                              <span className="text-[11px] text-slate-700 font-semibold ml-1.5">
                                 ({calcularTempoCasa(profissionalSelecionado.dataAdmissao)})
                               </span>
                             </div>
@@ -1656,7 +1693,7 @@ export default function ProfissionaisPage() {
                                   )}
                                   <Link
                                     href="/postos"
-                                    className="text-[11px] text-[#28185A] hover:underline font-semibold ml-1"
+                                    className="text-[11px] text-slate-900 hover:underline font-semibold ml-1"
                                     title="Abrir posto no Anexo 1-A"
                                   >
                                     Ver →
@@ -1664,7 +1701,7 @@ export default function ProfissionaisPage() {
                                 </>
                               ) : (
                                 <span className="font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                                  Reserva Técnica (Sem posto fixo)
+                                  Reserva técnica (Sem posto fixo)
                                 </span>
                               )}
                             </div>
@@ -1673,7 +1710,7 @@ export default function ProfissionaisPage() {
                           <div className="flex items-center justify-between py-1 border-b border-slate-50">
                             <span className="text-slate-500 font-medium">Escala de Trabalho</span>
                             <span className="font-bold text-slate-900">
-                              Escala {profissionalSelecionado.escala}
+                              {formatarEscalaMultiplicacao(profissionalSelecionado.escala, profissionalSelecionado.horarioDescricao)}
                             </span>
                           </div>
 
@@ -1744,7 +1781,7 @@ export default function ProfissionaisPage() {
                     <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-[#28185A]" />
+                          <Clock className="w-4 h-4 text-slate-900" />
                           <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wide">
                             Espelho Mensal de Ponto • Competência Oficial
                           </h4>
@@ -1759,46 +1796,13 @@ export default function ProfissionaisPage() {
                       {!ehPerfilPetrobras && (
                         <Link
                           href={`/profissionais/${chapaCodigo}/espelho-ponto`}
-                          className="h-8.5 px-3.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-[#28185A] text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
+                          className="h-8.5 px-3.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-900 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
                         >
-                          <FileText className="w-3.5 h-3.5 text-[#28185A]" />
+                          <FileText className="w-3.5 h-3.5 text-slate-900" />
                           <span>Abrir Espelho Completo →</span>
                         </Link>
                       )}
                     </div>
-
-                    {ocorrenciasColab.length === 0 ? (
-                      <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between text-xs text-slate-700">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>Nenhuma falta injustificada, atraso ou atestado registrado no período.</span>
-                        </div>
-                        <Link href="/ocorrencias" className="text-[11px] text-[#28185A] hover:underline font-semibold ml-2">
-                          Quadro Geral →
-                        </Link>
-                      </div>
-                    ) : (
-                      <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2">
-                        <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                          <h5 className="font-bold text-xs text-slate-800 uppercase tracking-wide">
-                            Ocorrências Registradas ({ocorrenciasColab.length})
-                          </h5>
-                          <Link href="/ocorrencias" className="text-[11px] text-[#28185A] hover:underline font-semibold">
-                            Ver Quadro Completo →
-                          </Link>
-                        </div>
-                        <div className="space-y-1.5">
-                          {ocorrenciasColab.map((oc) => (
-                            <div key={oc.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between text-xs">
-                              <span className="font-semibold text-slate-900">{oc.tipoOcorrencia.replace(/_/g, " ")}</span>
-                              <span className="font-mono text-slate-600">
-                                {oc.dataInicio === oc.dataFim ? oc.dataInicio : `${oc.dataInicio} a ${oc.dataFim}`} ({oc.diasAfetados}d)
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -1918,7 +1922,7 @@ export default function ProfissionaisPage() {
                   <button
                     type="button"
                     onClick={handleImprimirFicha}
-                    className="h-9 px-4 rounded-xl bg-[#28185A] hover:bg-[#1B1745] text-white text-xs font-semibold shadow-xs inline-flex items-center gap-2 transition-all cursor-pointer"
+                    className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs inline-flex items-center gap-2 transition-all cursor-pointer"
                     title="Imprimir ou exportar ficha funcional em PDF"
                   >
                     <Printer className="w-4 h-4 text-white" />
@@ -2004,10 +2008,10 @@ export default function ProfissionaisPage() {
       {modalAberto && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden animate-scaleIn">
-            <div className="p-5 bg-gradient-to-r from-[#1B1745] to-[#28185A] text-white flex items-center justify-between">
+            <div className="p-5 bg-[#0B132B] text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                  <Plus className="w-5 h-5 text-[#D8C7A0]" />
+                  <Plus className="w-5 h-5 text-white" />
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-white">Admitir Colaborador no Contrato</h3>
@@ -2034,7 +2038,7 @@ export default function ProfissionaisPage() {
                     placeholder="Ex: 046900"
                     value={formMatricula}
                     onChange={(e) => setFormMatricula(e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 uppercase font-mono text-slate-800 outline-none focus:border-[#28185A]"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 uppercase font-mono text-slate-800 outline-none focus:border-slate-900"
                   />
                 </div>
 
@@ -2048,7 +2052,7 @@ export default function ProfissionaisPage() {
                     placeholder="Ex: Gabriel Alves Moreira"
                     value={formNome}
                     onChange={(e) => setFormNome(e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-[#28185A]"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-slate-900"
                   />
                 </div>
               </div>
@@ -2065,7 +2069,7 @@ export default function ProfissionaisPage() {
                     placeholder="123.456.789-01"
                     value={formCpf}
                     onChange={(e) => setFormCpf(e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-800 outline-none focus:border-[#28185A]"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-800 outline-none focus:border-slate-900"
                   />
                 </div>
 
@@ -2076,10 +2080,10 @@ export default function ProfissionaisPage() {
                   <input
                     type="text"
                     required
-                    placeholder="Ex: Assistente de Logística"
+                    placeholder="Ex: Assistente de logística"
                     value={formFuncao}
                     onChange={(e) => setFormFuncao(e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-[#28185A]"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-slate-900"
                   />
                 </div>
               </div>
@@ -2092,7 +2096,7 @@ export default function ProfissionaisPage() {
                     onChange={(e) => setFormPosto(e.target.value)}
                     className="w-full border border-slate-300 rounded-xl px-2.5 py-2 bg-white text-slate-800 outline-none"
                   >
-                    <option value="">Reserva Técnica (Sem posto fixo)</option>
+                    <option value="">Reserva técnica (Sem posto fixo)</option>
                     {postos.slice(0, 100).map((p) => (
                       <option key={p.codigoPosto} value={p.codigoPosto}>
                         {p.codigoPosto} — {p.funcao}
@@ -2108,9 +2112,9 @@ export default function ProfissionaisPage() {
                     onChange={(e) => setFormEscala(e.target.value as "5x2" | "12x36" | "6x1")}
                     className="w-full border border-slate-300 rounded-xl px-2.5 py-2 bg-white text-slate-800 outline-none"
                   >
-                    <option value="5x2">5x2</option>
-                    <option value="12x36">12x36</option>
-                    <option value="6x1">6x1</option>
+                    <option value="5x2">5 × 2</option>
+                    <option value="12x36">12 × 36</option>
+                    <option value="6x1">6 × 1</option>
                   </select>
                 </div>
               </div>
@@ -2160,7 +2164,7 @@ export default function ProfissionaisPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#28185A] hover:bg-[#1B1745] text-white font-semibold shadow-xs transition-colors cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-[#0B132B] hover:bg-[#1C2541] text-white font-semibold shadow-xs transition-colors cursor-pointer"
                 >
                   Salvar Colaborador
                 </button>
@@ -2177,7 +2181,7 @@ export default function ProfissionaisPage() {
             <div className="bg-gradient-to-r from-[#1B1745] to-[#28185A] text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                  <RefreshCw className="w-4 h-4 text-[#D8C7A0]" />
+                  <RefreshCw className="w-4 h-4 text-white" />
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-white leading-tight">Trocar Posto / Substituição</h3>
@@ -2217,7 +2221,7 @@ export default function ProfissionaisPage() {
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-bold text-[11px]">
-                        ★ Reserva Técnica
+                        ★ Reserva técnica
                       </span>
                     )}
                   </div>
@@ -2237,7 +2241,7 @@ export default function ProfissionaisPage() {
                         setMoverParaReserva(false);
                         setBuscaSubstituto("");
                       }}
-                      className="text-[11px] text-[#28185A] hover:underline font-semibold cursor-pointer"
+                      className="text-[11px] text-slate-900 hover:underline font-semibold cursor-pointer"
                     >
                       Alterar seleção
                     </button>
@@ -2253,7 +2257,7 @@ export default function ProfissionaisPage() {
                         value={buscaSubstituto}
                         onChange={(e) => setBuscaSubstituto(e.target.value)}
                         placeholder="Digite o nome, chapa ou CPF do substituto..."
-                        className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#28185A]/20 focus:border-[#28185A] outline-none shadow-2xs"
+                        className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 outline-none shadow-2xs"
                         autoFocus
                       />
                       {buscaSubstituto && (
@@ -2278,7 +2282,7 @@ export default function ProfissionaisPage() {
                       >
                         <div className="flex items-center gap-2">
                           <UserMinus className="w-4 h-4 text-amber-600 shrink-0" />
-                          <span className="font-semibold text-amber-900">Mover titular atual para Reserva Técnica</span>
+                          <span className="font-semibold text-amber-900">Mover titular atual para Reserva técnica</span>
                         </div>
                         <span className="text-[11px] text-slate-400">(Deixar posto vago)</span>
                       </button>
@@ -2308,7 +2312,7 @@ export default function ProfissionaisPage() {
                           >
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-900 group-hover:text-[#28185A] text-xs truncate">
+                                <span className="font-bold text-slate-900 group-hover:text-slate-900 text-xs truncate">
                                   {formatarNome(cand.nome)}
                                 </span>
                                 <span className="font-mono text-[11px] text-slate-500">
@@ -2316,7 +2320,7 @@ export default function ProfissionaisPage() {
                                 </span>
                               </div>
                               <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                                {formatarFuncao(cand.funcao)} • Base {cand.imovelEfetivo || cand.unidadeId}
+                                {formatarFuncao(cand.funcao)} • Base {cand.baseNormalizada || cand.unidadeId}
                               </div>
                             </div>
 
@@ -2331,7 +2335,7 @@ export default function ProfissionaisPage() {
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-semibold border border-amber-200">
-                                  Reserva Técnica
+                                  Reserva técnica
                                 </span>
                               )}
                             </div>
@@ -2370,7 +2374,7 @@ export default function ProfissionaisPage() {
                           </span>
                         ) : (
                           <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-bold text-[11px]">
-                            ★ Reserva Técnica
+                            ★ Reserva técnica
                           </span>
                         )}
                       </div>
@@ -2391,7 +2395,7 @@ export default function ProfissionaisPage() {
                       <div className="text-emerald-800 pl-5">
                         {modoPermuta && substitutoSelecionado.postoCodigo
                           ? `Permuta mútua: ${formatarNome(colaboradorParaTransferir.nome)} assumirá o Posto ${substitutoSelecionado.postoCodigo}.`
-                          : `${formatarNome(colaboradorParaTransferir.nome)} será movido para a Reserva Técnica.`}
+                          : `${formatarNome(colaboradorParaTransferir.nome)} será movido para a Reserva técnica.`}
                       </div>
                     </div>
 
@@ -2416,10 +2420,10 @@ export default function ProfissionaisPage() {
                   <div className="p-4 bg-amber-50/70 border border-amber-300 rounded-xl space-y-2 animate-fadeIn">
                     <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
                       <UserMinus className="w-4 h-4 text-amber-600" />
-                      <span>Desocupar Posto — Mover para Reserva Técnica</span>
+                      <span>Desocupar Posto — Mover para Reserva técnica</span>
                     </div>
                     <p className="text-[11px] text-amber-900 leading-relaxed">
-                      O colaborador <strong>{formatarNome(colaboradorParaTransferir.nome)}</strong> será desvinculado do <strong>Posto {colaboradorParaTransferir.postoCodigo}</strong> e movido para a <strong>Reserva Técnica</strong>. O posto ficará oficialmente <strong>VAGO</strong> no Anexo 1-A e no Mapa de Ocupação.
+                      O colaborador <strong>{formatarNome(colaboradorParaTransferir.nome)}</strong> será desvinculado do <strong>Posto {colaboradorParaTransferir.postoCodigo}</strong> e movido para a <strong>Reserva técnica</strong>. O posto ficará oficialmente <strong>VAGO</strong> no Anexo 1-A e no Mapa de Ocupação.
                     </p>
                   </div>
                 )}
@@ -2468,7 +2472,7 @@ export default function ProfissionaisPage() {
                   disabled={!substitutoSelecionado && !moverParaReserva && !destinoPostoCodigo}
                   className={`h-9 px-5 rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer ${
                     substitutoSelecionado || moverParaReserva || destinoPostoCodigo
-                      ? "bg-[#28185A] hover:bg-[#1B1745] text-white active:scale-[0.98]"
+                      ? "bg-[#0B132B] hover:bg-[#1C2541] text-white active:scale-[0.98]"
                       : "bg-slate-300 text-slate-500 cursor-not-allowed"
                   }`}
                 >
