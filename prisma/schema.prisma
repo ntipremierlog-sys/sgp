@@ -40,6 +40,13 @@ enum SituacaoUnidade {
   SUSPENSA
 }
 
+enum StatusImovel {
+  ATIVO
+  INATIVO
+  EM_MOBILIZACAO
+  DESMOBILIZADO
+}
+
 enum SituacaoPosto {
   ATIVO
   SUSPENSO
@@ -210,6 +217,49 @@ model Unidade {
 }
 
 // -----------------------------------------------------------------------------
+// MODELOS CONTRATUAIS: IMÓVEL E ITEM DA PPU (CONTRATO PETROBRAS ICJ 5900.0129796.25.2)
+// Hierarquia Oficial: IMÓVEL → ITEM DA PPU → POSTO → POSIÇÃO → COLABORADOR
+// -----------------------------------------------------------------------------
+
+model Imovel {
+  id                        String        @id @default(uuid()) @db.Uuid
+  nome                      String        @unique
+  cidade                    String
+  uf                        String        @db.VarChar(2)
+  gerencia                  String
+  preposto                  String?
+  statusImovel              StatusImovel  @default(ATIVO) @map("status_imovel")
+  dataComunicacaoPetrobras  DateTime?     @map("data_comunicacao_petrobras") @db.Date
+  prazoLimite               DateTime?     @map("prazo_limite") @db.Date
+
+  // Auditoria e Soft Delete
+  createdAt                 DateTime      @default(now()) @map("created_at")
+  updatedAt                 DateTime      @updatedAt @map("updated_at")
+  createdBy                 String?       @map("created_by")
+  updatedBy                 String?       @map("updated_by")
+  deletedAt                 DateTime?     @map("deleted_at")
+
+  postos                    Posto[]
+
+  @@map("imovel")
+}
+
+model ItemPpu {
+  codigo                    String        @id @map("codigo") // ex.: "1.1", "3.6"
+  descricao                 String        @map("descricao")
+  regime                    String        @map("regime")
+  posicoesPorPosto          Int           @map("posicoes_por_posto")
+
+  createdAt                 DateTime      @default(now()) @map("created_at")
+  updatedAt                 DateTime      @updatedAt @map("updated_at")
+
+  postos                    Posto[]
+  coberturas                Cobertura[]
+
+  @@map("item_ppu")
+}
+
+// -----------------------------------------------------------------------------
 // MODELOS: POSTOS E PROFISSIONAIS
 // -----------------------------------------------------------------------------
 
@@ -217,6 +267,18 @@ model Posto {
   id                  String          @id @default(uuid()) @db.Uuid
   unidadeId           String          @map("unidade_id") @db.Uuid
   codigoPosto         String          @unique @map("codigo_posto") // Identificador idêntico ao Anexo 1-A
+
+  // Campos contratuais SGP (Especificação Técnica Contrato Petrobras)
+  postoIdSgp          String?         @unique @map("posto_id_sgp") // Código Posto_ID_SGP (ex.: PST-BOAVENTURA-008)
+  imovelId            String?         @map("imovel_id") @db.Uuid
+  imovel              Imovel?         @relation(fields: [imovelId], references: [id])
+  itemPpuCodigo       String?         @map("item_ppu")
+  itemPpu             ItemPpu?        @relation(fields: [itemPpuCodigo], references: [codigo])
+  regime              String?         @map("regime")
+  periculosidade      String          @default("NÃO") @map("periculosidade") // SIM / NÃO
+  fatorMedicao        Decimal         @default(0.8) @map("fator_medicao") @db.Decimal(3, 2) // 1,0 se periculosidade = SIM; 0,8 se NÃO
+  qtdPosicoes         Int             @default(1) @map("qtd_posicoes") // Vem do regime
+
   funcao              String
   descricao           String?
   escala              EscalaTrabalho  @default(ESCALA_5X2)
@@ -369,6 +431,11 @@ model Ocorrencia {
   registradoPor       String?           @map("registrado_por")
   observacaoPublica   String?           @map("observacao_publica")
 
+  // Gestão contratual de ausências (ET 9.4.1 férias / ET 9.4.2 substituição)
+  dataConsultaPetrobras DateTime?       @map("data_consulta_petrobras") @db.Date
+  substituicaoAprovada  Boolean         @default(false) @map("substituicao_aprovada")
+  substitutoChapa       String?         @map("substituto_chapa")
+
   // Auditoria e Soft Delete
   createdAt           DateTime          @default(now()) @map("created_at")
   updatedAt           DateTime          @updatedAt @map("updated_at")
@@ -415,6 +482,9 @@ model Cobertura {
   status                    StatusCobertura @default(CONFIRMADA)
   justificativa             String?
   documentoReferencia       String?         @map("documento_referencia")
+  // Item da PPU em que a cobertura é medida pela Petrobras
+  itemPpuCodigo             String?         @map("item_ppu")
+  itemPpu                   ItemPpu?        @relation(fields: [itemPpuCodigo], references: [codigo])
 
   // Auditoria e Soft Delete
   createdAt                 DateTime        @default(now()) @map("created_at")
@@ -706,8 +776,13 @@ model PosicaoPosto {
   id                  String        @id @default(uuid()) @db.Uuid
   posicaoIdSgp        String        @unique @map("posicao_id_sgp") // Chave permanente e imutável (ex.: "POS-BOAVENTURA-007-01")
   postoId             String        @map("posto_id") @db.Uuid
+  codigoEstrutural    String?       @map("codigo_estrutural") // ex.: "7.3"
   idOriginalMc        String?       @map("id_original_mc") // Numeração do Luiz (ex.: "7.1") - rastreabilidade, NUNCA chave
   sufixo              Int           @map("sufixo") // 1, 2, 3, 4
+  chapaTitular        String?       @map("chapa_titular")
+  nomeTitular         String?       @map("nome_titular")
+  situacaoRm          String?       @map("situacao_rm")
+  escalaPendente      Boolean       @default(false) @map("escala_pendente") // bool: escala cíclica 12x36/4x4/4x2 sem fase ou data-base
   statusValidacao     String        @default("VALIDADA") @map("status_validacao")
   conflitoCadastro    String?       @map("conflito_cadastro")
   ehEstrutural        Boolean       @default(true) @map("eh_estrutural")
@@ -750,18 +825,20 @@ model HistoricoTitularPosicao {
 
 model FeristaPosto {
   id                  String        @id @default(uuid()) @db.Uuid
-  profissionalId      String        @map("profissional_id") @db.Uuid
   postoId             String        @map("posto_id") @db.Uuid
+  chapa               String?       @map("chapa")
+  nome                String?       @map("nome")
+  situacaoRm          String?       @map("situacao_rm")
+  profissionalId      String?       @map("profissional_id") @db.Uuid
   unidadeId           String?       @map("unidade_id") @db.Uuid
   ativo               Boolean       @default(true)
   dataInicio          DateTime      @default(now()) @map("data_inicio")
   dataFim             DateTime?     @map("data_fim")
   observacoes         String?       @map("observacoes")
 
-  profissional        Profissional  @relation(fields: [profissionalId], references: [id])
+  profissional        Profissional? @relation(fields: [profissionalId], references: [id])
   posto               Posto         @relation(fields: [postoId], references: [id])
 
-  @@unique([profissionalId, postoId])
   @@map("ferista_posto")
 }
 

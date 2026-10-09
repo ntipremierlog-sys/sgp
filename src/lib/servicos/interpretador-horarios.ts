@@ -11,6 +11,7 @@ import {
   CicloEscalaColaborador,
   MarcacaoPontoOriginal,
 } from "@/lib/dados/ponto-tipos";
+import { ehFeriadoNacional } from "@/lib/dados/feriados-nacionais";
 
 export type { HorarioInterpretado, CicloEscalaColaborador };
 
@@ -211,7 +212,7 @@ export function verificarJornadaPrevistaDia(
     const [y, m, d] = dataIso.split("-").map(Number);
     const dataJs = new Date(Date.UTC(y, m - 1, d));
     const diaSemana = dataJs.getUTCDay(); // 0 = Domingo, 6 = Sábado
-    const isFeriadoNacional = dataIso === "2026-09-07"; // 07 de Setembro (Independência do Brasil)
+    const isFeriadoNacional = ehFeriadoNacional(dataIso); // lista única em src/lib/dados/feriados-nacionais.ts
     const ehDiaUtil = diaSemana >= 1 && diaSemana <= 5 && !isFeriadoNacional;
     return {
       temJornada: ehDiaUtil,

@@ -571,6 +571,40 @@ export default function RelatoriosOficiaisPage() {
       {/* ========================================================================= */}
       {abaAtiva === "coberturas" && dadosCoberturas && (
         <div className="space-y-4">
+          {dadosCoberturas.itens.length > 0 && (() => {
+            const porItem = new Map<string, { descricao: string; coberturas: number; dias: number }>();
+            dadosCoberturas.itens.forEach((it) => {
+              const chave = it.itemPpu && it.itemPpu !== "—" ? it.itemPpu : "SEM_ITEM";
+              const atual = porItem.get(chave) || { descricao: it.itemPpuDescricao || "", coberturas: 0, dias: 0 };
+              atual.coberturas += 1;
+              atual.dias += Number(it.totalDias) || 0;
+              porItem.set(chave, atual);
+            });
+            const linhas = Array.from(porItem.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+            return (
+              <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
+                <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-800">Dias de cobertura por Item da PPU</span>
+                  <span className="text-[11px] text-slate-500">Base de cálculo da medição Petrobras</span>
+                </div>
+                <div className="flex flex-wrap gap-x-8 gap-y-2 px-4 py-3">
+                  {linhas.map(([codigo, v]) => (
+                    <div key={codigo} className="min-w-[140px]" title={v.descricao}>
+                      <div className="text-[11px] text-slate-500">
+                        {codigo === "SEM_ITEM" ? "Sem item informado" : `Item ${codigo}`}
+                      </div>
+                      <div className="text-sm font-semibold text-slate-900 tabular-nums">
+                        {v.dias} dia{v.dias === 1 ? "" : "s"}
+                        <span className="ml-1.5 text-[11px] font-normal text-slate-500">
+                          · {v.coberturas} cobertura{v.coberturas === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
@@ -578,6 +612,7 @@ export default function RelatoriosOficiaisPage() {
                   <tr className="bg-slate-100 border-b border-slate-300 text-slate-800 font-bold">
                     <th className="py-2.5 px-3">Unidade</th>
                     <th className="py-2.5 px-3">Posto & Posição</th>
+                    <th className="py-2.5 px-3">Item PPU</th>
                     <th className="py-2.5 px-3">Titular Ausente</th>
                     <th className="py-2.5 px-3">Quem Cobriu (Substituto)</th>
                     <th className="py-2.5 px-3 font-mono">Data Início</th>
@@ -590,7 +625,7 @@ export default function RelatoriosOficiaisPage() {
                 <tbody className="divide-y divide-slate-200 text-slate-700 text-xs">
                   {dadosCoberturas.itens.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-slate-500">
+                      <td colSpan={10} className="py-8 text-center text-slate-500">
                         Nenhuma cobertura registrada para os filtros selecionados.
                       </td>
                     </tr>
@@ -602,18 +637,27 @@ export default function RelatoriosOficiaisPage() {
                           <span className="font-mono text-slate-900 font-bold block">{it.postoCodigo}</span>
                           <span className="text-[11px] text-slate-500 block truncate max-w-[200px]">{it.postoFuncao}</span>
                         </td>
+                        <td className="py-2.5 px-3">
+                          {it.itemPpu && it.itemPpu !== "—" ? (
+                            <>
+                              <span className="font-mono text-slate-900 font-semibold block">{it.itemPpu}</span>
+                              <span className="text-[11px] text-slate-500 block truncate max-w-[220px]" title={it.itemPpuDescricao}>
+                                {it.itemPpuDescricao}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[11px] text-amber-700">Não informado</span>
+                          )}
+                        </td>
                         <td className="py-2.5 px-3 font-medium text-slate-800">{it.titularNome}</td>
-                        <td className="py-2.5 px-3 font-bold text-blue-900">{it.substitutoNome}</td>
+                        <td className="py-2.5 px-3 font-semibold text-slate-900">{it.substitutoNome}</td>
                         <td className="py-2.5 px-3 font-mono text-slate-600">{it.dataInicio}</td>
                         <td className="py-2.5 px-3 font-mono text-slate-600">{it.dataFim}</td>
                         <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-900">{it.totalDias}</td>
-                        <td className="py-2.5 px-3">
-                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
-                            {it.motivoCategoria}
-                          </span>
-                        </td>
+                        <td className="py-2.5 px-3 text-slate-600">{it.motivoCategoria}</td>
                         <td className="py-2.5 px-3 text-center">
-                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             {it.status}
                           </span>
                         </td>

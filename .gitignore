@@ -46,3 +46,6 @@ next-env.d.ts
 **/scratch/
 **/.vite/
 
+
+# Credenciais locais (hash de senhas) - nunca versionar
+.sgp-dados/

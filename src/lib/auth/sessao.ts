@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { createHmac, timingSafeEqual } from "crypto";
 import { UsuarioSessao, UsuarioCadastro } from "./tipos";
 import { carregarUsuarios, USUARIOS_PADRAO } from "./usuarios";
 
@@ -20,27 +21,50 @@ export const SESSAO_PADRAO_DEV: UsuarioSessao = {
 
 export const TIMEOUT_INATIVIDADE_MS = 30 * 60 * 1000; // 30 minutos de inatividade máxima
 
+/** Validade máxima do cookie (a inatividade é controlada pelo timestamp renovado). */
+export const DURACAO_COOKIE_SESSAO_S = 12 * 60 * 60; // 12 horas
+
 /**
- * Codifica a sessão em base64 com timestamp de integridade
+ * Segredo de assinatura do token. Em produção DEVE vir de NEXTAUTH_SECRET.
+ * O mesmo algoritmo é reproduzido no middleware (Edge) via Web Crypto.
  */
-export function codificarTokenSessao(usuario: UsuarioSessao): string {
+export function obterSegredoSessao(): string {
+  return process.env.NEXTAUTH_SECRET || "sgp-dev-segredo-local-nao-usar-em-producao";
+}
+
+function assinar(payloadB64: string): string {
+  return createHmac("sha256", obterSegredoSessao()).update(payloadB64).digest("base64url");
+}
+
+/**
+ * Codifica a sessão em base64 com timestamp de integridade e assinatura HMAC-SHA256.
+ * Formato: <payload base64>.<assinatura base64url>
+ */
+export function codificarTokenSessao(usuario: UsuarioSessao, opcoes?: { timestamp?: number }): string {
   const payload = {
     userId: usuario.id,
     email: usuario.email,
     perfil: usuario.perfil,
     status: usuario.status,
     basesVinculadas: usuario.basesVinculadas,
-    timestamp: Date.now(),
+    timestamp: opcoes?.timestamp ?? Date.now(),
   };
-  return Buffer.from(JSON.stringify(payload)).toString("base64");
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64");
+  return `${payloadB64}.${assinar(payloadB64)}`;
 }
 
 /**
- * Decodifica o token de sessão e resolve o usuário ativo
+ * Decodifica o token de sessão e resolve o usuário ativo.
+ * Tokens sem assinatura válida são rejeitados (impede forjar perfil no cookie).
  */
-export function decodificarTokenSessao(token: string): { userId: string; email: string; timestamp?: number } | null {
+export function decodificarTokenSessao(token: string): { userId: string; email: string; perfil?: string; status?: string; timestamp?: number } | null {
   try {
-    const raw = Buffer.from(token, "base64").toString("utf-8");
+    const [payloadB64, assinatura] = token.split(".");
+    if (!payloadB64 || !assinatura) return null;
+    const esperada = Buffer.from(assinar(payloadB64));
+    const recebida = Buffer.from(assinatura);
+    if (esperada.length !== recebida.length || !timingSafeEqual(esperada, recebida)) return null;
+    const raw = Buffer.from(payloadB64, "base64").toString("utf-8");
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed.userId === "string") {
       return parsed;
@@ -49,6 +73,40 @@ export function decodificarTokenSessao(token: string): { userId: string; email: 
     // token inválido
   }
   return null;
+}
+
+/**
+ * Reemite o token com timestamp atual (sessão deslizante: cada atividade renova os 30 min).
+ * Retorna null se o token for inválido ou já tiver expirado.
+ */
+export function renovarTokenSessao(token: string): string | null {
+  const estado = verificarSessaoAtiva(token);
+  if (!estado.valida) return null;
+  const [payloadB64] = token.split(".");
+  try {
+    const payload = JSON.parse(Buffer.from(payloadB64, "base64").toString("utf-8"));
+    payload.timestamp = Date.now();
+    const novoB64 = Buffer.from(JSON.stringify(payload)).toString("base64");
+    return `${novoB64}.${assinar(novoB64)}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Monta o token de sessão a partir do cadastro do usuário. */
+export function tokenSessaoParaCadastro(u: UsuarioCadastro): string {
+  return codificarTokenSessao(mapearParaSessao({ ...u, ultimoAcesso: new Date().toISOString() }));
+}
+
+/** Opções padrão do cookie de sessão (HTTP-Only). */
+export function opcoesCookieSessao(maxAge = DURACAO_COOKIE_SESSAO_S) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge,
+  };
 }
 
 /**
@@ -83,8 +141,8 @@ export async function obterSessaoServidor(): Promise<UsuarioSessao | null> {
   const usuarios = carregarUsuarios();
 
   if (!token) {
-    // Em modo de desenvolvimento, se não houver cookie ainda, usa o Administrador Premier inicial
-    if (process.env.NODE_ENV !== "production") {
+    // Sem cookie não há sessão. Para demonstrações locais sem login, defina SGP_DEV_SEM_LOGIN=1.
+    if (process.env.NODE_ENV !== "production" && process.env.SGP_DEV_SEM_LOGIN === "1") {
       const admin = usuarios.find((u) => u.perfil === "PREMIER_ADMIN" && u.status === "ATIVO");
       if (admin) return mapearParaSessao(admin);
       return SESSAO_PADRAO_DEV;

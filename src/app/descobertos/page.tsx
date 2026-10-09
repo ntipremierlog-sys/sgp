@@ -25,7 +25,9 @@ import {
   OcorrenciaOperacional,
   CoberturaOperacional,
   registrarLogAuditoria,
+  obterItemPpuDoPosto,
 } from "@/lib/dados/estado-operacional";
+import { CampoItemPpu } from "@/components/cobertura/campo-item-ppu";
 import { VAGAS_MC_REAIS, ALOCACOES_MC_REAIS } from "@/lib/dados/estrutura-postos";
 import {
   obterFeristasSugeridosParaPosicao,
@@ -102,6 +104,7 @@ export default function DescobertosPeriodoPage() {
   const [substitutoChapa, setSubstitutoChapa] = useState("");
   const [substitutoNome, setSubstitutoNome] = useState("");
   const [salvandoCobertura, setSalvandoCobertura] = useState(false);
+  const [itemPpuCobertura, setItemPpuCobertura] = useState("");
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
 
   // Carregar dados
@@ -317,6 +320,7 @@ export default function DescobertosPeriodoPage() {
   // Abrir Modal de Cobertura
   const handleAbrirModalCobertura = (item: ItemDescobertoCompleto) => {
     setItemSelecionado(item);
+    setItemPpuCobertura(obterItemPpuDoPosto(item.postoId) || obterItemPpuDoPosto(item.codigoPosto) || "");
     if (item.feristasSugeridos.length > 0) {
       setSubstitutoChapa(item.feristasSugeridos[0].chapa);
       setSubstitutoNome(item.feristasSugeridos[0].nome);
@@ -328,7 +332,7 @@ export default function DescobertosPeriodoPage() {
 
   // Confirmar Cobertura (Critério: ao registrar, D passa a C)
   const handleConfirmarCobertura = async () => {
-    if (!itemSelecionado || !substitutoChapa || !substitutoNome) return;
+    if (!itemSelecionado || !substitutoChapa || !substitutoNome || !itemPpuCobertura) return;
     setSalvandoCobertura(true);
 
     const estadoAtual = carregarEstado();
@@ -340,6 +344,7 @@ export default function DescobertosPeriodoPage() {
       idPosto: itemSelecionado.postoId,
       vagaId: itemSelecionado.posicaoId,
       funcaoPosto: itemSelecionado.funcao,
+      itemPpu: itemPpuCobertura,
       titularMatricula: itemSelecionado.titularChapa,
       titularNome: itemSelecionado.titularNome,
       substitutoMatricula: substitutoChapa,
@@ -361,7 +366,7 @@ export default function DescobertosPeriodoPage() {
     registrarLogAuditoria(
       "REGISTRO_COBERTURA_DESCOBERTO",
       `Posição (${itemSelecionado.posicaoId})`,
-      `Cobertura registrada para o dia ${itemSelecionado.dataStr}: substituto ${substitutoNome} (${substitutoChapa}) cobrindo titular ${itemSelecionado.titularNome}. Posição passa de D para C.`,
+      `Cobertura registrada para o dia ${itemSelecionado.dataStr}: substituto ${substitutoNome} (${substitutoChapa}) cobrindo titular ${itemSelecionado.titularNome}. Item PPU ${itemPpuCobertura}. Posição passa de D para C.`,
       "Gestor Operacional Premier"
     );
 
@@ -876,6 +881,14 @@ export default function DescobertosPeriodoPage() {
                   />
                 </div>
               </div>
+
+              <CampoItemPpu
+                id="descobertos-cobertura-item-ppu"
+                valor={itemPpuCobertura}
+                onChange={setItemPpuCobertura}
+                itemDoPosto={obterItemPpuDoPosto(itemSelecionado.postoId) || obterItemPpuDoPosto(itemSelecionado.codigoPosto)}
+                className="pt-2 border-t border-slate-200"
+              />
             </div>
 
             {/* Rodapé do Modal */}
@@ -888,7 +901,7 @@ export default function DescobertosPeriodoPage() {
               </button>
               <button
                 onClick={handleConfirmarCobertura}
-                disabled={!substitutoChapa || !substitutoNome || salvandoCobertura}
+                disabled={!substitutoChapa || !substitutoNome || !itemPpuCobertura || salvandoCobertura}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer"
               >
                 {salvandoCobertura ? "Gravando..." : "Confirmar Cobertura (Mudar para C)"}

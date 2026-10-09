@@ -150,14 +150,14 @@ export function Cabecalho({
 
           <div className="h-6 w-px bg-[#E3E6EB] hidden sm:block" />
 
-          {/* Botão sutil de alternar conta de homologação / sair */}
+          {/* Alterar a própria senha / sair */}
           <div className="flex items-center gap-1">
             <Link
-              href="/login"
+              href="/login/trocar-senha"
               className="text-[11px] font-medium text-[#5B6474] hover:text-[#1F4FD1] px-2 py-1 rounded hover:bg-[#F2F4F7] transition-colors"
-              title="Trocar de conta no ambiente de homologação"
+              title="Alterar a senha da sua conta local"
             >
-              Trocar usuário
+              Alterar senha
             </Link>
             <button
               onClick={handleLogout}

@@ -45,7 +45,7 @@ const gruposMenuConfig: GrupoMenu[] = [
   {
     titulo: "OPERAÇÃO",
     itens: [
-      { rotulo: "Painel", href: "/painel", icone: LayoutDashboard, recurso: "PAINEL" },
+      { rotulo: "Painel", href: "/painel", icone: LayoutDashboard, recurso: "PAINEL", rotasAdicionais: ["/alertas"] },
       { rotulo: "Mapa de cobertura", href: "/mapa-ocupacao", icone: CalendarCheck, recurso: "MAPA_OCUPACAO", rotasAdicionais: ["/descobertos", "/presenca-diaria"] },
       { rotulo: "Coberturas e ocorrências", href: "/coberturas", icone: UserCheck2, recurso: "COBERTURAS", rotasAdicionais: ["/ocorrencias"] },
       { rotulo: "Profissionais", href: "/profissionais", icone: Users, recurso: "PROFISSIONAIS" },
@@ -119,20 +119,25 @@ export function MenuLateral() {
 
   return (
     <aside className="w-[240px] h-full bg-[#0F1E36] text-[#C9D2E0] flex flex-col shrink-0 select-none border-r border-[#1E2E4A]">
-      {/* Topo: Logo "P" + "Premier Logistics" + "SGP · Gestão de Postos" */}
-      <div className="p-4 border-b border-[#1E2E4A] flex items-center gap-3 shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-[#1F4FD1] text-white flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
-          P
-        </div>
-        <div className="leading-tight truncate">
-          <span className="font-bold text-sm text-white tracking-wide block truncate">
-            Premier Logistics
-          </span>
-          <span className="text-[11px] text-[#7F90AA] block truncate">
-            SGP · Gestão de Postos
-          </span>
-        </div>
-      </div>
+      {/* Topo: marca oficial Premier Logistics (versão para fundo escuro) + "SGP · Gestão de Postos" */}
+      <Link
+        href="/painel"
+        className="px-4 pt-4 pb-3 border-b border-[#1E2E4A] flex flex-col items-center gap-1.5 shrink-0 hover:bg-[#13233F] transition-colors"
+        title="Premier Logistics · SGP"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/marca/premier-logistics-claro.png"
+          alt="Premier Logistics"
+          width={150}
+          height={80}
+          className="w-[150px] h-auto select-none"
+          draggable={false}
+        />
+        <span className="text-[10px] text-[#7F90AA] tracking-[0.18em] uppercase">
+          SGP · Gestão de Postos
+        </span>
+      </Link>
 
       {/* Navegação agrupada por seções com títulos em caixa alta pequena */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-5">

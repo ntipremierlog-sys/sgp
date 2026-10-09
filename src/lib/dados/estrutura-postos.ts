@@ -1113,3 +1113,7 @@ export const ALOCACOES_MC_REAIS: AlocacaoVaga[] = alocacoesMcReaisJson as unknow
 export const RELATORIO_INCONSISTENCIAS_MC = relatorioInconsistenciasJson as InconsistenciaRelatorio;
 export const ESCALAS_POSICOES_REV04 = ESCALAS_REV04;
 
+// Re-export das funções de cálculo contratuais e modelos oficiais do Painel
+export * from "./painel-calculo";
+
+

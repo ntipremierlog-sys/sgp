@@ -4,6 +4,36 @@ Todas as alterações relevantes e entregas incrementais por semana de desenvolv
 
 ---
 
+## [Registros de Ponto no Mapa + Correções da Varredura de Regras] — 09/10/2026
+
+### Mapa de Ocupação — registros de ponto e espelho do período
+- Ao clicar no dia, o drawer mostra as batidas do colaborador (NSR/lote), a linha do tempo **previsto × trabalhado** e os indicadores de **atraso**, **saída antecipada** e **tempo não cumprido** (tolerância de 10 min). Ex.: jornada até 17h com saída às 15h → "Saída antecipada 2h00".
+- Botão **"Espelho completo do período"**: resumo da competência, tabela dia a dia, exportação CSV e registro em auditoria (`CONSULTA_ESPELHO_PONTO_INDIVIDUAL`).
+- LGPD: batidas individuais não são exibidas ao perfil Fiscal Petrobras.
+- **Carga horária prevalece sobre o horário:** carga prevista = faixa do posto − intervalo (CLT art. 71). Quem entra mais cedo e sai mais cedo cumprindo a carga fica como **"Carga cumprida · horário alterado"**, sem tempo não cumprido. O tempo não cumprido passa a ser o déficit de carga, com tolerância de 10 min. Dias fora da escala não geram mais atraso. As caixas de texto ficaram sem cor de fundo.
+- Serviço puro `src/lib/servicos/analise-jornada.ts` + componente `src/components/ponto/registros-ponto-dia.tsx`.
+- Visão **"Por Posto"** substituída por **"Por Item PPU"** (item → postos de todas as unidades → matriz do ciclo), com ocupação e dias descobertos por item. Os parâmetros e ocupantes do posto passam a abrir ao clicar no cabeçalho do posto (Grade e Por Item PPU), eliminando a visão redundante.
+- Opção **"Ver quem cumpre no hover"** renomeada para **"Detalhes do dia ao passar o mouse"** e integrada em ambas as visões (Grade e Por Item PPU).
+
+### Identidade Visual e Autenticação Corporativa (Login, Senha e Administração)
+- **Marca Premier Logistics:** selecionada a opção oficial transparente (`Premier - Marca-01.png`), gerando variantes tratadas para fundos escuros (`/marca/premier-logistics-claro.png`) e claros, aplicadas no topo do menu lateral, na tela de login e no favicon.
+- **Telas de Login e Senha:**
+  - Login profissional institucional em tela cheia com e-mail corporativo e senha criptografada via hash `scrypt` com sal e proteção contra força bruta.
+  - Fluxo de **Esqueci minha senha** (`/login/esqueci-senha`) e **Redefinição de senha** com token de uso único (`/login/redefinir-senha`).
+  - Primeiro acesso com troca obrigatória de senha temporária e tela de alteração voluntária no cabeçalho (`/login/trocar-senha`).
+  - Checklist em tempo real dos requisitos de segurança da senha (mínimo 10 caracteres, maiúscula, minúscula, número e caractere especial).
+- **Módulo de Administração:** corrigido o desaparecimento do menu na lateral através de **sessão deslizante (sliding session)** assinada com HMAC-SHA256, renovando os 30 min de inatividade a cada requisição ou navegação no middleware e monitor. O item "Administração" permanece fixo e funcional no grupo SISTEMA para perfis autorizados.
+
+### Correções da varredura (regras × planilhas)
+- **C2:** regra de competência unificada em `src/lib/servicos/periodo-competencia.ts` (10 do mês anterior a 09 do mês da competência, igual à MC). `obterPeriodoCompetencia`, `obterPeriodoCicloPadrao`, Mapa e Ocorrências passam a delegar a ela.
+- **A1:** 9 ocorrências não médicas (Declaração de Comparecimento, Atestado de Acompanhamento, Atestado Comp. Eleitoral) deixam de constar como `ATESTADO_MEDICO`.
+- **M1:** jornada SEG/SEX passa a respeitar todos os feriados nacionais de 2026–2027 (antes só 07/09). Lista única em `src/lib/dados/feriados-nacionais.ts`.
+- **M2:** termo "TRE" no Cubo de Abono só é reconhecido como palavra inteira (ENTREGA/TREINAMENTO não viram abono legal).
+- **M3:** abono de jornada de 12h/16h/24h conta 1 dia (antes 12h = 2 dias).
+- Testes: `src/__tests__/analise-jornada-ponto.test.ts` e `src/__tests__/correcoes-varredura-regras.test.ts`.
+
+---
+
 ## [Entrega Oficial — Auditoria de Governança, Matriz de Conformidade e Merge em Produção] — 21/09/2026
 
 ### O que ficou pronto:

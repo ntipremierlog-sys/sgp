@@ -1,67 +1,86 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import {
   obterSessaoServidor,
-  codificarTokenSessao,
+  renovarTokenSessao,
+  opcoesCookieSessao,
+  tokenSessaoParaCadastro as tokenParaUsuario,
   NOME_COOKIE_SESSAO,
 } from "@/lib/auth/sessao";
-import {
-  carregarUsuarios,
-  obterUsuarioPorEmail,
-  obterUsuarioPorId,
-} from "@/lib/auth/usuarios";
+import { autenticarComSenha } from "@/lib/auth/credenciais";
+import { emitirTokenTrocaSenha, NOME_COOKIE_TROCA_SENHA, VALIDADE_TROCA_SENHA_S } from "@/lib/auth/token-troca-senha";
 import { registrarLog } from "@/lib/dados/estado-operacional";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * GET: retorna a sessão atual e RENOVA o timestamp do cookie (sessão deslizante).
+ * Sem isso a sessão expirava 30 min após o login mesmo com o usuário ativo.
+ */
 export async function GET() {
   try {
     const usuario = await obterSessaoServidor();
-    return NextResponse.json({
+    const resposta = NextResponse.json({
       autenticado: !!usuario,
       usuario: usuario || null,
     });
+    if (usuario) {
+      const token = (await cookies()).get(NOME_COOKIE_SESSAO)?.value;
+      const renovado = token ? renovarTokenSessao(token) : null;
+      if (renovado) resposta.cookies.set(NOME_COOKIE_SESSAO, renovado, opcoesCookieSessao());
+    }
+    return resposta;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno";
     return NextResponse.json({ autenticado: false, usuario: null, erro: msg }, { status: 500 });
   }
 }
 
+/** POST: login com e-mail e senha (contas locais). */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { usuarioId, email } = body;
+    const body = await request.json().catch(() => ({}));
+    const email = typeof body.email === "string" ? body.email.trim() : "";
+    const senha = typeof body.senha === "string" ? body.senha : "";
 
-    let usuarioAlvo = usuarioId ? obterUsuarioPorId(usuarioId) : undefined;
-    if (!usuarioAlvo && email) {
-      usuarioAlvo = obterUsuarioPorEmail(email);
+    if (!email || !senha) {
+      return NextResponse.json({ sucesso: false, erro: "Informe e-mail e senha." }, { status: 400 });
     }
 
-    if (!usuarioAlvo) {
+    const resultado = autenticarComSenha(email, senha);
+
+    if (!resultado.ok) {
+      const mensagens: Record<typeof resultado.motivo, { texto: string; status: number }> = {
+        CREDENCIAIS_INVALIDAS: { texto: "E-mail ou senha inválidos.", status: 401 },
+        BLOQUEADO: {
+          texto: "Conta bloqueada temporariamente por excesso de tentativas. Tente novamente em alguns minutos ou redefina sua senha.",
+          status: 423,
+        },
+        CONTA_INATIVA: { texto: "Esta conta está inativa ou bloqueada pela administração.", status: 403 },
+        CONTA_SSO: { texto: "Esta conta utiliza login corporativo Microsoft Entra ID.", status: 400 },
+      };
+      const m = mensagens[resultado.motivo];
+      try {
+        registrarLog("LOGIN_FALHA", "Sessão", `Tentativa de login recusada para ${email} (${resultado.motivo})`);
+      } catch {
+        // ignora
+      }
       return NextResponse.json(
-        { sucesso: false, erro: "Usuário não encontrado no cadastro corporativo." },
-        { status: 404 }
+        { sucesso: false, erro: m.texto, motivo: resultado.motivo, bloqueadoAte: resultado.bloqueadoAteMs ?? null },
+        { status: m.status }
       );
     }
 
-    if (usuarioAlvo.status !== "ATIVO") {
-      return NextResponse.json(
-        { sucesso: false, erro: "Esta conta está inativa ou bloqueada pela administração." },
-        { status: 403 }
-      );
-    }
+    const usuarioAlvo = resultado.usuario;
 
-    const token = codificarTokenSessao({
-      id: usuarioAlvo.id,
-      nome: usuarioAlvo.nome,
-      email: usuarioAlvo.email,
-      empresa: usuarioAlvo.empresa,
-      perfil: usuarioAlvo.perfil,
-      status: usuarioAlvo.status,
-      tipoConta: usuarioAlvo.tipoConta,
-      basesVinculadas: usuarioAlvo.basesVinculadas,
-      cargo: usuarioAlvo.cargo,
-      ultimoAcesso: new Date().toISOString(),
-    });
+    // Senha inicial/temporária: exige troca antes de abrir a sessão
+    if (resultado.trocarSenha) {
+      const resposta = NextResponse.json({ sucesso: true, trocarSenha: true, email: usuarioAlvo.email });
+      resposta.cookies.set(NOME_COOKIE_TROCA_SENHA, emitirTokenTrocaSenha(usuarioAlvo.email), {
+        ...opcoesCookieSessao(VALIDADE_TROCA_SENHA_S),
+      });
+      return resposta;
+    }
 
     try {
       registrarLog(
@@ -85,14 +104,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Define cookie HTTP-Only seguro
-    resposta.cookies.set(NOME_COOKIE_SESSAO, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 dias
-    });
-
+    resposta.cookies.set(NOME_COOKIE_SESSAO, tokenParaUsuario(usuarioAlvo), opcoesCookieSessao());
     return resposta;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Falha na autenticação";
@@ -102,12 +114,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE() {
   const resposta = NextResponse.json({ sucesso: true, mensagem: "Sessão encerrada com sucesso." });
-  resposta.cookies.set(NOME_COOKIE_SESSAO, "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
-  });
+  resposta.cookies.set(NOME_COOKIE_SESSAO, "", opcoesCookieSessao(0));
+  resposta.cookies.set(NOME_COOKIE_TROCA_SENHA, "", opcoesCookieSessao(0));
   return resposta;
 }

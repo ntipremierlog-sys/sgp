@@ -1,250 +1,154 @@
 "use client";
 
-import React from "react";
+/**
+ * Alertas contratuais do Painel — substitui a antiga faixa "Atenção Gerencial".
+ * Chips curtos e clicáveis: cada um mostra a quantidade e abre a lista filtrada
+ * correspondente em /alertas?tipo=<slug>. Só aparecem alertas com quantidade > 0.
+ *
+ * Cores: vermelho = prazo vencido · âmbar = a vencer / pendência de cadastro · roxo = informativo.
+ */
+
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  AlertTriangle,
-  AlertOctagon,
-  AlertCircle,
-  Clock,
-  ArrowRight,
-  ShieldAlert,
-  Users,
-  CheckCircle2,
-  TrendingDown,
+  CalendarX2,
+  UserRoundX,
+  Truck,
+  UserPlus,
   CalendarClock,
-  RefreshCw,
+  ClipboardCheck,
+  UsersRound,
+  ChevronRight,
+  CheckCircle2,
 } from "lucide-react";
+import {
+  AlertaContratual,
+  CorAlerta,
+  TipoAlertaContratual,
+  calcularAlertasContratuais,
+  filtrarAlertasVisiveis,
+} from "@/lib/servicos/alertas-contratuais";
+import { carregarEstado, FERIADOS_OFICIAIS_CONTRATO } from "@/lib/dados/estado-operacional";
 
-export interface ItemAlertaSintetico {
-  id: string;
-  tipo: "CRITICO" | "ALTO_RISCO" | "ATENCAO" | "INFO";
-  titulo: string;
-  descricao: string;
-  labelBotao: string;
-  linkHref: string;
-  isScroll?: boolean;
-  Icon: React.ComponentType<{ className?: string }>;
+// =============================================================================
+// HOOK — calcula os alertas a partir do estado operacional (cliente)
+// =============================================================================
+
+export function useAlertasContratuais(): { alertas: AlertaContratual[]; carregado: boolean } {
+  const [versao, setVersao] = useState(0);
+  const [carregado, setCarregado] = useState(false);
+
+  useEffect(() => {
+    setCarregado(true);
+    const handler = () => setVersao((v) => v + 1);
+    window.addEventListener("sgp-dados-atualizados", handler);
+    return () => window.removeEventListener("sgp-dados-atualizados", handler);
+  }, []);
+
+  const alertas = useMemo(() => {
+    if (!carregado) return calcularAlertasContratuais();
+    const estado = carregarEstado();
+    return calcularAlertasContratuais({
+      ausencias: estado.ocorrencias as any[],
+      pessoasAAlocar: estado.pessoasAAlocar || [],
+      pendenciasEscala: estado.pendenciasEscala as any[] | undefined,
+      feriados: FERIADOS_OFICIAIS_CONTRATO.filter((f) => f.tipo === "NACIONAL").map((f) => f.data),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregado, versao]);
+
+  return { alertas, carregado };
 }
 
-interface AlertasGerenciaisProps {
-  slaAtual: number | null;
-  metaSla: number;
-  projecaoSla: number | null;
-  postosVagos: number;
-  basesComVagos: number;
-  decisoesVencidas: number;
-  descobertosTurno: number;
-  frescorAtrasado: boolean;
-  tempoFrescor: string;
-  competencia: string;
-  onAbrirPrazo?: () => void;
-  temPrazoCadastrado?: boolean;
-}
+// =============================================================================
+// ESTILO
+// =============================================================================
 
-const CONFIG_TIPO = {
-  CRITICO: {
-    borda: "border-rose-300",
-    fundo: "bg-rose-50",
-    iconeCor: "text-rose-600",
-    tituloCor: "text-rose-800",
-    descricaoCor: "text-rose-700",
-    botaoClasse: "bg-rose-600 hover:bg-rose-700 text-white",
-    indicador: "bg-rose-500",
+export const ICONE_ALERTA: Record<TipoAlertaContratual, React.ComponentType<{ className?: string }>> = {
+  "ferias-sem-consulta": CalendarX2,
+  "substituicao-vencendo": UserRoundX,
+  mobilizacao: Truck,
+  "admissoes-a-alocar": UserPlus,
+  "escala-sem-fase": CalendarClock,
+  "validacoes-mc-rm": ClipboardCheck,
+  "preposto-acima-limite": UsersRound,
+};
+
+export const ESTILO_COR: Record<
+  CorAlerta,
+  { chip: string; numero: string; icone: string; ponto: string; rotulo: string }
+> = {
+  VERMELHO: {
+    chip: "bg-rose-50 border-rose-200 hover:border-rose-400 hover:bg-rose-100/70 focus-visible:ring-rose-400",
+    numero: "bg-rose-600 text-white",
+    icone: "text-rose-600",
+    ponto: "bg-rose-500",
+    rotulo: "Prazo vencido",
   },
-  ALTO_RISCO: {
-    borda: "border-orange-300",
-    fundo: "bg-orange-50",
-    iconeCor: "text-orange-600",
-    tituloCor: "text-orange-900",
-    descricaoCor: "text-orange-700",
-    botaoClasse: "bg-orange-600 hover:bg-orange-700 text-white",
-    indicador: "bg-orange-500",
+  AMBAR: {
+    chip: "bg-amber-50 border-amber-200 hover:border-amber-400 hover:bg-amber-100/70 focus-visible:ring-amber-400",
+    numero: "bg-amber-500 text-white",
+    icone: "text-amber-600",
+    ponto: "bg-amber-500",
+    rotulo: "A vencer / pendência",
   },
-  ATENCAO: {
-    borda: "border-amber-300",
-    fundo: "bg-amber-50",
-    iconeCor: "text-amber-600",
-    tituloCor: "text-amber-900",
-    descricaoCor: "text-amber-700",
-    botaoClasse: "bg-amber-600 hover:bg-amber-700 text-white",
-    indicador: "bg-amber-500",
-  },
-  INFO: {
-    borda: "border-blue-200",
-    fundo: "bg-blue-50",
-    iconeCor: "text-blue-600",
-    tituloCor: "text-blue-900",
-    descricaoCor: "text-blue-700",
-    botaoClasse: "bg-blue-600 hover:bg-blue-700 text-white",
-    indicador: "bg-blue-500",
+  ROXO: {
+    chip: "bg-violet-50 border-violet-200 hover:border-violet-400 hover:bg-violet-100/70 focus-visible:ring-violet-400",
+    numero: "bg-violet-600 text-white",
+    icone: "text-violet-600",
+    ponto: "bg-violet-500",
+    rotulo: "Informativo",
   },
 };
 
-export function AlertasGerenciais({
-  slaAtual,
-  metaSla,
-  projecaoSla,
-  postosVagos,
-  basesComVagos,
-  decisoesVencidas,
-  descobertosTurno,
-  frescorAtrasado,
-  tempoFrescor,
-  competencia,
-}: AlertasGerenciaisProps) {
-  const alertas: ItemAlertaSintetico[] = [];
+/** Rótulo do chip sem o número inicial (o número vai no badge). */
+export function rotuloSemNumero(a: AlertaContratual): string {
+  return a.rotulo.replace(/^\d+\s+/, "");
+}
 
-  // 1. SLA abaixo da meta
-  if (slaAtual !== null && slaAtual < metaSla) {
-    const isCritico = slaAtual < 85.0;
-    const desvio = (metaSla - slaAtual).toFixed(1).replace(".", ",");
-    alertas.push({
-      id: "alerta-sla",
-      tipo: isCritico ? "CRITICO" : "ALTO_RISCO",
-      titulo: isCritico
-        ? `SLA Crítico: ${slaAtual.toFixed(1).replace(".", ",")}% — ${desvio} p.p. abaixo da meta`
-        : `SLA Abaixo da Meta: ${slaAtual.toFixed(1).replace(".", ",")}%`,
-      descricao: projecaoSla !== null
-        ? `Meta contratual: ${Math.round(metaSla)}%. Projeção de fechamento: ${projecaoSla.toFixed(1).replace(".", ",")}%. Intervenção imediata necessária para reduzir glosa.`
-        : `Meta contratual: ${Math.round(metaSla)}%. Revise os registros de presença e ocorrências para corrigir a tendência.`,
-      labelBotao: "Ver evolução do SLA",
-      linkHref: "#grafico-evolucao-sla",
-      isScroll: true,
-      Icon: TrendingDown,
-    });
-  }
+// =============================================================================
+// COMPONENTE
+// =============================================================================
 
-  // 2. Postos homologados vagos
-  if (postosVagos > 0) {
-    alertas.push({
-      id: "alerta-vagos",
-      tipo: "ALTO_RISCO",
-      titulo: `${postosVagos} ${postosVagos === 1 ? "Posto Vago" : "Postos Vagos"} sem Titular`,
-      descricao: `${basesComVagos > 1 ? `Em ${basesComVagos} bases contratuais. ` : ""}Postos sem alocação impactam diretamente no SLA e geram glosa proporcional ao período sem cobertura.`,
-      labelBotao: "Ver postos vagos",
-      linkHref: `/postos?aba=VAGOS&competencia=${competencia}`,
-      Icon: Users,
-    });
-  }
+export function AlertasGerenciais() {
+  const { alertas } = useAlertasContratuais();
+  const visiveis = filtrarAlertasVisiveis(alertas);
 
-  // 3. Decisões operacionais vencidas
-  if (decisoesVencidas > 0) {
-    alertas.push({
-      id: "alerta-vencidas",
-      tipo: "CRITICO",
-      titulo: `${decisoesVencidas} ${decisoesVencidas === 1 ? "Decisão Vencida" : "Decisões Vencidas"} sem Resposta`,
-      descricao: `Prazo para justificativa ou cobertura já expirou. Pendências vencidas são passíveis de notificação formal pela fiscalização Petrobras.`,
-      labelBotao: "Resolver pendências",
-      linkHref: "#decisoes-pendentes",
-      isScroll: true,
-      Icon: CalendarClock,
-    });
-  }
-
-  // 4. Postos descobertos hoje
-  if (descobertosTurno > 0) {
-    alertas.push({
-      id: "alerta-descobertos",
-      tipo: "ATENCAO",
-      titulo: `${descobertosTurno} ${descobertosTurno === 1 ? "Posto Descoberto" : "Postos Descobertos"} no Turno Atual`,
-      descricao: `Postos sem titular nem substituto registrado agora. Acione cobertura imediata ou registre ocorrência para não impactar o SLA de hoje.`,
-      labelBotao: "Ver presenças",
-      linkHref: `/presenca-diaria?situacao=DESCOBERTO&competencia=${competencia}`,
-      Icon: AlertOctagon,
-    });
-  }
-
-  // 5. Carga de ponto defasada
-  if (frescorAtrasado) {
-    alertas.push({
-      id: "alerta-frescor",
-      tipo: "INFO",
-      titulo: `Dados Desatualizados (${tempoFrescor})`,
-      descricao: `A última importação foi há mais de 24 horas. Os indicadores do painel podem não refletir a situação real. Importe os arquivos de ponto para atualizar.`,
-      labelBotao: "Importar agora",
-      linkHref: "/importacoes",
-      Icon: RefreshCw,
-    });
-  }
-
-  // Estado de conformidade total
-  if (alertas.length === 0) {
+  if (visiveis.length === 0) {
     return (
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3.5 shadow-sm flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          <div>
-            <p className="text-sm font-bold text-emerald-800">Contrato em Conformidade Plena</p>
-            <p className="text-xs text-emerald-700">SLA acima da meta, quadro de postos regular e sem pendências vencidas. Operação estável.</p>
-          </div>
-        </div>
-        <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-full shrink-0">
-          Tudo em ordem ✓
-        </span>
-      </div>
+      <section
+        aria-label="Alertas contratuais"
+        className="flex items-center gap-2 text-xs text-slate-500"
+      >
+        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+        <span>Nenhum alerta contratual pendente.</span>
+      </section>
     );
   }
 
-  // Alertas expandidos em grid
   return (
-    <section aria-label="Alertas e riscos gerenciais" className="w-full space-y-2">
-      {/* Cabeçalho da seção */}
-      <div className="flex items-center gap-2">
-        <ShieldAlert className="w-4 h-4 text-rose-600" />
-        <span className="text-xs font-bold uppercase tracking-wider text-[#1A2230]">
-          Atenção Gerencial — {alertas.length} {alertas.length === 1 ? "item requer sua ação" : "itens requerem sua ação"}
-        </span>
-      </div>
-
-      <div className={`grid gap-3 ${alertas.length === 1 ? "grid-cols-1" : alertas.length === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"}`}>
-        {alertas.map((item) => {
-          const cfg = CONFIG_TIPO[item.tipo];
+    <section aria-label="Alertas contratuais" className="flex items-center gap-3 flex-wrap">
+      <h2 className="text-xs font-medium text-slate-500 shrink-0">Alertas</h2>
+      <ul className="flex flex-wrap gap-2" role="list">
+        {visiveis.map((a) => {
+          const estilo = ESTILO_COR[a.cor];
           return (
-            <div
-              key={item.id}
-              className={`relative rounded-xl border ${cfg.borda} ${cfg.fundo} p-4 flex flex-col gap-3 shadow-sm overflow-hidden`}
-            >
-              {/* Barra lateral de severidade */}
-              <div className={`absolute left-0 top-0 bottom-0 w-1 ${cfg.indicador} rounded-l-xl`} />
-
-              <div className="flex items-start gap-3 pl-2">
-                <div className={`mt-0.5 shrink-0 ${cfg.iconeCor}`}>
-                  <item.Icon className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-bold leading-tight ${cfg.tituloCor}`}>
-                    {item.titulo}
-                  </p>
-                  <p className={`text-xs mt-1 leading-relaxed ${cfg.descricaoCor}`}>
-                    {item.descricao}
-                  </p>
-                </div>
-              </div>
-
-              <div className="pl-2">
-                {item.isScroll ? (
-                  <a
-                    href={item.linkHref}
-                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${cfg.botaoClasse}`}
-                  >
-                    <span>{item.labelBotao}</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </a>
-                ) : (
-                  <Link
-                    href={item.linkHref}
-                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${cfg.botaoClasse}`}
-                  >
-                    <span>{item.labelBotao}</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                )}
-              </div>
-            </div>
+            <li key={a.tipo}>
+              <Link
+                id={`alerta-${a.tipo}`}
+                href={a.href}
+                title={`${estilo.rotulo} · ${a.descricao} (${a.referencia})`}
+                className="group inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-xs transition-colors hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${estilo.ponto}`} />
+                <span className="font-semibold tabular-nums text-slate-900">{a.quantidade}</span>
+                <span>{rotuloSemNumero(a)}</span>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500" />
+              </Link>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </section>
   );
 }

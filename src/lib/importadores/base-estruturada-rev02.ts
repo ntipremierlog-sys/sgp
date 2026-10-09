@@ -15,8 +15,6 @@
  */
 
 import * as XLSX from "xlsx";
-import path from "path";
-import fs from "fs";
 import {
   TipoPosto,
   PostoEstrutural,
@@ -33,6 +31,8 @@ import {
   PENDENTES_RM_REV02,
   VALIDACOES_REV02,
   REGISTRO_CARGA_REV02,
+  POSTOS_REV04,
+  POSICOES_REV04,
   FERISTAS_REV04,
   ESCALAS_REV04,
   PENDENCIAS_ESCALA_REV04,
@@ -43,6 +43,8 @@ import {
   LinhaRejeitadaImportacao,
   ValidacaoAutomaticaItem,
   RelatorioImportacaoREV04,
+  Imovel,
+  IMOVEIS_REV04,
 } from "@/lib/dados/estrutura-postos";
 import funcionariosReaisJson from "@/lib/dados/funcionarios-reais.json";
 
@@ -52,6 +54,8 @@ export interface ResultadoImportacaoREV04 {
   dataImportacao: string;
   usuario: string;
   versao: string;
+  totalImoveis: number;
+  imoveis: Imovel[];
   totalPostos: number;
   totalPosicoes: number;
   totalFeristas: number;
@@ -116,16 +120,18 @@ export function obterDadosBaseREV04(): ResultadoImportacaoREV04 {
     dataImportacao: RELATORIO_IMPORTACAO_REV04?.dataGeracao || new Date().toISOString(),
     usuario: REGISTRO_CARGA_REV02.usuario,
     versao: "REV04",
-    totalPostos: POSTOS_REV02.length,
-    totalPosicoes: POSICOES_REV02.length,
+    totalImoveis: IMOVEIS_REV04.length,
+    imoveis: IMOVEIS_REV04,
+    totalPostos: POSTOS_REV04.length,
+    totalPosicoes: POSICOES_REV04.length,
     totalFeristas: FERISTAS_REV04.length,
     totalEscalas: ESCALAS_REV04.length,
     totalPendenciasEscala: PENDENCIAS_ESCALA_REV04.length,
     totalPendentesRM: PENDENTES_RM_REV02.length,
     totalValidacoes: VALIDACOES_REV02.length,
     totalLinhasRejeitadasPosicoes: RELATORIO_IMPORTACAO_REV04?.totais?.totalLinhasRejeitadasPosicoes || 8,
-    postos: POSTOS_REV02,
-    posicoes: POSICOES_REV02,
+    postos: POSTOS_REV04,
+    posicoes: POSICOES_REV04,
     feristas: FERISTAS_REV04,
     escalas: ESCALAS_REV04,
     pendenciasEscala: PENDENCIAS_ESCALA_REV04,
@@ -189,21 +195,29 @@ export function obterDadosBaseREV02(): ResultadoImportacaoREV02 {
  * validações automáticas, idempotência por upsert e relatório detalhado.
  */
 export function processarPlanilhaREV04(
-  fonte?: Buffer | string,
+  fonte?: ArrayBuffer | Uint8Array | Buffer | string,
   nomeArquivo: string = "Base_Estruturada_SGP_Petrobras_REV04.xlsx",
   usuario: string = "Administrador Premier"
 ): ResultadoImportacaoREV04 {
   let wb: XLSX.WorkBook;
-  if (Buffer.isBuffer(fonte)) {
-    wb = XLSX.read(fonte, { type: "buffer" });
-  } else if (typeof fonte === "string") {
-    wb = XLSX.readFile(fonte);
-  } else {
-    const defaultPath = path.join(process.cwd(), "Base_Estruturada_SGP_Petrobras_REV04.xlsx");
-    if (fs.existsSync(defaultPath)) {
-      wb = XLSX.readFile(defaultPath);
+  if (fonte) {
+    if (typeof fonte === "string") {
+      wb = XLSX.readFile(fonte);
     } else {
-      throw new Error(`Planilha oficial não encontrada no caminho: ${defaultPath}`);
+      wb = XLSX.read(fonte, { type: typeof Buffer !== "undefined" && Buffer.isBuffer(fonte) ? "buffer" : "array" });
+    }
+  } else {
+    try {
+      const fsMod = eval("require('fs')");
+      const pathMod = eval("require('path')");
+      const defaultPath = pathMod.join(process.cwd(), "Base_Estruturada_SGP_Petrobras_REV04.xlsx");
+      if (fsMod.existsSync(defaultPath)) {
+        wb = XLSX.readFile(defaultPath);
+      } else {
+        throw new Error(`Planilha oficial não encontrada no caminho: ${defaultPath}`);
+      }
+    } catch (err: any) {
+      throw new Error(err.message || "Planilha oficial não encontrada");
     }
   }
 
@@ -530,12 +544,133 @@ export function processarPlanilhaREV04(
       mensagem: "Colaborador da MC não localizado no cadastro de funcionários RM",
     }));
 
+  // ===========================================================================
+  // 7. Extração Oficial dos Imóveis (Etapa 1 - Regra Contratual)
+  // - Nome = campo Unidade
+  // - Cidade/UF extraídos de Unidade_RM (ex.: "BOAVENTURA (Itaboraí - RJ)" -> Itaboraí / RJ)
+  // - Status inicial: ATIVO se tiver >= 1 posição ocupada; EM_MOBILIZACAO se tiver postos e nenhuma posição ocupada
+  // - Preposto por imóvel: da aba "Relatório Mensal de atividades" da MC ou mapa consolidado
+  // ===========================================================================
+  const prepostosMap = new Map<string, string>();
+  const sheetAtiv = wb.Sheets["Relatório Mensal de atividades"];
+  if (sheetAtiv) {
+    const ativRows = XLSX.utils.sheet_to_json<any>(sheetAtiv);
+    ativRows.forEach((r) => {
+      const local = String(r["LOCAL DE ATUAÇÃO"] || "").trim();
+      const prep = String(r["PREPOSTO"] || "").trim();
+      if (local && prep) {
+        prepostosMap.set(
+          local.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase(),
+          prep
+        );
+      }
+    });
+  }
+  // Mapeamentos consolidados de prepostos (da MC de Setembro/REV04)
+  prepostosMap.set("EDIBRA", "Kleydson Alves da Silva");
+  prepostosMap.set("EDMAN", "Kleydson Alves da Silva");
+  IMOVEIS_REV04.forEach((im) => {
+    if (im.preposto) {
+      const norm = im.nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+      if (!prepostosMap.has(norm)) prepostosMap.set(norm, im.preposto);
+    }
+  });
+
+  const unidadeInfoMap = new Map<string, { unidadeRm: string; gerencia: string }>();
+  mapaCadastroSheet.forEach((r) => {
+    const u = String(r.Unidade || "").trim();
+    const urm = String(r.Unidade_RM || "").trim();
+    const ger = String(r.Gerencia || "").trim();
+    if (!u) return;
+
+    if (!unidadeInfoMap.has(u)) {
+      unidadeInfoMap.set(u, { unidadeRm: urm, gerencia: ger });
+    } else {
+      const existing = unidadeInfoMap.get(u)!;
+      if (!existing.unidadeRm && urm) existing.unidadeRm = urm;
+      if (u === "EDIHB" && urm.includes("EDIHB")) existing.unidadeRm = urm;
+      if (u === "IMBOASSICA" && urm.includes("IMBOASSICA")) existing.unidadeRm = urm;
+      if (u === "RNEST" && urm.includes("RNEST")) existing.unidadeRm = urm;
+      if (u === "RPBC" && urm.includes("RPBC")) existing.unidadeRm = urm;
+    }
+  });
+
+  function extrairCidadeUfLocal(unidadeRm: string, nomeUnidade: string) {
+    if (!unidadeRm) return { cidade: nomeUnidade, uf: "" };
+    const match = unidadeRm.match(/\((.*?)\s*-\s*([A-Za-z]{2})\)/);
+    if (match) {
+      return {
+        cidade: match[1].trim(),
+        uf: match[2].trim().toUpperCase(),
+      };
+    }
+    return { cidade: nomeUnidade, uf: "" };
+  }
+
+  const postosPorUnidade = new Map<string, number>();
+  postos.forEach((p) => {
+    const u = p.unidade;
+    if (u) postosPorUnidade.set(u, (postosPorUnidade.get(u) || 0) + 1);
+  });
+
+  const posicoesPorUnidade = new Map<string, number>();
+  const ocupadasPorUnidade = new Map<string, number>();
+  posicoes.forEach((pos) => {
+    const pPosto = postosMap.get(pos.postoIdSGP);
+    const u = pPosto?.unidade || (pos as any).unidade;
+    if (!u) return;
+    posicoesPorUnidade.set(u, (posicoesPorUnidade.get(u) || 0) + 1);
+
+    const titular = String(pos.titularReferencia || "").trim();
+    const semTitular = String(pos.posicaoSemTitularMC || "").toUpperCase() === "SIM";
+    const ehOcupada = !semTitular && titular && !titular.toUpperCase().includes("SEM TITULAR");
+    if (ehOcupada) {
+      ocupadasPorUnidade.set(u, (ocupadasPorUnidade.get(u) || 0) + 1);
+    }
+  });
+
+  const unidadesOrdenadas = Array.from(unidadeInfoMap.keys()).sort();
+  const imoveis: Imovel[] = unidadesOrdenadas.map((nome, idx) => {
+    const info = unidadeInfoMap.get(nome) || { unidadeRm: "", gerencia: "" };
+    const { cidade, uf } = extrairCidadeUfLocal(info.unidadeRm, nome);
+    const nomeNorm = nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    const preposto = prepostosMap.get(nomeNorm) || null;
+
+    const pCount = postosPorUnidade.get(nome) || 0;
+    const posCount = posicoesPorUnidade.get(nome) || 0;
+    const posOcup = ocupadasPorUnidade.get(nome) || 0;
+    const vCount = Math.max(0, posCount - posOcup);
+
+    let statusImovel: "ATIVO" | "EM_MOBILIZACAO" | "INATIVO" = "INATIVO";
+    if (posOcup > 0) {
+      statusImovel = "ATIVO";
+    } else if (pCount > 0 && posOcup === 0) {
+      statusImovel = "EM_MOBILIZACAO";
+    }
+
+    return {
+      id: `IMO-${String(idx + 1).padStart(3, "0")}`,
+      nome,
+      cidade,
+      uf,
+      gerencia: info.gerencia || "",
+      preposto,
+      status_imovel: statusImovel,
+      postosCount: pCount,
+      posicoesCount: posCount,
+      posicoesOcupadas: posOcup,
+      vagasCount: vCount,
+    };
+  });
+
   return {
     sucesso: true,
     arquivo: nomeArquivo,
     dataImportacao: new Date().toISOString(),
     usuario,
     versao: "REV04",
+    totalImoveis: imoveis.length,
+    imoveis,
     totalPostos: postos.length,
     totalPosicoes: posicoes.length,
     totalFeristas: feristas.length,

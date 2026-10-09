@@ -335,20 +335,20 @@ describe("Etapa Final Pré-Entrega aos Fiscais da Petrobras", () => {
       expect(resAtiva.valida).toBe(true);
       expect(resAtiva.expiradaPorInatividade).toBe(false);
 
-      // Token com timestamp antigo (mais de 30 minutos atrás)
-      const tokenAntigoPayload = {
-        userId: usuarioAdmin.id,
-        email: usuarioAdmin.email,
-        perfil: usuarioAdmin.perfil,
-        status: usuarioAdmin.status,
-        basesVinculadas: usuarioAdmin.basesVinculadas,
+      // Token assinado com timestamp antigo (mais de 30 minutos atrás)
+      const tokenAntigo = codificarTokenSessao(usuarioAdmin, {
         timestamp: Date.now() - (TIMEOUT_INATIVIDADE_MS + 60000), // 31 min atrás
-      };
-      const tokenAntigo = Buffer.from(JSON.stringify(tokenAntigoPayload)).toString("base64");
+      });
 
       const resInativa = verificarSessaoAtiva(tokenAntigo);
       expect(resInativa.valida).toBe(false);
       expect(resInativa.expiradaPorInatividade).toBe(true);
+
+      // Token sem assinatura (forjado editando o cookie) é rejeitado
+      const tokenForjado = Buffer.from(
+        JSON.stringify({ userId: usuarioAdmin.id, email: usuarioAdmin.email, perfil: "PREMIER_ADMIN", timestamp: Date.now() })
+      ).toString("base64");
+      expect(verificarSessaoAtiva(tokenForjado).valida).toBe(false);
     });
   });
 

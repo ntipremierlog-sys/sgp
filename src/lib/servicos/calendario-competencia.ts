@@ -28,6 +28,7 @@ import {
   VAGAS_MC_REAIS,
   ALOCACOES_MC_REAIS,
 } from "@/lib/dados/estado-operacional";
+import { calcularPeriodoCompetencia } from "@/lib/servicos/periodo-competencia";
 
 export type StatusDiaCalendario =
   | "Não se aplica"
@@ -131,32 +132,8 @@ export function obterPeriodoCompetencia(competencia: string): {
   textoFormatado: string;
   datas: string[];
 } {
-  const [anoStr, mesStr] = competencia.split("-");
-  const ano = parseInt(anoStr, 10) || 2026;
-  const mes = parseInt(mesStr, 10) || 9;
-
-  let anoAnt = ano;
-  let mesAnt = mes - 1;
-  if (mesAnt === 0) {
-    mesAnt = 12;
-    anoAnt = ano - 1;
-  }
-
-  const dataInicio = `${anoAnt}-${String(mesAnt).padStart(2, "0")}-10`;
-  const dataFim = `${ano}-${String(mes).padStart(2, "0")}-09`;
-  const textoFormatado = `10/${String(mesAnt).padStart(2, "0")}/${anoAnt} a 09/${String(mes).padStart(2, "0")}/${ano}`;
-
-  const datas: string[] = [];
-  const dtAtual = new Date(anoAnt, mesAnt - 1, 10);
-  const dtFim = new Date(ano, mes - 1, 9);
-  while (dtAtual <= dtFim) {
-    const y = dtAtual.getFullYear();
-    const m = String(dtAtual.getMonth() + 1).padStart(2, "0");
-    const d = String(dtAtual.getDate()).padStart(2, "0");
-    datas.push(`${y}-${m}-${d}`);
-    dtAtual.setDate(dtAtual.getDate() + 1);
-  }
-
+  // Fonte única da regra: src/lib/servicos/periodo-competencia.ts
+  const { dataInicio, dataFim, textoFormatado, datas } = calcularPeriodoCompetencia(competencia);
   return { dataInicio, dataFim, textoFormatado, datas };
 }
 

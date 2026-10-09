@@ -26,7 +26,9 @@ import {
   ALOCACOES_MC_REAIS,
   FERISTAS_REV04,
   FERISTAS_VINCULADOS_POSTOS,
+  obterItemPpuDoPosto,
 } from "@/lib/dados/estado-operacional";
+import { obterItemPPU } from "@/lib/dados/painel-calculo";
 import { BASES_SGP_SISTEMA } from "@/lib/dados/secoes-horarios";
 import { obterFeristasSugeridosParaPosicao } from "@/lib/servicos/sugestao-cobertura";
 import {
@@ -98,6 +100,9 @@ export interface ItemCoberturaRelatorio {
   unidadeNome: string;
   postoCodigo: string;
   postoFuncao: string;
+  /** Item da PPU da cobertura (base de medição Petrobras) */
+  itemPpu: string;
+  itemPpuDescricao: string;
   posicaoId: string;
   titularMatricula: string;
   titularNome: string;
@@ -468,12 +473,16 @@ export function gerarRelatorioCoberturas(filtros: {
     else if (j.includes("folga") || j.includes("banco")) motivoLimpo = "Folga compensatória";
     else if (j.includes("falta")) motivoLimpo = "Falta injustificada";
 
+    const itemPpuCob = String(cob.itemPpu || "").trim() || obterItemPpuDoPosto(cob.idPosto || cob.postoCodigo) || "";
+
     itens.push({
       id: cob.id,
       unidadeId: posto?.unidadeId || "CONTRATO",
       unidadeNome: posto?.unidadeNome || posto?.baseOperacional || "Contrato Geral",
       postoCodigo: cob.postoCodigo,
       postoFuncao: posto?.funcao || cob.funcaoPosto || "Posto Operacional",
+      itemPpu: itemPpuCob || "—",
+      itemPpuDescricao: itemPpuCob ? obterItemPPU(itemPpuCob)?.descricao || "" : "Item não informado",
       posicaoId: cob.vagaId || "1",
       titularMatricula: cob.titularMatricula || "—",
       titularNome: cob.titularNome || "Titular do Posto",
@@ -927,6 +936,8 @@ export function exportarRelatorioParaXlsx(
       [
         "UNIDADE",
         "POSTO",
+        "ITEM PPU",
+        "DESCRIÇÃO ITEM PPU",
         "FUNÇÃO",
         "POSIÇÃO",
         "TITULAR AUSENTE",
@@ -943,6 +954,8 @@ export function exportarRelatorioParaXlsx(
       linhas.push([
         it.unidadeNome,
         it.postoCodigo,
+        it.itemPpu,
+        it.itemPpuDescricao,
         it.postoFuncao,
         it.posicaoId,
         `${it.titularMatricula} - ${it.titularNome}`,
@@ -959,6 +972,8 @@ export function exportarRelatorioParaXlsx(
     ws["!cols"] = [
       { wch: 25 },
       { wch: 18 },
+      { wch: 10 },
+      { wch: 40 },
       { wch: 28 },
       { wch: 16 },
       { wch: 28 },

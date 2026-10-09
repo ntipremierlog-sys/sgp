@@ -34,6 +34,7 @@ import {
 import { MarcacaoPontoOriginal } from "@/lib/dados/ponto-tipos";
 import { validarInterjornadaClt } from "@/lib/servicos/validacao-interjornada";
 import { obterOcupacaoConsolidada } from "@/lib/servicos/adaptador-painel";
+import { calcularPeriodoCompetencia } from "@/lib/servicos/periodo-competencia";
 
 function obterVagasDoPosto(posto: PostoOperacional, mapVagas: Map<string, VagaPosto[]>): VagaPosto[] {
   const idsParaTestar = [
@@ -276,20 +277,16 @@ export default function PostosPage() {
 
   // Período do Ciclo Contratual (10 do mês anterior ao dia 09 do mês de referência)
   const periodoCiclo = useMemo(() => {
-    const datas: string[] = [];
-    const dt = new Date(2026, 7, 10);
-    const dtFim = new Date(2026, 8, 9);
-    while (dt <= dtFim) {
-      datas.push(dt.toISOString().slice(0, 10));
-      dt.setDate(dt.getDate() + 1);
-    }
+    // Fonte única da regra: src/lib/servicos/periodo-competencia.ts
+    const p = calcularPeriodoCompetencia("2026-09");
     return {
       ano: 2026,
       mesReferencia: 9,
-      dataInicio: "2026-08-10",
-      dataFim: "2026-09-09",
-      totalDias: datas.length,
-      datas,
+      competencia: p.competencia,
+      dataInicio: p.dataInicio,
+      dataFim: p.dataFim,
+      totalDias: p.datas.length,
+      datas: p.datas,
     };
   }, []);
 

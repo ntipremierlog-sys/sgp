@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import {
   carregarEstado,
+  obterItemPpuDoPosto,
   adicionarCobertura,
   atualizarCobertura,
   cancelarCobertura,
@@ -62,6 +63,7 @@ import { ItemAlocadoSifac } from "@/lib/dados/conciliacao-sifac";
 import { VAGAS_MC_REAIS, ALOCACOES_MC_REAIS, FERISTAS_REV04 } from "@/lib/dados/estrutura-postos";
 import { validarInterjornadaClt } from "@/lib/servicos/validacao-interjornada";
 import { obterPeriodoCompetencia } from "@/lib/servicos/calendario-competencia";
+import { CampoItemPpu } from "@/components/cobertura/campo-item-ppu";
 
 // =============================================================================
 // TIPOS E UTILITÁRIOS
@@ -517,6 +519,8 @@ export default function CoberturasPage() {
   const [formDataFim, setFormDataFim] = useState(() => hojeISO());
   const [formTipo, setFormTipo] = useState<CoberturaOperacional["tipoCobertura"]>("SUBSTITUICAO_INTERNA");
   const [formJustificativa, setFormJustificativa] = useState("");
+  // Item da PPU da cobertura (base de medição Petrobras)
+  const [formItemPpu, setFormItemPpu] = useState("");
   const [efetivarTrocaPermanente, setEfetivarTrocaPermanente] = useState(false);
   const [cienteInterjornada, setCienciaInterjornada] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState("");
@@ -554,6 +558,7 @@ export default function CoberturasPage() {
     setFormDataFim(dataFimPadrao || dataPadrao || hojeISO());
     setFormTipo("SUBSTITUICAO_INTERNA");
     setFormJustificativa(justificativaPadrao ? `Cobertura de ausência: ${justificativaPadrao}` : "");
+    setFormItemPpu(obterItemPpuDoPosto(postoPadrao) || "");
     setEfetivarTrocaPermanente(false);
     setCienciaInterjornada(false);
     setModalAberto(true);
@@ -568,6 +573,7 @@ export default function CoberturasPage() {
     setFormDataFim(cob.dataFim);
     setFormTipo(cob.tipoCobertura);
     setFormJustificativa(cob.justificativa || "");
+    setFormItemPpu(cob.itemPpu || obterItemPpuDoPosto(cob.idPosto || cob.postoCodigo) || "");
     setEfetivarTrocaPermanente(false);
     setCienciaInterjornada(cob.alertaInterjornada || false);
     setCoberturaPainel(null);
@@ -1414,6 +1420,11 @@ export default function CoberturasPage() {
       return;
     }
 
+    if (!formItemPpu) {
+      alert("Informe o item da PPU da cobertura. É a base de cálculo da medição pela Petrobras.");
+      return;
+    }
+
     if (formDataFim < formDataInicio) {
       alert("A data de término não pode ser anterior à data de início.");
       return;
@@ -1506,6 +1517,7 @@ export default function CoberturasPage() {
           idPosto: postoObj.idPosto || postoObj.codigoPosto,
           vagaId: posicaoSel?.vaga.id,
           funcaoPosto: postoObj.funcao,
+          itemPpu: formItemPpu,
           titularMatricula: titularMatriculaCob,
           titularNome: titularNomeCob,
           substitutoMatricula: substitutoObj.matricula,
@@ -1527,6 +1539,7 @@ export default function CoberturasPage() {
           idPosto: postoObj.idPosto || postoObj.codigoPosto,
           vagaId: posicaoSel?.vaga.id,
           funcaoPosto: postoObj.funcao,
+          itemPpu: formItemPpu,
           titularMatricula: titularMatriculaCob,
           titularNome: titularNomeCob,
           substitutoMatricula: substitutoObj.matricula,
@@ -2498,6 +2511,15 @@ export default function CoberturasPage() {
                           )}
                         </div>
                         <div className="text-[11px] text-slate-500 font-normal leading-tight mt-0.5">
+                          {(() => {
+                            const itemPpuGrupo =
+                              (primeiroItem as any)?.itemPpu || obterItemPpuDoPosto(grupo.postoCodigo);
+                            return itemPpuGrupo ? (
+                              <span className="font-mono text-slate-700 mr-1.5" title="Item da PPU (base de medição)">
+                                PPU {itemPpuGrupo}
+                              </span>
+                            ) : null;
+                          })()}
                           {formatarTexto(grupo.funcaoPosto)}
                         </div>
                       </td>
@@ -3084,7 +3106,10 @@ export default function CoberturasPage() {
                   <select
                     required
                     value={formPostoCodigo}
-                    onChange={(e) => setFormPostoCodigo(e.target.value)}
+                    onChange={(e) => {
+                      setFormPostoCodigo(e.target.value);
+                      setFormItemPpu(obterItemPpuDoPosto(e.target.value) || "");
+                    }}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-800 outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-500 transition-all text-xs"
                   >
                     <option value="">Selecione o posto...</option>
@@ -3116,6 +3141,15 @@ export default function CoberturasPage() {
                     ))}
                   </select>
                 </div>
+              )}
+
+              {formPostoCodigo && (
+                <CampoItemPpu
+                  id="cobertura-item-ppu"
+                  valor={formItemPpu}
+                  onChange={setFormItemPpu}
+                  itemDoPosto={obterItemPpuDoPosto(formPostoCodigo)}
+                />
               )}
 
               <div>

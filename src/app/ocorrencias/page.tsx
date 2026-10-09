@@ -36,6 +36,7 @@ import {
 import { useSessaoUsuario } from "@/lib/auth/use-sessao-usuario";
 import { podeVerDadosPessoaisCompletos } from "@/lib/dados/rm-tipos";
 import { obterPeriodoCompetencia } from "@/lib/servicos/calendario-competencia";
+import { competenciaDaData } from "@/lib/servicos/periodo-competencia";
 
 const NOMES_MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -48,17 +49,8 @@ function hojeISO(): string {
 /** Retorna a competência de apuração YYYY-MM (dia 10 do mês anterior a dia 09 do mês de referência). */
 function obterCompetenciaDaData(dataIso?: string): string {
   if (!dataIso || !/^\d{4}-\d{2}-\d{2}/.test(dataIso)) return "";
-  const [anoStr, mesStr, diaStr] = dataIso.split("-");
-  const ano = parseInt(anoStr, 10);
-  const mes = parseInt(mesStr, 10);
-  const dia = parseInt(diaStr, 10);
-  if (dia >= 10) {
-    const proximoMes = mes === 12 ? 1 : mes + 1;
-    const proximoAno = mes === 12 ? ano + 1 : ano;
-    return `${proximoAno}-${String(proximoMes).padStart(2, "0")}`;
-  } else {
-    return `${ano}-${String(mes).padStart(2, "0")}`;
-  }
+  // Fonte única da regra: src/lib/servicos/periodo-competencia.ts
+  return competenciaDaData(dataIso.slice(0, 10));
 }
 
 const TIPOS_DISPONIVEIS: {
@@ -309,6 +301,11 @@ export default function OcorrenciasPage() {
   const [formCid, setFormCid] = useState("");
   const [formMedico, setFormMedico] = useState("");
   const [formCrm, setFormCrm] = useState("");
+  // Gestão contratual (ET 9.4.1 / 9.4.2)
+  const [formCategoria, setFormCategoria] = useState("");
+  const [formDataConsulta, setFormDataConsulta] = useState("");
+  const [formSubstAprovada, setFormSubstAprovada] = useState(false);
+  const [formSubstitutoChapa, setFormSubstitutoChapa] = useState("");
   const [mensagemSucesso, setMensagemSucesso] = useState("");
 
   const carregarDados = () => {
@@ -323,6 +320,18 @@ export default function OcorrenciasPage() {
     window.addEventListener("sgp-dados-atualizados", handleAtualizacao);
     return () => window.removeEventListener("sgp-dados-atualizados", handleAtualizacao);
   }, []);
+
+  // Abertura direta pelo link dos alertas do Painel: /ocorrencias?editar=<id>
+  const [edicaoViaLinkFeita, setEdicaoViaLinkFeita] = useState(false);
+  useEffect(() => {
+    if (edicaoViaLinkFeita || ocorrencias.length === 0 || typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get("editar");
+    if (!id) return;
+    const alvo = ocorrencias.find((o) => o.id === id);
+    setEdicaoViaLinkFeita(true);
+    if (alvo) abrirEdicaoOcorrencia(alvo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ocorrencias, edicaoViaLinkFeita]);
 
   // LGPD: CID, médico e CRM só para perfis Premier. Qualquer outro perfil — inclusive
   // sessão ainda não carregada ou com falha — recebe a visão restrita (fail-closed).
@@ -447,6 +456,10 @@ export default function OcorrenciasPage() {
     setFormCid("");
     setFormMedico("");
     setFormCrm("");
+    setFormCategoria("");
+    setFormDataConsulta("");
+    setFormSubstAprovada(false);
+    setFormSubstitutoChapa("");
   };
 
   const abrirEdicaoOcorrencia = (oc: OcorrenciaOperacional) => {
@@ -460,6 +473,10 @@ export default function OcorrenciasPage() {
     setFormCid(oc.dadoSensivel?.cid || "");
     setFormMedico(oc.dadoSensivel?.profissionalEmissor || "");
     setFormCrm(oc.dadoSensivel?.crm || "");
+    setFormCategoria(oc.tipoOcorrencia === "FERIAS" ? "" : oc.categoriaAusencia || "");
+    setFormDataConsulta(oc.data_consulta_petrobras || "");
+    setFormSubstAprovada(oc.substituicao_aprovada === true);
+    setFormSubstitutoChapa(oc.substituto_chapa || "");
     setOcorrenciaSelecionada(null);
     setModalAberto(true);
   };
@@ -524,6 +541,11 @@ export default function OcorrenciasPage() {
       dataFim: formDataFim,
       diasAfetados: diasCalculados,
       observacaoPublica: obsPadrao,
+      categoriaAusencia:
+        formTipo === "FERIAS" ? "Férias" : formCategoria || ocorrenciaEmEdicao?.categoriaAusencia || undefined,
+      data_consulta_petrobras: formTipo === "FERIAS" ? formDataConsulta || null : null,
+      substituicao_aprovada: formSubstAprovada,
+      substituto_chapa: formSubstitutoChapa.trim() || null,
       dadoSensivel:
         formTipo === "ATESTADO_MEDICO"
           ? {
@@ -1477,6 +1499,97 @@ export default function OcorrenciasPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Campo 3b: Gestão contratual da ausência (ET 9.4.1 / 9.4.2) */}
+              {formTipo !== "FOLGA_ESCALA" && formTipo !== "TREINAMENTO" && (
+                <div className="p-3.5 bg-amber-50/50 rounded-lg border border-amber-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-950 text-xs">Gestão contratual</span>
+                    <span className="text-[10px] font-mono text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">
+                      {formTipo === "FERIAS" ? "ET 9.4.1" : "ET 9.4.2"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {formTipo === "FERIAS" ? (
+                      <div>
+                        <label htmlFor="form-data-consulta" className="font-semibold text-slate-700 block mb-1 text-[11px]">
+                          Data da consulta à Petrobras
+                        </label>
+                        <input
+                          id="form-data-consulta"
+                          type="date"
+                          value={formDataConsulta}
+                          onChange={(e) => setFormDataConsulta(e.target.value)}
+                          className="w-full border border-slate-300 rounded px-2 py-1.5 bg-white text-slate-800 font-mono text-xs outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label htmlFor="form-categoria" className="font-semibold text-slate-700 block mb-1 text-[11px]">
+                          Categoria
+                        </label>
+                        <select
+                          id="form-categoria"
+                          value={formCategoria}
+                          onChange={(e) => setFormCategoria(e.target.value)}
+                          className="w-full border border-slate-300 rounded px-2 py-1.5 bg-white text-slate-800 text-xs outline-none focus:border-amber-500"
+                        >
+                          <option value="">Ausência pontual</option>
+                          <option value="Afastamento">Afastamento</option>
+                          <option value="Licença">Licença</option>
+                          <option value="Desligamento">Desligamento</option>
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <span className="font-semibold text-slate-700 block mb-1 text-[11px]">Substituição aprovada</span>
+                      <div className="flex gap-1.5" role="radiogroup" aria-label="Substituição aprovada">
+                        {[
+                          { v: true, r: "Sim" },
+                          { v: false, r: "Não" },
+                        ].map((op) => (
+                          <button
+                            key={op.r}
+                            type="button"
+                            role="radio"
+                            aria-checked={formSubstAprovada === op.v}
+                            onClick={() => setFormSubstAprovada(op.v)}
+                            className={`flex-1 px-2 py-1.5 rounded border text-xs font-semibold transition-colors cursor-pointer ${
+                              formSubstAprovada === op.v
+                                ? "bg-slate-900 text-white border-slate-900"
+                                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                            }`}
+                          >
+                            {op.r}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="form-substituto-chapa" className="font-semibold text-slate-700 block mb-1 text-[11px]">
+                        Chapa do substituto
+                      </label>
+                      <input
+                        id="form-substituto-chapa"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Ex: 045858"
+                        value={formSubstitutoChapa}
+                        onChange={(e) => setFormSubstitutoChapa(e.target.value)}
+                        className="w-full border border-slate-300 rounded px-2 py-1.5 bg-white text-slate-800 font-mono text-xs outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-amber-900/80 leading-snug">
+                    {formTipo === "FERIAS"
+                      ? "Férias exigem consulta à fiscalização com 60 dias de antecedência. Sem substituição aprovada, há desconto na medição."
+                      : "Afastamento, licença ou desligamento exige substituto em até 7 dias úteis."}
+                  </p>
+                </div>
+              )}
 
               {/* Campo 4: Justificativa / Rótulo Público Auditável */}
               <div className="space-y-1.5">

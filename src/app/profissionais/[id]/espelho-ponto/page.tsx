@@ -312,6 +312,9 @@ export default function EspelhoPontoColaboradorPage({ params }: PageProps) {
                       {item.indicadores.entradaAposHorario && (
                         <span className="ml-1 text-[11px] text-amber-600 font-medium">(atraso &gt; 10m)</span>
                       )}
+                      {item.indicadores.saidaAntesHorario && (
+                        <span className="ml-1 text-[11px] text-orange-600 font-medium">(saída antecipada &gt; 10m)</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 font-sans text-muted-foreground text-[11px]">
                       {item.marcacoesDoDia.length > 0 ? (

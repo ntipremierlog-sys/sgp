@@ -26,6 +26,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { BadgeStatus, StatusOcupacao } from "@/components/ui/badge-status";
+import { CampoItemPpu } from "@/components/cobertura/campo-item-ppu";
 import { BASES_SGP_SISTEMA } from "@/lib/dados/secoes-horarios";
 import {
   carregarEstado,
@@ -47,9 +48,11 @@ import {
   obterAjusteManualDia,
   validarVinculoFeristaPosto,
   registrarCoberturaComValidacao,
+  obterItemPpuDoPosto,
   isCoberturaAtivaParaPosicao,
   excluirCobertura,
   obterProgressoProgramacaoEscalas,
+  registrarLogAuditoria,
   ApuracaoPostoCiclo,
   VAGAS_MC_REAIS,
   ALOCACOES_MC_REAIS,
@@ -66,6 +69,8 @@ import {
   MarcacaoPontoOriginal,
   ProfissionalOperacional,
 } from "@/lib/dados/estado-operacional";
+import { calcularPeriodoCompetencia } from "@/lib/servicos/periodo-competencia";
+import { obterItemPPU } from "@/lib/dados/painel-calculo";
 import {
   PENDENCIAS_ESCALA_REV04,
   FERISTAS_REV04,
@@ -86,6 +91,22 @@ import {
 } from "@/lib/dados/rm-tipos";
 import { useSessaoUsuario } from "@/lib/auth/use-sessao-usuario";
 import { limparDadosOperacionaisOcupacao } from "@/lib/dados/limpeza-dados-demo";
+import { analisarJornadaDia, montarEspelhoPeriodo } from "@/lib/servicos/analise-jornada";
+import type { CicloEscalaColaborador } from "@/lib/dados/ponto-tipos";
+import {
+  RegistrosPontoDia,
+  ModalEspelhoPeriodo,
+  PessoaRegistroPonto,
+} from "@/components/ponto/registros-ponto-dia";
+
+/** Exigibilidade de jornada derivada do status apurado da posição no dia. */
+function exigivelDoStatusPosicao(status: string): boolean | undefined {
+  if (status === "PRESENTE" || status === "COBERTO" || status === "DESCOBERTO" || status === "PENDENTE") return true;
+  if (status === "FOLGA") return false;
+  return undefined; // decide pela escala do RM
+}
+
+const chapa6 = (c?: string | null) => String(c || "").replace(/\D/g, "").padStart(6, "0");
 
 interface DiaCiclo {
   dataStr: string; // YYYY-MM-DD
@@ -193,22 +214,22 @@ function getEstiloCelulaHeatmap(status: string) {
       return {
         sigla: "P",
         label: "Presença do titular",
-        classes: "bg-[#86EFAC] text-emerald-950 hover:bg-[#4ADE80] font-bold",
-        borda: "border border-[#4ADE80]/70",
+        classes: "bg-emerald-50 text-emerald-700/80 hover:bg-emerald-100 font-semibold",
+        borda: "border border-emerald-100",
       };
     case "COBERTO":
       return {
         sigla: "C",
         label: "Cobertura (substituto)",
-        classes: "bg-[#E1EFFE] text-blue-900 hover:bg-[#BFDBFE] font-bold",
-        borda: "border border-[#BFDBFE]/70",
+        classes: "bg-sky-50 text-sky-700 hover:bg-sky-100 font-semibold",
+        borda: "border border-sky-200",
       };
     case "DESCOBERTO":
       return {
         sigla: "D",
         label: "Posição Descoberta (ausência sem cobertura)",
-        classes: "bg-[#B42318] text-white hover:brightness-110 shadow-2xs font-extrabold",
-        borda: "border border-[#991B1B]",
+        classes: "bg-rose-600 text-white hover:bg-rose-700 font-bold",
+        borda: "border border-rose-700",
       };
     case "SEM_DADO":
       return {
@@ -240,8 +261,8 @@ function getEstiloCelulaHeatmap(status: string) {
       return {
         sigla: "F",
         label: "Folga (não programado pela escala)",
-        classes: "bg-white text-slate-500 hover:bg-slate-50 font-bold",
-        borda: "border border-slate-200",
+        classes: "bg-white text-slate-300 hover:bg-slate-50 font-medium",
+        borda: "border border-slate-100",
       };
   }
 }
@@ -256,7 +277,7 @@ function getCelulaEstiloPosicao(status: string) {
       return {
         sigla: "P",
         label: "Presença do titular",
-        classes: "bg-[#86EFAC] text-emerald-950 border border-[#4ADE80] hover:bg-[#4ADE80] font-bold",
+        classes: "bg-emerald-50 text-emerald-700/80 border border-emerald-100 hover:bg-emerald-100 font-semibold",
       };
     case "COBERTO":
       return {
@@ -268,7 +289,7 @@ function getCelulaEstiloPosicao(status: string) {
       return {
         sigla: "D",
         label: "Descoberto",
-        classes: "bg-[#B42318] text-white border border-[#991B1B] hover:brightness-110 font-bold",
+        classes: "bg-rose-600 text-white border border-rose-700 hover:bg-rose-700 font-bold",
       };
     case "SEM_DADO":
       return {
@@ -464,7 +485,7 @@ export default function MapaOcupacaoPage() {
   };
 
   // Visões: Grade de Ocupação, Árvore e Painel de Pendências (Premier)
-  const [abaVisao, setAbaVisao] = useState<"GRADE" | "ARVORE" | "PENDENCIAS">("GRADE");
+  const [abaVisao, setAbaVisao] = useState<"GRADE" | "PPU" | "PENDENCIAS">("GRADE");
 
   // Filtros
   const [competencia, setCompetencia] = useState<string>("2026-09");
@@ -475,6 +496,7 @@ export default function MapaOcupacaoPage() {
   // Filtros RM / Cadastros Importados
   const [filtroFuncao, setFiltroFuncao] = useState<string>("TODAS");
   const [filtroSituacao, setFiltroSituacao] = useState<string>("TODAS");
+  const [mostrarMaisFiltros, setMostrarMaisFiltros] = useState<boolean>(false);
 
   // Intervalo de Datas do Filtro (Data Início e Data Fim)
   const [dataInicioFiltro, setDataInicioFiltro] = useState<string>("2026-08-10");
@@ -484,6 +506,7 @@ export default function MapaOcupacaoPage() {
   // Controle de expansão da árvore (inicia fechado por padrão conforme Item 4)
   const [basesExpandidas, setBasesExpandidas] = useState<Set<string>>(new Set());
   const [postosExpandidos, setPostosExpandidos] = useState<Set<string>>(new Set());
+  const [itensPpuExpandidos, setItensPpuExpandidos] = useState<Set<string>>(new Set());
 
   // Opção "Mostrar só exceções" (desativado por padrão)
   const [mostrarApenasExcecoes, setMostrarApenasExcecoes] = useState<boolean>(false);
@@ -518,6 +541,15 @@ export default function MapaOcupacaoPage() {
     postoOcupacao?: OcupacaoDiaDetalhada;
   } | null>(null);
 
+  // Registros de ponto do dia (colaborador selecionado) e Espelho completo do período
+  const [pessoaPontoAtiva, setPessoaPontoAtiva] = useState(0);
+  const [espelhoPeriodoAberto, setEspelhoPeriodoAberto] = useState<{
+    chapa: string;
+    nome: string;
+    horarioDescricao?: string;
+    ehTitular: boolean;
+  } | null>(null);
+
   // Estados de Edição da Escala da Posição (Item 5: Grupo, fase e data-base)
   const [editandoEscala, setEditandoEscala] = useState(false);
   const [formGrupo, setFormGrupo] = useState("");
@@ -537,6 +569,16 @@ export default function MapaOcupacaoPage() {
   const [avisoVinculoSubstituto, setAvisoVinculoSubstituto] = useState<{ vinculado: boolean; mensagem: string } | null>(null);
   const [mensagemCoberturaSucesso, setMensagemCoberturaSucesso] = useState("");
   const [erroCobertura, setErroCobertura] = useState("");
+  // Item da PPU da cobertura (base de cálculo da medição Petrobras)
+  const [formItemPpuCob, setFormItemPpuCob] = useState("");
+  useEffect(() => {
+    if (registrandoCobertura && drawerInspecao) {
+      setFormItemPpuCob(
+        obterItemPpuDoPosto(drawerInspecao.posto.idPosto || drawerInspecao.posto.id) || ""
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registrandoCobertura, drawerInspecao?.posto?.id]);
 
   // Filtros da aba de Pendências (Item 6)
   const [filtroPendenciaUnidade, setFiltroPendenciaUnidade] = useState<string>("TODAS");
@@ -617,19 +659,13 @@ export default function MapaOcupacaoPage() {
 
   // Passo 1 & 2: Dias do ciclo padrão (dia 10 ao dia 09 do mês seguinte)
   const diasCiclo: DiaCiclo[] = useMemo(() => {
-    const parts = competencia.split("-").map(Number);
-    const anoComp = parts[0] || 2026;
-    const mesComp = parts[1] || 9;
+    // Fonte única da regra de competência (igual à MC): 10 do mês anterior a 09 do mês da competência
+    const periodo = calcularPeriodoCompetencia(competencia);
+    const [anoIni, mesIni, diaIni] = periodo.dataInicio.split("-").map(Number);
+    const [anoFim, mesFim, diaFim] = periodo.dataFim.split("-").map(Number);
 
-    let anoInicio = anoComp;
-    let mesInicio = mesComp - 1;
-    if (mesInicio < 1) {
-      mesInicio = 12;
-      anoInicio = anoComp - 1;
-    }
-
-    const dtInicio = new Date(anoInicio, mesInicio - 1, 10);
-    const dtFim = new Date(anoComp, mesComp - 1, 9);
+    const dtInicio = new Date(anoIni, mesIni - 1, diaIni);
+    const dtFim = new Date(anoFim, mesFim - 1, diaFim);
     const hojeStr = new Date().toISOString().slice(0, 10);
 
     const lista: DiaCiclo[] = [];
@@ -1003,6 +1039,53 @@ export default function MapaOcupacaoPage() {
     return gruposPorBaseComResumo.map((r) => [r.baseNome, r.postos] as [string, PostoOperacional[]]);
   }, [gruposPorBaseComResumo]);
 
+  // Agrupamento por Item da PPU (base da medição Petrobras): item → postos de todas as unidades
+  const gruposPorItemPpu = useMemo(() => {
+    const map = new Map<string, PostoOperacional[]>();
+    postosFiltrados.forEach((p) => {
+      const codigo = String(p.itemPPU || obterItemPpuDoPosto(p.postoIdSGP || p.idPosto || p.id) || "").trim() || "Sem item";
+      const lista = map.get(codigo) || [];
+      lista.push(p);
+      map.set(codigo, lista);
+    });
+
+    const grupos = [...map.entries()].map(([codigo, postosDoItem]) => {
+      let totalPosicoes = 0;
+      let totalDiasD = 0;
+      let somaExig = 0;
+      let somaAtend = 0;
+      const bases = new Set<string>();
+      postosDoItem.forEach((p) => {
+        bases.add(p.localAtuacao || p.baseOperacional || p.unidadeNome || "");
+        totalPosicoes += obterVagasDoPosto(p, vagasPorPosto).length;
+        const ap = apuracaoCicloPorPosto.get(p.idPosto || p.id);
+        if (ap) {
+          somaExig += ap.totalPosicoesExigiveis;
+          somaAtend += ap.totalPosicoesAtendidas;
+          ap.dias?.forEach((d) => d.vagasDetalhe?.forEach((vd) => { if (vd.status === "DESCOBERTO") totalDiasD++; }));
+        }
+      });
+      const item = obterItemPPU(codigo);
+      const postosOrdenados = [...postosDoItem].sort((a, b) =>
+        String(a.localAtuacao || a.baseOperacional || "").localeCompare(String(b.localAtuacao || b.baseOperacional || "")) ||
+        String(a.postoIdSGP || a.id).localeCompare(String(b.postoIdSGP || b.id), "pt-BR", { numeric: true })
+      );
+      return {
+        codigo,
+        descricao: item?.descricao || (codigo === "Sem item" ? "Postos sem item da PPU informado" : "Item fora do catálogo"),
+        postos: postosOrdenados,
+        totalPostos: postosDoItem.length,
+        totalPosicoes,
+        totalBases: bases.size,
+        totalDiasD,
+        taxaOcupacao: somaExig > 0 ? Math.round((somaAtend / somaExig) * 1000) / 10 : 100,
+      };
+    });
+
+    // Ordem do catálogo (1.1, 1.2, 2.1 ... 11.1); "Sem item" por último
+    return grupos.sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR", { numeric: true }));
+  }, [postosFiltrados, vagasPorPosto, apuracaoCicloPorPosto]);
+
   // 1. CARDS DO TOPO: Reduzir para 4 cards na mesma unidade de medida (Posições)
   const metricasCards = useMemo(() => {
     let totalPosicoes = 0;
@@ -1154,6 +1237,119 @@ export default function MapaOcupacaoPage() {
     );
   }, [drawerInspecao, postos, vagas, alocacoes, ocorrencias, coberturas]);
 
+  // Contexto de jornada prevista da posição (horário RM da posição/titular e data-base da escala)
+  const obterContextoPontoVaga = useCallback(
+    (vaga: VagaPosto, dataStr: string) => {
+      const titular: any = obterAlocacaoVigenteVaga(vaga.id, alocacoes, dataStr);
+      const chapaTitular: string | undefined = titular?.matricula || (vaga as any).chapaTitular || undefined;
+      const profTitular = chapaTitular ? mapaProfissionaisPorChapa.get(String(chapaTitular).trim()) : undefined;
+      const horarioPosicao: string | undefined =
+        (vaga as any).horario_rm || (vaga as any).horarioRm || profTitular?.horarioDescricao || titular?.horarioEscalaRm || undefined;
+      const dataBase: string | undefined =
+        (vaga as any).dataBaseEscala || (vaga as any).data_base_escala || (vaga as any).dataBaseCiclo || undefined;
+      const ciclo: CicloEscalaColaborador | undefined = dataBase
+        ? { colaboradorId: "", chapa: chapaTitular || "", horarioCodigo: "", dataBaseCiclo: dataBase, confirmado: true }
+        : undefined;
+      return { titular, chapaTitular, profTitular, horarioPosicao, ciclo };
+    },
+    [alocacoes, mapaProfissionaisPorChapa]
+  );
+
+  // Pessoas com registros de ponto no dia inspecionado (ocupante/cobertura e titular)
+  const pessoasPontoDrawer = useMemo(() => {
+    if (!drawerInspecao || ehFiscal) return [] as Array<PessoaRegistroPonto & { horarioDescricao?: string; ehTitular: boolean }>;
+    const { vaga, dataStr, ocupacao } = drawerInspecao;
+    const ctx = obterContextoPontoVaga(vaga, dataStr);
+    const lista: Array<PessoaRegistroPonto & { horarioDescricao?: string; ehTitular: boolean }> = [];
+    const adicionar = (chapa: string | undefined, nome: string | undefined, papel: string, exigivel: boolean | undefined) => {
+      if (!chapa) return;
+      if (lista.some((p) => chapa6(p.chapa) === chapa6(chapa))) return;
+      const prof = mapaProfissionaisPorChapa.get(String(chapa).trim()) || mapaProfissionaisPorChapa.get(chapa6(chapa));
+      const ehTitular = Boolean(ctx.chapaTitular) && chapa6(ctx.chapaTitular) === chapa6(chapa);
+      // Titular: faixa da posição. Cobertura no dia: faixa da posição que está cobrindo.
+      const horarioDescricao = ctx.horarioPosicao || prof?.horarioDescricao;
+      lista.push({
+        chapa: chapa6(chapa),
+        nome: nome || prof?.nome || chapa,
+        papel,
+        horarioDescricao: ehTitular ? horarioDescricao : prof?.horarioDescricao || horarioDescricao,
+        ehTitular,
+        analise: analisarJornadaDia({
+          dataStr,
+          chapa,
+          marcacoes,
+          horarioDescricao,
+          ciclo: ehTitular ? ctx.ciclo : undefined,
+          jornadaExigivel: exigivel,
+        }),
+      });
+    };
+    const chapaOcupante = ocupacao.ocupanteMatricula || ocupacao.ocupante?.matricula;
+    if (chapaOcupante) {
+      const ehTit = Boolean(ctx.chapaTitular) && chapa6(chapaOcupante) === chapa6(ctx.chapaTitular);
+      adicionar(
+        chapaOcupante,
+        ocupacao.ocupanteNome || ocupacao.ocupante?.nome,
+        ehTit ? "Titular" : ocupacao.status === "COBERTO" ? "Cobertura" : "Ocupante",
+        exigivelDoStatusPosicao(ocupacao.status)
+      );
+    }
+    adicionar(
+      ctx.chapaTitular,
+      ctx.profTitular?.nome || ctx.titular?.nome,
+      "Titular",
+      ocupacao.status === "FOLGA" ? false : ocupacao.status === "PRESENTE" ? true : undefined
+    );
+    return lista;
+  }, [drawerInspecao, ehFiscal, obterContextoPontoVaga, mapaProfissionaisPorChapa, marcacoes]);
+
+  // Espelho completo do período (ciclo da competência) para o colaborador selecionado
+  const espelhoPeriodo = useMemo(() => {
+    if (!espelhoPeriodoAberto || !drawerInspecao || ehFiscal || diasCiclo.length === 0) return null;
+    const { vaga, posto } = drawerInspecao;
+    const datas = diasCiclo.map((d) => d.dataStr);
+    const statusPorData = new Map<string, OcupacaoVagaDia>();
+    datas.forEach((dt) =>
+      statusPorData.set(
+        dt,
+        calcularStatusVagaDia(vaga, posto, dt, alocacoes, ocorrencias, coberturas, apontamentos, marcacoesSet, dataRefLote || "2026-09-15")
+      )
+    );
+    const ctx = obterContextoPontoVaga(vaga, datas[0]);
+    const alvo = chapa6(espelhoPeriodoAberto.chapa);
+    const resultado = montarEspelhoPeriodo(
+      datas,
+      {
+        chapa: espelhoPeriodoAberto.chapa,
+        marcacoes,
+        horarioDescricao: espelhoPeriodoAberto.horarioDescricao,
+        ciclo: espelhoPeriodoAberto.ehTitular ? ctx.ciclo : undefined,
+      },
+      (dt) => {
+        const st = statusPorData.get(dt);
+        if (!st) return undefined;
+        const ocup = st.ocupanteMatricula || st.ocupante?.matricula;
+        // Exigibilidade pelo mapa apenas quando a pessoa ocupava esta posição no dia; caso contrário, pela escala do RM
+        if (ocup && chapa6(ocup) === alvo) return exigivelDoStatusPosicao(st.status);
+        if (espelhoPeriodoAberto.ehTitular && st.status === "FOLGA") return false;
+        return undefined;
+      }
+    );
+    return { ...resultado, statusPorData };
+  }, [espelhoPeriodoAberto, drawerInspecao, ehFiscal, diasCiclo, alocacoes, ocorrencias, coberturas, apontamentos, marcacoesSet, dataRefLote, marcacoes, obterContextoPontoVaga]);
+
+  const abrirEspelhoPeriodo = (idx: number) => {
+    const p = pessoasPontoDrawer[idx];
+    if (!p) return;
+    setEspelhoPeriodoAberto({ chapa: p.chapa, nome: p.nome, horarioDescricao: p.horarioDescricao, ehTitular: p.ehTitular });
+    registrarLogAuditoria(
+      "CONSULTA_ESPELHO_PONTO_INDIVIDUAL",
+      `Profissional (${p.chapa})`,
+      `Visualização do espelho de ponto do período via Mapa de Ocupação — ${p.nome} (Chapa ${p.chapa}).`,
+      perfilAtivo || "PREMIER_ADMIN"
+    );
+  };
+
   // Abrir inspeção da posição no dia selecionado (Item 1)
   const abrirInspecaoDia = (vaga: VagaPosto, posto: PostoOperacional, dataStr: string) => {
     const apuracao = calcularStatusVagaDia(
@@ -1198,6 +1394,7 @@ export default function MapaOcupacaoPage() {
     setEditandoEscala(false);
     setMensagemEscalaSucesso("");
     setMensagemAjusteSucesso("");
+    setPessoaPontoAtiva(0);
 
     // Inicializa valores do formulário de cobertura
     setRegistrandoCobertura(false);
@@ -1520,6 +1717,10 @@ export default function MapaOcupacaoPage() {
       setErroCobertura("Informe o período da cobertura (data início e data fim).");
       return;
     }
+    if (!formItemPpuCob) {
+      setErroCobertura("Informe o Item da PPU da cobertura.");
+      return;
+    }
 
     const titularVig = obterAlocacaoVigenteVaga(
       drawerInspecao.vaga.id,
@@ -1539,6 +1740,7 @@ export default function MapaOcupacaoPage() {
       dataFim: formDataFimCob,
       motivo: formMotivoCob,
       justificativaNaoVinculado: formJustificativaNaoVinculado,
+      itemPpu: formItemPpuCob,
     });
 
     if (!res.sucesso) {
@@ -1667,6 +1869,17 @@ export default function MapaOcupacaoPage() {
             </div>
           </div>
 
+          <CampoItemPpu
+            id="mapa-cobertura-item-ppu"
+            valor={formItemPpuCob}
+            onChange={setFormItemPpuCob}
+            itemDoPosto={
+              drawerInspecao
+                ? obterItemPpuDoPosto(drawerInspecao.posto.idPosto || drawerInspecao.posto.id)
+                : undefined
+            }
+          />
+
           <div>
             <label className="text-[10px] font-semibold text-slate-700 uppercase block">Motivo da Cobertura</label>
             <select
@@ -1771,6 +1984,508 @@ export default function MapaOcupacaoPage() {
     }
   };
 
+  // Detalhes do posto (parâmetros + quem ocupa cada posição no dia de referência).
+  // Antes ficavam na visão "Por Posto"; agora abrem ao clicar no cabeçalho do posto (Grade e Por Item PPU).
+  const renderDetalhesPosto = (posto: PostoOperacional, vgs: VagaPosto[]) => {
+    const idPostoChave = posto.idPosto || posto.id;
+    const tipoPostoObj = obterTipoPosto(posto.tipoPostoId);
+    const vagasExigidas = tipoPostoObj ? tipoPostoObj.vagas : vgs.length || 1;
+    const idPostoParaFerista = posto.postoIdSGP || idPostoChave;
+    const feristasDestePosto = FERISTAS_REV04.filter(
+      (f) => f.postoIdSGP === idPostoParaFerista || f.postoIdSGP === posto.id || f.postoIdSGP === posto.idPosto
+    );
+    const fmtDM = (iso: string) => iso.split("-").reverse().slice(0, 2).join("/");
+
+    return (
+      <>
+        {/* Parâmetros do posto em linha (sem caixas) */}
+        <div className="px-3 py-2 border-b border-slate-100 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-slate-500">
+          <span>Gerência <span className="text-slate-800 font-medium">{posto.gerenciaPetrobras || "Não informada"}</span></span>
+          <span>Item PPU <span className="text-slate-800 font-medium font-mono">{posto.itemPPU || obterItemPpuDoPosto(posto.postoIdSGP || idPostoChave) || "–"}</span></span>
+          <span>Vagas exigidas <span className="text-slate-800 font-medium">{vagasExigidas}</span></span>
+          <span>Periculosidade <span className={`font-medium ${posto.periculosidade === "SIM" ? "text-amber-700" : "text-slate-800"}`}>{posto.periculosidade === "SIM" ? "Sim" : "Não"}</span></span>
+          {feristasDestePosto.length > 0 && (
+            <span className="inline-flex items-center gap-1.5" title="Recurso de cobertura (não cria posição no posto)">
+              <Users className="w-3 h-3 text-slate-400" />
+              Feristas{" "}
+              <span className="text-slate-800 font-medium">
+                {feristasDestePosto.map((f) => `${f.colaborador}${f.chapaRM ? ` (${f.chapaRM})` : ""}`).join(" · ")}
+              </span>
+            </span>
+          )}
+        </div>
+
+        {/* Quem ocupa cada posição no dia de referência */}
+        <div className="overflow-x-auto border-b border-slate-100">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200 text-left">
+                <th className="px-3 py-1.5 font-semibold text-slate-800 w-[120px]">Posição</th>
+                <th className="px-3 py-1.5 font-semibold text-slate-800">Ocupante</th>
+                <th className="px-3 py-1.5 font-semibold text-slate-800">Horário</th>
+                <th className="px-3 py-1.5 font-semibold text-slate-800 hidden xl:table-cell">Seção</th>
+                <th className="px-3 py-1.5 font-semibold text-slate-800">Status em {fmtDM(diaReferenciaStr)}</th>
+                <th className="px-3 py-1.5 w-10" />
+              </tr>
+            </thead>
+            <tbody>
+              {vgs.map((vaga) => {
+                const codigoVisual = (vaga as any).codigoPosicaoEstrutural || vaga.etiqueta || vaga.codigoVisual || obterCodigoVisualPosicao(vaga, posto);
+                const ehVagaReal = Boolean((vaga as any).ehVaga || (vaga as any).posicaoSemTitularMC === "SIM");
+                const ehAValidar = ehPosicaoAValidar(vaga) || (vaga as any).statusMapeamento === "A VALIDAR MAPEAMENTO";
+                const alocVigente = obterAlocacaoVigenteVaga(vaga.id, alocacoes, diaReferenciaStr);
+                const statusVagaDia = calcularStatusVagaDia(
+                  vaga,
+                  posto,
+                  diaReferenciaStr,
+                  alocacoes,
+                  ocorrencias,
+                  coberturas,
+                  apontamentos,
+                  marcacoesSet,
+                  dataRefLote || "2026-09-15"
+                );
+                const coberturaVaga = coberturas.find((c) =>
+                  isCoberturaAtivaParaPosicao(c, diaReferenciaStr, posto, vaga, alocVigente?.matricula)
+                );
+                const alocDet = (alocVigente as any)?.alocacaoDetalhe;
+                const alertaSemChapa = Boolean(alocDet?.alertaSemChapaRM || (!ehVagaReal && alocVigente && !alocVigente.matricula));
+                const alertaUnidadeDivergente = Boolean(alocDet?.alertaUnidadeDivergente || (alocVigente as any)?.unidadeConfere === "REVISAR");
+                const alertaMapeamentoAValidar = Boolean(alocDet?.alertaMapeamentoAValidar || ehAValidar || (vaga as any).statusMapeamentoREV03 === "A VALIDAR MAPEAMENTO");
+                const chapaAloc = alocVigente?.matricula || (vaga as any).chapaTitular;
+                const profAloc = chapaAloc ? mapaProfissionaisPorChapa.get(chapaAloc.trim()) : null;
+                const horarioFormatado = formatarHorarioExibicao(
+                  profAloc?.horarioCodigo,
+                  profAloc?.horarioDescricao || vaga.horario_rm || (vaga as any).horario || alocVigente?.horarioEscalaRm || posto.escala
+                );
+                const secaoFormatada = formatarSecaoExibicao(profAloc?.secaoCodigo, profAloc?.secaoDescricao);
+                const ehSubstituto = alocVigente?.motivo === "substituicao" || (alocVigente as any)?.tipoAlocacao?.includes("SUBSTITUT");
+
+                return (
+                  <tr key={vaga.id} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 transition-colors align-top">
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-semibold text-slate-800">{codigoVisual}</span>
+                        {ehAValidar && (
+                          <span title="Posição com premissa a validar">
+                            <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      {ehVagaReal || !alocVigente ? (
+                        <span className="text-amber-700 font-medium">Vaga · sem titular</span>
+                      ) : (
+                        <div className="flex flex-wrap items-baseline gap-x-1.5">
+                          <span className="text-slate-900 font-medium">{alocVigente.nome}</span>
+                          {alocVigente.matricula && (
+                            <span className="font-mono text-[11px] text-slate-400">{alocVigente.matricula}</span>
+                          )}
+                          {ehSubstituto && <span className="text-[11px] text-sky-700 font-medium">substituto</span>}
+                        </div>
+                      )}
+                      {(alertaSemChapa || alertaUnidadeDivergente || alertaMapeamentoAValidar || coberturaVaga) && (
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-[10.5px] text-slate-500">
+                          {coberturaVaga && (
+                            <span
+                              className="inline-flex items-center gap-1"
+                              title={`Substituto: ${coberturaVaga.substitutoNome} (${coberturaVaga.substitutoMatricula})`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+                              Substituição {fmtDM(coberturaVaga.dataInicio)} a {fmtDM(coberturaVaga.dataFim)}
+                            </span>
+                          )}
+                          {alertaSemChapa && (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                              Não localizado no RM
+                            </span>
+                          )}
+                          {alertaUnidadeDivergente && (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                              Unidade RM divergente
+                            </span>
+                          )}
+                          {alertaMapeamentoAValidar && (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                              Mapeamento a validar
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600 font-mono text-[11px] max-w-[260px] truncate" title={horarioFormatado}>
+                      {horarioFormatado}
+                    </td>
+                    <td className="px-3 py-2 text-slate-500 text-[11px] max-w-[220px] truncate hidden xl:table-cell" title={secaoFormatada}>
+                      {secaoFormatada && secaoFormatada !== "–" ? secaoFormatada : "–"}
+                    </td>
+                    <td className="px-3 py-2">
+                      <BadgeStatus status={statusVagaDia.statusVaga} tamanho="sm" />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const historico = obterHistoricoAlocacoesVaga(vaga.id, alocacoes);
+                          setModalHistorico({ vaga, posto, alocacoes: historico });
+                        }}
+                        className="p-1 rounded text-slate-400 hover:text-[#1F4FD1] hover:bg-slate-100 transition-colors cursor-pointer"
+                        title="Ver histórico de alocações da posição"
+                        aria-label={`Histórico da posição ${codigoVisual}`}
+                      >
+                        <History className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </>
+    );
+  };
+
+  // Cartão do posto (cabeçalho clicável + detalhes opcionais + matriz do ciclo) — mesmo padrão nas visões Grade e Por Item PPU
+  const renderCartaoPosto = (
+    posto: PostoOperacional,
+    posicoesFiltradas: VagaPosto[],
+    opcoes?: { unidade?: string }
+  ) => {
+    const idPostoChave = posto.idPosto || posto.id;
+    const vgs = obterVagasDoPosto(posto, vagasPorPosto);
+    const apuracaoCiclo = apuracaoCicloPorPosto.get(idPostoChave);
+    const postoAberto = postosExpandidos.has(idPostoChave);
+
+    return (
+      <div key={idPostoChave} className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs">
+        <button
+          onClick={() => togglePosto(idPostoChave)}
+          aria-expanded={postoAberto}
+          title={postoAberto ? "Ocultar detalhes do posto" : "Ver parâmetros e ocupantes do posto"}
+          className="w-full p-2.5 bg-white hover:bg-slate-50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2 text-left cursor-pointer transition-colors"
+        >
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            {postoAberto ? (
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            )}
+            <span className="text-xs font-semibold text-slate-800">{formatarTituloPosto(posto)}</span>
+            <span className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded">
+              {formatarEtiquetaRegime(posto, vgs.length, vgs)}
+            </span>
+            {opcoes?.unidade && (
+              <span className="text-[11px] text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded">
+                {opcoes.unidade}
+              </span>
+            )}
+          </div>
+
+          <div className="text-xs text-slate-600 font-medium">
+            Ciclo: <span className="text-slate-900 font-semibold">{apuracaoCiclo?.percentualCicloFormatado ?? "–"}</span>
+          </div>
+        </button>
+
+        {postoAberto && renderDetalhesPosto(posto, vgs)}
+
+        {renderTabelaCicloPosto(posto, vgs, apuracaoCiclo, posicoesFiltradas)}
+      </div>
+    );
+  };
+
+  // Filtro de exceções/descobertos aplicado às posições de um posto (mesma regra da Grade)
+  const obterPosicoesVisiveis = (posto: PostoOperacional, vgs: VagaPosto[]): VagaPosto[] => {
+    if (!mostrarApenasExcecoes && !filtroApenasDescobertos) return vgs;
+    const apCiclo = apuracaoCicloPorPosto.get(posto.idPosto || posto.id);
+    return vgs.filter((vaga) =>
+      apCiclo?.dias?.some((d) =>
+        d.vagasDetalhe?.some((vd: OcupacaoVagaDia) => {
+          if (vd.vagaId !== vaga.id && vd.posicaoId !== vaga.id) return false;
+          if (filtroApenasDescobertos) return vd.status === "DESCOBERTO";
+          return (
+            vd.status === "DESCOBERTO" ||
+            vd.status === "CICLO_NAO_CONFIGURADO" ||
+            vd.status === "SEM_DADO" ||
+            vd.status === "PENDENTE"
+          );
+        })
+      )
+    );
+  };
+
+  // Grade (heatmap) do ciclo de um posto — usada nas visões Grade e Por Posto (mesmo padrão visual)
+  const renderTabelaCicloPosto = (
+    posto: PostoOperacional,
+    vgs: VagaPosto[],
+    apuracaoCiclo: ApuracaoPostoCiclo | undefined,
+    posicoesFiltradas: VagaPosto[]
+  ) => (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs border-collapse">
+        <thead>
+          <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200">
+            {/* Coluna 1 Fixa: Posição */}
+            <th className="p-1.5 text-left sticky left-0 bg-slate-50 border-r border-slate-200 z-20 min-w-[130px] max-w-[150px]">
+              <div className="font-semibold text-slate-800 text-xs">Posição</div>
+              <div className="text-[9px] text-slate-500 font-normal leading-tight mt-0.5">
+                % diário quando &lt; 100%
+              </div>
+            </th>
+            {/* Colunas: Dias do Ciclo */}
+            {diasExibidosCiclo.map((d) => {
+              const isDiaRef = dataInicioFiltro === dataFimFiltro && d.dataStr === dataInicioFiltro;
+              const isViradaMes = d.diaNumero === 1;
+
+              let headerClass =
+                "p-1 text-center border-r border-slate-100 min-w-[30px] w-7.5";
+              if (isViradaMes) {
+                headerClass += " border-l-2 border-l-slate-300";
+              }
+              if (isDiaRef) {
+                headerClass +=
+                  " ring-1 ring-[#1F4FD1] bg-blue-50/50 text-[#1F4FD1] font-bold";
+              } else if (d.isFimDeSemana) {
+                headerClass += " bg-slate-100/70 text-slate-500";
+              } else {
+                headerClass += " bg-slate-50/80 text-slate-600";
+              }
+
+              const diaDetalhe = apuracaoCiclo?.dias?.find(
+                (ad) => ((ad as any).dataStr || ad.data) === d.dataStr
+              );
+              const posExig = diaDetalhe?.posicoesExigiveis ?? 0;
+              const posAtendidas = diaDetalhe?.posicoesAtendidas ?? 0;
+              const percDia = diaDetalhe?.percentualCobertura ?? null;
+              const percDiaFmt = diaDetalhe?.percentualCoberturaFormatado ?? "–";
+              const todosSemDado =
+                posExig > 0 &&
+                posAtendidas === 0 &&
+                diaDetalhe?.vagasDetalhe &&
+                diaDetalhe.vagasDetalhe.length > 0 &&
+                diaDetalhe.vagasDetalhe.every(
+                  (vd: any) =>
+                    vd.status === "SEM_DADO" ||
+                    vd.status === "FOLGA" ||
+                    vd.status === "NAO_EXIGIVEL" ||
+                    vd.status === "PENDENTE"
+                );
+
+              return (
+                <th
+                  key={d.dataStr}
+                  className={headerClass}
+                  title={`Dia ${String(d.diaNumero).padStart(2, "0")}/${String(d.mes).padStart(2, "0")} (${d.diaSemana})${d.isHoje ? " • Hoje" : ""}${isDiaRef ? " • Dia de Referência" : ""}\nCumprimento no dia: ${posExig > 0 ? (todosSemDado ? "Sem dado de ponto importado" : `${posAtendidas}/${posExig} atendidas (${percDiaFmt})`) : "Sem exigência (Folga)"}`}
+                >
+                  <div className="text-[10px] leading-tight font-medium">{d.diaNumero}</div>
+                  <div className="text-[8px] opacity-75 font-normal leading-tight">
+                    {d.diaSemana}
+                  </div>
+                  <div
+                    className={`text-[8.5px] leading-tight mt-0.5 tracking-tight ${
+                      posExig === 0
+                        ? "text-slate-300 font-normal"
+                        : todosSemDado
+                        ? "text-slate-400 font-normal"
+                        : percDia === 100
+                        ? "text-transparent select-none"
+                        : percDia && percDia > 0
+                        ? "text-amber-700 font-semibold"
+                        : "text-rose-600 font-semibold"
+                    }`}
+                  >
+                    {posExig === 0 ? "·" : todosSemDado ? "–" : percDia === 100 ? "·" : percDiaFmt}
+                  </div>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {posicoesFiltradas.map((vaga) => {
+            const codigoVisual = obterCodigoVisualPosicao(vaga, posto);
+            const ehAValidar = ehPosicaoAValidar(vaga);
+            const alocRef = obterAlocacaoVigenteVaga(
+              vaga.id,
+              alocacoes,
+              diaReferenciaStr
+            );
+            const horarioEscala = obterHorarioEEscalaAbreviados(
+              vaga,
+              posto,
+              alocRef
+            );
+
+            return (
+              <tr
+                key={vaga.id}
+                className="hover:bg-slate-50/50 transition-colors border-b border-slate-100"
+              >
+                {/* Coluna 1 Fixa: Posição (sem nome do colaborador na linha) */}
+                <td
+                  className="p-1.5 sticky left-0 bg-white border-r border-slate-200 z-10"
+                  title={`Posição ${codigoVisual}\nOcupante: ${alocRef ? `${alocRef.nome} (${alocRef.matricula})` : "Sem titular alocado"}`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-semibold text-xs text-slate-800">
+                      {codigoVisual}
+                    </span>
+                    {ehAValidar && (
+                      <span title="Posição com premissa a validar">
+                        <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                      </span>
+                    )}
+                    <span
+                      className="text-[10px] text-slate-400 truncate max-w-[80px]"
+                      title={horarioEscala}
+                    >
+                      {horarioEscala}
+                    </span>
+                  </div>
+                </td>
+
+                {/* Células do Heatmap */}
+                {diasExibidosCiclo.map((d) => {
+                  const diaDetalhe = apuracaoCiclo?.dias?.find((ad) => ((ad as any).dataStr || ad.data) === d.dataStr);
+                  const statusVaga = diaDetalhe?.vagasDetalhe?.find(
+                    (vd: OcupacaoVagaDia) =>
+                      vd.vagaId === vaga.id || vd.posicaoId === vaga.id
+                  );
+                  const statusStr = statusVaga?.status || "FOLGA";
+                  const estilo = getEstiloCelulaHeatmap(statusStr);
+                  const isViradaMes = d.diaNumero === 1;
+                  const isDiaRef = dataInicioFiltro === dataFimFiltro && d.dataStr === dataInicioFiltro;
+
+                  let tdClass =
+                    "p-[1px] text-center border-r border-slate-100 min-w-[30px] w-7.5";
+                  if (isViradaMes) {
+                    tdClass += " border-l-2 border-l-slate-300";
+                  }
+                  if (d.isFimDeSemana) {
+                    tdClass += " bg-slate-50/50";
+                  }
+                  if (isDiaRef) {
+                    tdClass += " bg-blue-50/20";
+                  }
+
+                  return (
+                    <td
+                      key={d.dataStr}
+                      onClick={() => abrirInspecaoDia(vaga, posto, d.dataStr)}
+                      onMouseEnter={(e) =>
+                        mostrarTooltipHover(
+                          e,
+                          vaga,
+                          posto,
+                          d,
+                          statusVaga,
+                          estilo,
+                          codigoVisual,
+                          alocRef
+                        )
+                      }
+                      onMouseLeave={esconderTooltipHover}
+                      className={tdClass}
+                      title={
+                        ativarTooltipHover
+                          ? undefined
+                          : `Posição ${codigoVisual} • ${d.dataStr} (${d.diaSemana})\nStatus: ${estilo.label} (${estilo.sigla})\n${statusVaga?.motivoPublico || ""}\nClique para ver detalhes`
+                      }
+                    >
+                      <div
+                        className={`w-full h-5 rounded-[2px] flex items-center justify-center cursor-pointer transition-transform hover:scale-110 select-none text-[10px] leading-none ${estilo.classes} ${estilo.borda}`}
+                      >
+                        {estilo.sigla}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+
+          {/* Item 3: Barra fina de cor e percentual diário no rodapé do posto para postos com mais de 1 posição */}
+          {vgs.length > 1 && (
+            <tr className="bg-slate-50/60 border-t border-slate-200">
+              <td className="p-1 sticky left-0 bg-slate-50 border-r border-slate-200 z-10 text-[10px] font-medium text-slate-600">
+                <div className="flex items-center justify-between pr-1">
+                  <span>% Total do Posto</span>
+                  <span className="font-mono text-[9px] text-slate-400 font-normal">dia</span>
+                </div>
+              </td>
+              {diasExibidosCiclo.map((d) => {
+                const apuracaoDia = apuracaoCiclo?.dias?.find((ad) => ((ad as any).dataStr || ad.data) === d.dataStr);
+                const percentual = apuracaoDia?.percentualCobertura ?? null;
+                const posExig = apuracaoDia?.posicoesExigiveis ?? 0;
+                const posAtendidas = apuracaoDia?.posicoesAtendidas ?? 0;
+                const isViradaMes = d.diaNumero === 1;
+
+                const todosSemDado =
+                  posExig > 0 &&
+                  posAtendidas === 0 &&
+                  apuracaoDia?.vagasDetalhe &&
+                  apuracaoDia.vagasDetalhe.length > 0 &&
+                  apuracaoDia.vagasDetalhe.every(
+                    (vd: any) =>
+                      vd.status === "SEM_DADO" ||
+                      vd.status === "FOLGA" ||
+                      vd.status === "NAO_EXIGIVEL" ||
+                      vd.status === "PENDENTE"
+                  );
+
+                let barColor = "bg-transparent";
+                let textColor = "text-slate-300";
+                let desc = "Sem exigência";
+                if (posExig > 0 && percentual !== null) {
+                  if (todosSemDado) {
+                    barColor = "bg-slate-200";
+                    textColor = "text-slate-400 font-normal";
+                    desc = "Sem dado importado";
+                  } else if (percentual === 100) {
+                    barColor = "bg-emerald-500";
+                    textColor = "text-emerald-700 font-bold";
+                    desc = "100% atendido";
+                  } else if (percentual > 0) {
+                    barColor = "bg-amber-400";
+                    textColor = "text-amber-700 font-bold";
+                    desc = `${percentual}% atendido`;
+                  } else {
+                    barColor = "bg-[#B42318]";
+                    textColor = "text-rose-700 font-bold";
+                    desc = "0% atendido (descoberto)";
+                  }
+                }
+
+                let tdClass =
+                  "p-[1px] text-center border-r border-slate-100 min-w-[30px] w-7.5";
+                if (isViradaMes) tdClass += " border-l-2 border-l-slate-300";
+
+                return (
+                  <td
+                    key={d.dataStr}
+                    className={tdClass}
+                    title={`Cumprimento do posto em ${d.dataStr}: ${desc} (${posAtendidas}/${posExig} posições)`}
+                  >
+                    <div className="flex flex-col items-center justify-center py-0.5">
+                      <div className={`w-full h-1 rounded-[1px] ${barColor}`} />
+                      <span className={`text-[8.5px] leading-tight mt-0.5 tracking-tight ${textColor}`}>
+                        {posExig === 0 ? "—" : todosSemDado ? "–" : `${percentual !== null ? `${percentual}%` : "—"}`}
+                      </span>
+                    </div>
+                  </td>
+                );
+              })}
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <div className="space-y-4 max-w-full mx-auto">
       {/* 1. CABEÇALHO */}
@@ -1803,14 +2518,14 @@ export default function MapaOcupacaoPage() {
               Grade
             </button>
             <button
-              onClick={() => setAbaVisao("ARVORE")}
+              onClick={() => setAbaVisao("PPU")}
               className={`px-2.5 py-1 rounded text-xs font-medium transition-all cursor-pointer ${
-                abaVisao === "ARVORE"
+                abaVisao === "PPU"
                   ? "bg-white text-slate-900 shadow-2xs font-semibold"
                   : "text-slate-500 hover:text-slate-900"
               }`}
             >
-              Por Posto
+              Por Item PPU
             </button>
             {podeEditarOperacao && (
               <button
@@ -1832,11 +2547,11 @@ export default function MapaOcupacaoPage() {
           {podeEditarOperacao && (
             <button
               onClick={() => setModalConfirmarLimpezaOperacional(true)}
-              className="inline-flex items-center gap-1 text-rose-700 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-200 hover:border-rose-600 text-xs font-semibold px-2.5 py-1 rounded shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center w-7 h-7 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
               title="Limpar dados de presença, coberturas e ausências do mapa mantendo todas as posições"
+              aria-label="Limpar dados do mapa"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Limpar Dados</span>
             </button>
           )}
 
@@ -1867,213 +2582,227 @@ export default function MapaOcupacaoPage() {
         </div>
       )}
 
-      {/* 2. CARDS DO TOPO (Item 1: 4 cards em posições, fundo branco, cor só quando há problema) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {/* Card 1: Posições (total) */}
-        <div className="bg-white p-3.5 rounded-lg border border-slate-200">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Posições</span>
-            <Users className="w-4 h-4 text-slate-400" />
-          </div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">
+      {/* 2. INDICADORES (faixa única; cor só quando há problema) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 rounded-lg border border-slate-200 bg-white divide-y md:divide-y-0 md:divide-x divide-slate-100">
+        {/* Posições (total) */}
+        <div className="px-4 py-3">
+          <div className="text-xs text-slate-500">Posições</div>
+          <div className="text-xl font-semibold tabular-nums text-slate-900 mt-0.5">
             {metricasCards.totalPosicoes}
           </div>
-          <span className="text-[11px] text-slate-400 mt-0.5 block">
-            Total de posições
-          </span>
         </div>
 
-        {/* Card 2: Ocupação no período / dia (%) */}
-        <div className="bg-white p-3.5 rounded-lg border border-slate-200">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">
-              {dataInicioFiltro === dataFimFiltro ? "Ocupação no dia" : "Ocupação no período"}
+        {/* Ocupação no período / dia (%) */}
+        <div className="px-4 py-3">
+          <div className="text-xs text-slate-500">
+            {dataInicioFiltro === dataFimFiltro ? "Ocupação no dia" : "Ocupação no período"}
+          </div>
+          <div className="flex items-baseline gap-2 mt-0.5">
+            <span className="text-xl font-semibold tabular-nums text-slate-900">
+              {metricasCards.taxaOcupacaoDiaRef}%
             </span>
-            <CheckCircle2 className="w-4 h-4 text-slate-400" />
+            <span
+              className="text-[11px] text-slate-400 tabular-nums truncate"
+              title={dataInicioFiltro === dataFimFiltro ? "posições atendidas / exigíveis" : "posições-dia atendidas / exigíveis"}
+            >
+              {metricasCards.posicoesAtendidasDiaRef}/{metricasCards.posicoesExigiveisDiaRef}
+            </span>
           </div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">
-            {metricasCards.taxaOcupacaoDiaRef}%
-          </div>
-          <span className="text-[11px] text-slate-400 mt-0.5 block">
-            {dataInicioFiltro === dataFimFiltro
-              ? `Ref. ${dataInicioFiltro.split("-").reverse().slice(0, 2).join("/")} (${metricasCards.posicoesAtendidasDiaRef}/${metricasCards.posicoesExigiveisDiaRef} pos.)`
-              : `Ref. ${dataInicioFiltro.split("-").reverse().slice(0, 2).join("/")} a ${dataFimFiltro.split("-").reverse().slice(0, 2).join("/")} (${metricasCards.posicoesAtendidasDiaRef}/${metricasCards.posicoesExigiveisDiaRef} pos.-dias)`}
-          </span>
         </div>
 
-        {/* Card 3: Descobertos (clicável - filtra só posições com D) */}
+        {/* Descobertos (clicável - filtra só posições com D) */}
         <button
           onClick={() => setFiltroApenasDescobertos((prev) => !prev)}
-          className={`bg-white p-3.5 rounded-lg border text-left transition-all cursor-pointer ${
-            filtroApenasDescobertos
-              ? "border-[#1F4FD1] ring-2 ring-[#1F4FD1]/20 shadow-2xs"
-              : "border-slate-200 hover:border-slate-300"
+          className={`px-4 py-3 text-left transition-colors cursor-pointer ${
+            filtroApenasDescobertos ? "bg-slate-50" : "hover:bg-slate-50"
           }`}
+          aria-pressed={filtroApenasDescobertos}
           title={filtroApenasDescobertos ? "Clique para desativar filtro de descobertos" : "Clique para filtrar apenas posições com descobertos"}
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Descobertos</span>
-            <AlertCircle className={`w-4 h-4 ${metricasCards.posicoesDescobertasCiclo > 0 ? "text-[#B42318]" : "text-slate-400"}`} />
+          <div className="text-xs text-slate-500 flex items-center justify-between">
+            <span>Descobertos no ciclo</span>
+            {filtroApenasDescobertos && (
+              <span className="text-[10px] font-medium text-slate-700 bg-white border border-slate-200 rounded px-1.5">
+                Filtrando
+              </span>
+            )}
           </div>
-          <div className={`text-2xl font-bold mt-1 ${metricasCards.posicoesDescobertasCiclo > 0 ? "text-[#B42318]" : "text-slate-900"}`}>
+          <div
+            className={`text-xl font-semibold tabular-nums mt-0.5 ${
+              metricasCards.posicoesDescobertasCiclo > 0 ? "text-rose-600" : "text-slate-900"
+            }`}
+          >
             {metricasCards.posicoesDescobertasCiclo}
           </div>
-          <span className="text-[11px] text-slate-400 mt-0.5 flex items-center justify-between">
-            <span>Posições no ciclo</span>
-            {filtroApenasDescobertos && (
-              <span className="text-[10px] text-[#1F4FD1] font-semibold">Filtrando</span>
-            )}
-          </span>
         </button>
 
-        {/* Card 4: Pendências de escala */}
-        <div className="bg-white p-3.5 rounded-lg border border-slate-200">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Pendências de escala</span>
-            <Clock className="w-4 h-4 text-slate-400" />
-          </div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">
+        {/* Pendências de escala */}
+        <div className="px-4 py-3">
+          <div className="text-xs text-slate-500">Escalas a parametrizar</div>
+          <div className="text-xl font-semibold tabular-nums text-slate-900 mt-0.5">
             {metricasCards.totalPendenciasEscala}
           </div>
-          <span className="text-[11px] text-slate-400 mt-0.5 block">
-            Escalas a parametrizar
-          </span>
         </div>
       </div>
 
-      {/* 3. BARRA DE FILTROS */}
-      <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs space-y-2.5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 items-end">
-          {/* Busca */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar posto, ID..."
-              className="w-full text-xs pl-8 pr-2 py-1.5 border border-slate-200 rounded outline-none focus:border-[#1F4FD1] bg-white text-slate-800"
-            />
-            {busca && (
-              <button
-                onClick={() => setBusca("")}
-                className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 text-xs"
+      {/* 3. BARRA DE FILTROS (uma linha; Função/Situação em "Mais filtros") */}
+      {(() => {
+        const qtdFiltrosExtras = (filtroFuncao !== "TODAS" ? 1 : 0) + (filtroSituacao !== "TODAS" ? 1 : 0);
+        const temFiltroAtivo =
+          filtroFuncao !== "TODAS" ||
+          filtroSituacao !== "TODAS" ||
+          filtroBase !== "TODAS" ||
+          filtroStatusAgregado !== "TODOS" ||
+          busca !== "" ||
+          filtroApenasDescobertos;
+        const campo =
+          "h-8 text-xs border border-slate-200 rounded-md px-2 bg-white text-slate-700 outline-none focus:ring-2 focus:ring-slate-200 focus:border-slate-300";
+        return (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Busca */}
+              <div className="relative flex-1 min-w-[200px] max-w-xs">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="mapa-busca"
+                  type="text"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar posto ou ID"
+                  className={`${campo} w-full pl-8 pr-7`}
+                />
+                {busca && (
+                  <button
+                    onClick={() => setBusca("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    aria-label="Limpar busca"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Base */}
+              <select
+                id="mapa-filtro-base"
+                value={filtroBase}
+                onChange={(e) => setFiltroBase(e.target.value)}
+                className={`${campo} max-w-[200px] truncate`}
+                aria-label="Base"
               >
-                ×
+                <option value="TODAS">Todas as bases ({listaBases.length})</option>
+                {listaBases.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+
+              {/* Status */}
+              <select
+                id="mapa-filtro-status"
+                value={filtroStatusAgregado}
+                onChange={(e) => setFiltroStatusAgregado(e.target.value)}
+                className={campo}
+                aria-label="Status"
+              >
+                <option value="TODOS">Todos os status</option>
+                <option value="COMPLETO">Completo (100%)</option>
+                <option value="PARCIAL">Parcial</option>
+                <option value="DESCOBERTO">Descoberto</option>
+                <option value="SEM_DADO">Com sem dado</option>
+                <option value="CICLO_NAO_CONFIGURADO">Escala em aberto</option>
+              </select>
+
+              {/* Período */}
+              <div className="inline-flex items-center gap-1.5">
+                <input
+                  id="mapa-data-inicio"
+                  type="date"
+                  value={dataInicioFiltro}
+                  onChange={(e) => setDataInicioFiltro(e.target.value)}
+                  className={campo}
+                  aria-label="Data início"
+                />
+                <span className="text-xs text-slate-400">até</span>
+                <input
+                  id="mapa-data-fim"
+                  type="date"
+                  value={dataFimFiltro}
+                  onChange={(e) => setDataFimFiltro(e.target.value)}
+                  className={campo}
+                  aria-label="Data fim"
+                />
+              </div>
+
+              {/* Mais filtros */}
+              <button
+                id="mapa-mais-filtros"
+                onClick={() => setMostrarMaisFiltros((v) => !v)}
+                aria-expanded={mostrarMaisFiltros}
+                className={`h-8 px-2.5 text-xs rounded-md border inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  mostrarMaisFiltros || qtdFiltrosExtras > 0
+                    ? "border-slate-300 bg-slate-50 text-slate-800"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                Mais filtros
+                {qtdFiltrosExtras > 0 && (
+                  <span className="min-w-4 h-4 px-1 rounded-full bg-slate-800 text-white text-[10px] inline-flex items-center justify-center">
+                    {qtdFiltrosExtras}
+                  </span>
+                )}
               </button>
+
+              {temFiltroAtivo && (
+                <button
+                  onClick={() => {
+                    setFiltroBase("TODAS");
+                    setFiltroStatusAgregado("TODOS");
+                    setBusca("");
+                    setFiltroFuncao("TODAS");
+                    setFiltroSituacao("TODAS");
+                    setFiltroApenasDescobertos(false);
+                  }}
+                  className="h-8 px-2 text-xs text-slate-500 hover:text-slate-900 cursor-pointer"
+                  title="Limpar todos os filtros"
+                >
+                  Limpar filtros
+                </button>
+              )}
+            </div>
+
+            {/* Linha opcional: Função e Situação (cadastros importados RM) */}
+            {(mostrarMaisFiltros || qtdFiltrosExtras > 0) && (
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  id="mapa-filtro-funcao"
+                  value={filtroFuncao}
+                  onChange={(e) => setFiltroFuncao(e.target.value)}
+                  className={`${campo} max-w-[260px] truncate`}
+                  aria-label="Função"
+                >
+                  <option value="TODAS">Todas as funções ({funcoesDisponiveis.length})</option>
+                  {funcoesDisponiveis.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+                <select
+                  id="mapa-filtro-situacao"
+                  value={filtroSituacao}
+                  onChange={(e) => setFiltroSituacao(e.target.value)}
+                  className={`${campo} max-w-[220px] truncate`}
+                  aria-label="Situação"
+                >
+                  <option value="TODAS">Todas as situações</option>
+                  {situacoesDisponiveis.map((sit) => (
+                    <option key={sit} value={sit}>{sit}</option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
-
-          {/* Base */}
-          <div>
-            <select
-              value={filtroBase}
-              onChange={(e) => setFiltroBase(e.target.value)}
-              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-700 outline-none truncate focus:border-[#1F4FD1]"
-            >
-              <option value="TODAS">Todas as Bases ({listaBases.length})</option>
-              {listaBases.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status */}
-          <div>
-            <select
-              value={filtroStatusAgregado}
-              onChange={(e) => setFiltroStatusAgregado(e.target.value)}
-              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-700 outline-none focus:border-[#1F4FD1]"
-            >
-              <option value="TODOS">Todos os Status</option>
-              <option value="COMPLETO">Completo (100%)</option>
-              <option value="PARCIAL">Parcial</option>
-              <option value="DESCOBERTO">Descoberto</option>
-              <option value="SEM_DADO">Com Sem Dado</option>
-              <option value="CICLO_NAO_CONFIGURADO">Escala em Aberto</option>
-            </select>
-          </div>
-
-          {/* Data Início */}
-          <div>
-            <label className="text-[10px] text-slate-500 font-semibold block mb-0.5">Data Início</label>
-            <input
-              type="date"
-              value={dataInicioFiltro}
-              onChange={(e) => setDataInicioFiltro(e.target.value)}
-              className="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-800 font-medium outline-none focus:border-[#1F4FD1]"
-            />
-          </div>
-
-          {/* Data Fim */}
-          <div>
-            <label className="text-[10px] text-slate-500 font-semibold block mb-0.5">Data Fim</label>
-            <input
-              type="date"
-              value={dataFimFiltro}
-              onChange={(e) => setDataFimFiltro(e.target.value)}
-              className="w-full text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-800 font-medium outline-none focus:border-[#1F4FD1]"
-            />
-          </div>
-        </div>
-
-        {/* Linha 2: Filtros por Função e Situação (cadastros importados RM) */}
-        <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 items-end">
-          {/* Função */}
-          <div>
-            <label className="text-[10px] text-slate-500 font-semibold block mb-0.5">Função</label>
-            <select
-              value={filtroFuncao}
-              onChange={(e) => setFiltroFuncao(e.target.value)}
-              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-700 outline-none truncate focus:border-[#1F4FD1]"
-            >
-              <option value="TODAS">Todas as Funções ({funcoesDisponiveis.length})</option>
-              {funcoesDisponiveis.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Situação */}
-          <div>
-            <label className="text-[10px] text-slate-500 font-semibold block mb-0.5">Situação</label>
-            <select
-              value={filtroSituacao}
-              onChange={(e) => setFiltroSituacao(e.target.value)}
-              className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-700 outline-none truncate focus:border-[#1F4FD1]"
-            >
-              <option value="TODAS">Todas as Situações</option>
-              {situacoesDisponiveis.map((sit) => (
-                <option key={sit} value={sit}>{sit}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Botão Limpar Filtros */}
-          <div className="flex items-center">
-            {(filtroFuncao !== "TODAS" ||
-              filtroSituacao !== "TODAS" ||
-              filtroBase !== "TODAS" ||
-              filtroStatusAgregado !== "TODOS" ||
-              busca !== "") && (
-              <button
-                onClick={() => {
-                  setFiltroBase("TODAS");
-                  setFiltroStatusAgregado("TODOS");
-                  setBusca("");
-                  setFiltroFuncao("TODAS");
-                  setFiltroSituacao("TODAS");
-                  setFiltroApenasDescobertos(false);
-                }}
-                className="text-[11px] text-rose-600 hover:text-rose-800 font-semibold px-3 py-1.5 rounded hover:bg-rose-50 border border-rose-200 shrink-0 cursor-pointer"
-                title="Limpar todos os filtros"
-              >
-                Limpar
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* 4. VISÃO GRADE DE OCUPAÇÃO POR UNIDADE */}
       {abaVisao === "GRADE" && (
@@ -2086,14 +2815,17 @@ export default function MapaOcupacaoPage() {
                 {postosFiltrados.length} postos · {metricasCards.totalPosicoes} posições · {gruposPorBaseComResumo.length} unidades
               </span>
               <div className="flex items-center gap-1.5 pl-2 border-l border-slate-300">
-                <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] text-slate-700 hover:text-slate-900 font-medium">
+                <label
+                  className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] text-slate-700 hover:text-slate-900 font-medium"
+                  title="Ao passar o mouse sobre um dia, mostra quem cumpriu o posto, ocorrências e coberturas"
+                >
                   <input
                     type="checkbox"
                     checked={ativarTooltipHover}
                     onChange={(e) => setAtivarTooltipHover(e.target.checked)}
                     className="rounded text-[#1F4FD1] focus:ring-[#1F4FD1] w-3.5 h-3.5 cursor-pointer"
                   />
-                  <span>Ver quem cumpre no hover</span>
+                  <span>Detalhes do dia ao passar o mouse</span>
                 </label>
               </div>
             </div>
@@ -2103,28 +2835,28 @@ export default function MapaOcupacaoPage() {
               <div className="hidden lg:flex items-center gap-2.5 text-[11px] text-slate-600">
                 <span className="text-slate-400">Legenda:</span>
                 <span className="inline-flex items-center gap-1" title="Presença do titular">
-                  <span className="w-4 h-4 rounded-[2px] bg-[#86EFAC] border border-[#4ADE80]/70 inline-flex items-center justify-center text-[9px] font-bold text-emerald-950">P</span>
+                  <span className="w-4 h-4 rounded-[3px] bg-emerald-50 border border-emerald-100 inline-flex items-center justify-center text-[9px] font-semibold text-emerald-700/80">P</span>
                   <span>Presença</span>
                 </span>
                 <span className="inline-flex items-center gap-1" title="Cobertura (substituto)">
-                  <span className="w-4 h-4 rounded-[2px] bg-[#E1EFFE] border border-[#BFDBFE]/60 inline-flex items-center justify-center text-[9px] font-bold text-blue-900">C</span>
+                  <span className="w-4 h-4 rounded-[3px] bg-sky-50 border border-sky-200 inline-flex items-center justify-center text-[9px] font-semibold text-sky-700">C</span>
                   <span>Cobertura</span>
                 </span>
                 <span className="inline-flex items-center gap-1" title="Folga (não programado pela escala)">
-                  <span className="w-4 h-4 rounded-[2px] bg-white border border-slate-200 inline-flex items-center justify-center text-[9px] font-bold text-slate-500">F</span>
+                  <span className="w-4 h-4 rounded-[3px] bg-white border border-slate-100 inline-flex items-center justify-center text-[9px] font-medium text-slate-300">F</span>
                   <span>Folga</span>
                 </span>
                 <span className="inline-flex items-center gap-1" title="Escala em aberto (clique para incluir)">
-                  <span className="w-4 h-4 rounded-[2px] bg-white border border-slate-200 inline-flex items-center justify-center text-[10px] text-slate-400 font-bold">·</span>
+                  <span className="w-4 h-4 rounded-[3px] bg-white border border-slate-200 inline-flex items-center justify-center text-[10px] text-slate-400 font-bold">·</span>
                   <span>Em aberto</span>
                 </span>
                 <span className="inline-flex items-center gap-1" title="Sem dado de presença ou ausência">
-                  <span className="w-4 h-4 rounded-[2px] bg-[#F3F4F6] border border-dashed border-[#D1D5DB] inline-flex items-center justify-center text-[9px] text-slate-400">–</span>
+                  <span className="w-4 h-4 rounded-[3px] bg-[#F3F4F6] border border-dashed border-[#D1D5DB] inline-flex items-center justify-center text-[9px] text-slate-400">–</span>
                   <span>Sem dado</span>
                 </span>
                 <span className="inline-flex items-center gap-1" title="Descoberto (ausência sem cobertura)">
-                  <span className="w-4 h-4 rounded-[2px] bg-[#B42318] border border-[#991B1B] inline-flex items-center justify-center text-[9px] font-extrabold text-white">D</span>
-                  <span className="font-semibold text-[#B42318]">Descoberto</span>
+                  <span className="w-4 h-4 rounded-[3px] bg-rose-600 border border-rose-700 inline-flex items-center justify-center text-[9px] font-bold text-white">D</span>
+                  <span>Descoberto</span>
                 </span>
               </div>
 
@@ -2184,8 +2916,9 @@ export default function MapaOcupacaoPage() {
 
                       {/* Indicador de dias D sem fundo destacado */}
                       {totalDiasD > 0 && (
-                        <span className="text-xs font-semibold text-[#B42318]">
-                          {totalDiasD} {totalDiasD === 1 ? "dia D" : "dias D"}
+                        <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                          {totalDiasD} {totalDiasD === 1 ? "dia descoberto" : "dias descobertos"}
                         </span>
                       )}
                     </div>
@@ -2271,292 +3004,7 @@ export default function MapaOcupacaoPage() {
                             return true;
                           });
 
-                          return (
-                            <div
-                              key={idPostoChave}
-                              className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs"
-                            >
-                              {/* Item 5: Cabeçalho do Posto limpo */}
-                              <div className="p-2.5 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="text-xs font-semibold text-slate-800">
-                                    {formatarTituloPosto(posto)}
-                                  </span>
-                                  <span className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded">
-                                    {formatarEtiquetaRegime(posto, vgs.length, vgs)}
-                                  </span>
-                                  <span className="text-[11px] text-slate-400 font-mono">
-                                    ID {idReferencia}
-                                  </span>
-                                </div>
-
-                                <div className="text-xs text-slate-600 font-medium">
-                                  Ciclo: <span className="text-slate-900 font-semibold">{percentualCicloFmt}</span>
-                                </div>
-                              </div>
-
-                              {/* Item 3: Grade do Posto (Heatmap) */}
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-xs border-collapse">
-                                  <thead>
-                                    <tr className="bg-slate-50/80 text-slate-600 border-b border-slate-200">
-                                      {/* Coluna 1 Fixa: Posição */}
-                                      <th className="p-1.5 text-left sticky left-0 bg-slate-50 border-r border-slate-200 z-20 min-w-[130px] max-w-[150px]">
-                                        <div className="font-semibold text-slate-800 text-xs">Posição</div>
-                                        <div className="text-[9px] text-slate-500 font-normal leading-tight mt-0.5">
-                                          ↓ % Cumprimento diário
-                                        </div>
-                                      </th>
-                                      {/* Colunas: Dias do Ciclo */}
-                                      {diasExibidosCiclo.map((d) => {
-                                        const isDiaRef = dataInicioFiltro === dataFimFiltro && d.dataStr === dataInicioFiltro;
-                                        const isViradaMes = d.diaNumero === 1;
-
-                                        let headerClass =
-                                          "p-1 text-center border-r border-slate-100 min-w-[30px] w-7.5";
-                                        if (isViradaMes) {
-                                          headerClass += " border-l-2 border-l-slate-300";
-                                        }
-                                        if (isDiaRef) {
-                                          headerClass +=
-                                            " ring-1 ring-[#1F4FD1] bg-blue-50/50 text-[#1F4FD1] font-bold";
-                                        } else if (d.isFimDeSemana) {
-                                          headerClass += " bg-slate-100/70 text-slate-500";
-                                        } else {
-                                          headerClass += " bg-slate-50/80 text-slate-600";
-                                        }
-
-                                        const diaDetalhe = apuracaoCiclo?.dias?.find(
-                                          (ad) => ((ad as any).dataStr || ad.data) === d.dataStr
-                                        );
-                                        const posExig = diaDetalhe?.posicoesExigiveis ?? 0;
-                                        const posAtendidas = diaDetalhe?.posicoesAtendidas ?? 0;
-                                        const percDia = diaDetalhe?.percentualCobertura ?? null;
-                                        const percDiaFmt = diaDetalhe?.percentualCoberturaFormatado ?? "–";
-                                        const todosSemDado =
-                                          posExig > 0 &&
-                                          posAtendidas === 0 &&
-                                          diaDetalhe?.vagasDetalhe &&
-                                          diaDetalhe.vagasDetalhe.length > 0 &&
-                                          diaDetalhe.vagasDetalhe.every(
-                                            (vd: any) =>
-                                              vd.status === "SEM_DADO" ||
-                                              vd.status === "FOLGA" ||
-                                              vd.status === "NAO_EXIGIVEL" ||
-                                              vd.status === "PENDENTE"
-                                          );
-
-                                        return (
-                                          <th
-                                            key={d.dataStr}
-                                            className={headerClass}
-                                            title={`Dia ${String(d.diaNumero).padStart(2, "0")}/${String(d.mes).padStart(2, "0")} (${d.diaSemana})${d.isHoje ? " • Hoje" : ""}${isDiaRef ? " • Dia de Referência" : ""}\nCumprimento no dia: ${posExig > 0 ? (todosSemDado ? "Sem dado de ponto importado" : `${posAtendidas}/${posExig} atendidas (${percDiaFmt})`) : "Sem exigência (Folga)"}`}
-                                          >
-                                            <div className="text-[10px] leading-tight font-medium">{d.diaNumero}</div>
-                                            <div className="text-[8px] opacity-75 font-normal leading-tight">
-                                              {d.diaSemana}
-                                            </div>
-                                            <div
-                                              className={`text-[8.5px] leading-tight mt-0.5 tracking-tight ${
-                                                posExig === 0
-                                                  ? "text-slate-300 font-normal"
-                                                  : todosSemDado
-                                                  ? "text-slate-400 font-normal"
-                                                  : percDia === 100
-                                                  ? "text-emerald-700 font-bold"
-                                                  : percDia && percDia > 0
-                                                  ? "text-amber-700 font-bold"
-                                                  : "text-rose-700 font-bold"
-                                              }`}
-                                            >
-                                              {posExig === 0 ? "—" : todosSemDado ? "–" : percDiaFmt}
-                                            </div>
-                                          </th>
-                                        );
-                                      })}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {posicoesFiltradas.map((vaga) => {
-                                      const codigoVisual = obterCodigoVisualPosicao(vaga, posto);
-                                      const ehAValidar = ehPosicaoAValidar(vaga);
-                                      const alocRef = obterAlocacaoVigenteVaga(
-                                        vaga.id,
-                                        alocacoes,
-                                        diaReferenciaStr
-                                      );
-                                      const horarioEscala = obterHorarioEEscalaAbreviados(
-                                        vaga,
-                                        posto,
-                                        alocRef
-                                      );
-
-                                      return (
-                                        <tr
-                                          key={vaga.id}
-                                          className="hover:bg-slate-50/50 transition-colors border-b border-slate-100"
-                                        >
-                                          {/* Coluna 1 Fixa: Posição (sem nome do colaborador na linha) */}
-                                          <td
-                                            className="p-1.5 sticky left-0 bg-white border-r border-slate-200 z-10"
-                                            title={`Posição ${codigoVisual}\nOcupante: ${alocRef ? `${alocRef.nome} (${alocRef.matricula})` : "Sem titular alocado"}`}
-                                          >
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="font-mono font-semibold text-xs text-slate-800">
-                                                {codigoVisual}
-                                              </span>
-                                              {ehAValidar && (
-                                                <span title="Posição com premissa a validar">
-                                                  <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
-                                                </span>
-                                              )}
-                                              <span
-                                                className="text-[10px] text-slate-400 truncate max-w-[80px]"
-                                                title={horarioEscala}
-                                              >
-                                                {horarioEscala}
-                                              </span>
-                                            </div>
-                                          </td>
-
-                                          {/* Células do Heatmap */}
-                                          {diasExibidosCiclo.map((d) => {
-                                            const diaDetalhe = apuracaoCiclo?.dias?.find((ad) => ((ad as any).dataStr || ad.data) === d.dataStr);
-                                            const statusVaga = diaDetalhe?.vagasDetalhe?.find(
-                                              (vd: OcupacaoVagaDia) =>
-                                                vd.vagaId === vaga.id || vd.posicaoId === vaga.id
-                                            );
-                                            const statusStr = statusVaga?.status || "FOLGA";
-                                            const estilo = getEstiloCelulaHeatmap(statusStr);
-                                            const isViradaMes = d.diaNumero === 1;
-                                            const isDiaRef = dataInicioFiltro === dataFimFiltro && d.dataStr === dataInicioFiltro;
-
-                                            let tdClass =
-                                              "p-[1px] text-center border-r border-slate-100 min-w-[30px] w-7.5";
-                                            if (isViradaMes) {
-                                              tdClass += " border-l-2 border-l-slate-300";
-                                            }
-                                            if (d.isFimDeSemana) {
-                                              tdClass += " bg-slate-50/50";
-                                            }
-                                            if (isDiaRef) {
-                                              tdClass += " bg-blue-50/20";
-                                            }
-
-                                            return (
-                                              <td
-                                                key={d.dataStr}
-                                                onClick={() => abrirInspecaoDia(vaga, posto, d.dataStr)}
-                                                onMouseEnter={(e) =>
-                                                  mostrarTooltipHover(
-                                                    e,
-                                                    vaga,
-                                                    posto,
-                                                    d,
-                                                    statusVaga,
-                                                    estilo,
-                                                    codigoVisual,
-                                                    alocRef
-                                                  )
-                                                }
-                                                onMouseLeave={esconderTooltipHover}
-                                                className={tdClass}
-                                                title={
-                                                  ativarTooltipHover
-                                                    ? undefined
-                                                    : `Posição ${codigoVisual} • ${d.dataStr} (${d.diaSemana})\nStatus: ${estilo.label} (${estilo.sigla})\n${statusVaga?.motivoPublico || ""}\nClique para ver detalhes`
-                                                }
-                                              >
-                                                <div
-                                                  className={`w-full h-5 rounded-[2px] flex items-center justify-center cursor-pointer transition-transform hover:scale-110 select-none text-[10px] leading-none ${estilo.classes} ${estilo.borda}`}
-                                                >
-                                                  {estilo.sigla}
-                                                </div>
-                                              </td>
-                                            );
-                                          })}
-                                        </tr>
-                                      );
-                                    })}
-
-                                    {/* Item 3: Barra fina de cor e percentual diário no rodapé do posto para postos com mais de 1 posição */}
-                                    {vgs.length > 1 && (
-                                      <tr className="bg-slate-50/60 border-t border-slate-200">
-                                        <td className="p-1 sticky left-0 bg-slate-50 border-r border-slate-200 z-10 text-[10px] font-medium text-slate-600">
-                                          <div className="flex items-center justify-between pr-1">
-                                            <span>% Total do Posto</span>
-                                            <span className="font-mono text-[9px] text-slate-400 font-normal">dia</span>
-                                          </div>
-                                        </td>
-                                        {diasExibidosCiclo.map((d) => {
-                                          const apuracaoDia = apuracaoCiclo?.dias?.find((ad) => ((ad as any).dataStr || ad.data) === d.dataStr);
-                                          const percentual = apuracaoDia?.percentualCobertura ?? null;
-                                          const posExig = apuracaoDia?.posicoesExigiveis ?? 0;
-                                          const posAtendidas = apuracaoDia?.posicoesAtendidas ?? 0;
-                                          const isViradaMes = d.diaNumero === 1;
-
-                                          const todosSemDado =
-                                            posExig > 0 &&
-                                            posAtendidas === 0 &&
-                                            apuracaoDia?.vagasDetalhe &&
-                                            apuracaoDia.vagasDetalhe.length > 0 &&
-                                            apuracaoDia.vagasDetalhe.every(
-                                              (vd: any) =>
-                                                vd.status === "SEM_DADO" ||
-                                                vd.status === "FOLGA" ||
-                                                vd.status === "NAO_EXIGIVEL" ||
-                                                vd.status === "PENDENTE"
-                                            );
-
-                                          let barColor = "bg-transparent";
-                                          let textColor = "text-slate-300";
-                                          let desc = "Sem exigência";
-                                          if (posExig > 0 && percentual !== null) {
-                                            if (todosSemDado) {
-                                              barColor = "bg-slate-200";
-                                              textColor = "text-slate-400 font-normal";
-                                              desc = "Sem dado importado";
-                                            } else if (percentual === 100) {
-                                              barColor = "bg-emerald-500";
-                                              textColor = "text-emerald-700 font-bold";
-                                              desc = "100% atendido";
-                                            } else if (percentual > 0) {
-                                              barColor = "bg-amber-400";
-                                              textColor = "text-amber-700 font-bold";
-                                              desc = `${percentual}% atendido`;
-                                            } else {
-                                              barColor = "bg-[#B42318]";
-                                              textColor = "text-rose-700 font-bold";
-                                              desc = "0% atendido (descoberto)";
-                                            }
-                                          }
-
-                                          let tdClass =
-                                            "p-[1px] text-center border-r border-slate-100 min-w-[30px] w-7.5";
-                                          if (isViradaMes) tdClass += " border-l-2 border-l-slate-300";
-
-                                          return (
-                                            <td
-                                              key={d.dataStr}
-                                              className={tdClass}
-                                              title={`Cumprimento do posto em ${d.dataStr}: ${desc} (${posAtendidas}/${posExig} posições)`}
-                                            >
-                                              <div className="flex flex-col items-center justify-center py-0.5">
-                                                <div className={`w-full h-1 rounded-[1px] ${barColor}`} />
-                                                <span className={`text-[8.5px] leading-tight mt-0.5 tracking-tight ${textColor}`}>
-                                                  {posExig === 0 ? "—" : todosSemDado ? "–" : `${percentual !== null ? `${percentual}%` : "—"}`}
-                                                </span>
-                                              </div>
-                                            </td>
-                                          );
-                                        })}
-                                      </tr>
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          );
+                          return renderCartaoPosto(posto, posicoesFiltradas);
                         });
                       })()}
                     </div>
@@ -2569,482 +3017,118 @@ export default function MapaOcupacaoPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* 5. VISÃO A: POR POSTO EM ÁRVORE (Passo 7) */}
+      {/* 5. VISÃO POR ITEM DA PPU (item → postos de todas as unidades → matriz do ciclo) */}
       {/* ========================================================================= */}
-      {abaVisao === "ARVORE" && (
+      {abaVisao === "PPU" && (
         <div className="space-y-3">
-          {gruposPorBase.length === 0 ? (
+          {/* Sub-barra no mesmo padrão da Grade */}
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 px-1 py-0.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-slate-500 text-[11px]">
+                {gruposPorItemPpu.length} itens da PPU · {postosFiltrados.length} postos · {metricasCards.totalPosicoes} posições
+              </span>
+              <div className="flex items-center gap-1.5 pl-2 border-l border-slate-300">
+                <label
+                  className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] text-slate-700 hover:text-slate-900 font-medium"
+                  title="Ao passar o mouse sobre um dia, mostra quem cumpriu o posto, ocorrências e coberturas"
+                >
+                  <input
+                    type="checkbox"
+                    checked={ativarTooltipHover}
+                    onChange={(e) => setAtivarTooltipHover(e.target.checked)}
+                    className="rounded text-[#1F4FD1] focus:ring-[#1F4FD1] w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>Detalhes do dia ao passar o mouse</span>
+                </label>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-[11px]">
+              <button
+                onClick={() => setItensPpuExpandidos(new Set(gruposPorItemPpu.map((g) => g.codigo)))}
+                className="text-[#1F4FD1] hover:underline cursor-pointer font-medium"
+              >
+                Expandir todos
+              </button>
+              <span className="text-slate-300">·</span>
+              <button
+                onClick={() => {
+                  setItensPpuExpandidos(new Set());
+                  setPostosExpandidos(new Set());
+                }}
+                className="text-slate-500 hover:underline cursor-pointer"
+              >
+                Recolher todos
+              </button>
+            </div>
+          </div>
+
+          {gruposPorItemPpu.length === 0 ? (
             <div className="bg-white p-8 rounded-lg border border-slate-200 text-center text-slate-500">
               <AlertCircle className="w-8 h-8 text-slate-400 mx-auto mb-2" />
               <div className="font-semibold text-sm">Nenhum posto encontrado para os filtros selecionados.</div>
               <p className="text-xs text-slate-400 mt-1">Ajuste os filtros de busca ou selecione outra base.</p>
             </div>
           ) : (
-            gruposPorBase.map(([baseNome, postosDaBase]) => {
-              const baseAberta = basesExpandidas.has(baseNome);
+            gruposPorItemPpu.map((grupo) => {
+              const aberto = itensPpuExpandidos.has(grupo.codigo);
+              const postosVisiveis = grupo.postos
+                .map((p) => ({ posto: p, posicoes: obterPosicoesVisiveis(p, obterVagasDoPosto(p, vagasPorPosto)) }))
+                .filter((x) => x.posicoes.length > 0 || (!mostrarApenasExcecoes && !filtroApenasDescobertos));
 
               return (
-                <div key={baseNome} className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
-                  {/* Cabeçalho da Base Operacional */}
+                <div key={grupo.codigo} className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-2xs">
+                  {/* Linha do Item PPU (Acordeão) — mesmo padrão da linha de unidade da Grade */}
                   <button
-                    onClick={() => toggleBase(baseNome)}
-                    className="w-full flex items-center justify-between p-3.5 bg-slate-50/80 hover:bg-slate-100/80 border-b border-slate-200 transition-colors text-left cursor-pointer"
+                    onClick={() =>
+                      setItensPpuExpandidos((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(grupo.codigo)) next.delete(grupo.codigo);
+                        else next.add(grupo.codigo);
+                        return next;
+                      })
+                    }
+                    aria-expanded={aberto}
+                    className="w-full flex items-center justify-between gap-3 p-3 bg-white hover:bg-slate-50 border-b border-slate-100 transition-colors text-left cursor-pointer"
                   >
-                    <div className="flex items-center gap-2.5">
-                      {baseAberta ? (
-                        <ChevronDown className="w-4 h-4 text-slate-600 shrink-0" />
+                    <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+                      {aberto ? (
+                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                       ) : (
-                        <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
+                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                       )}
-                      <Building2 className="w-4 h-4 text-premier-900 shrink-0" />
-                      <span className="font-bold text-slate-900 text-sm">{baseNome}</span>
-                      <span className="text-xs text-slate-500 font-normal">
-                        ({postosDaBase.length} {postosDaBase.length === 1 ? "posto" : "postos"})
+                      <span className="font-mono font-semibold text-slate-900 text-sm w-10">{grupo.codigo}</span>
+                      <span className="font-semibold text-slate-900 text-sm">{grupo.descricao}</span>
+                      <span className="text-xs text-slate-400 font-normal">
+                        · {grupo.totalPostos} {grupo.totalPostos === 1 ? "posto" : "postos"} · {grupo.totalPosicoes}{" "}
+                        {grupo.totalPosicoes === 1 ? "posição" : "posições"} · {grupo.totalBases}{" "}
+                        {grupo.totalBases === 1 ? "unidade" : "unidades"}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="hidden sm:inline-block text-[11px] text-slate-500">
-                        Status em {diaReferenciaStr.split("-").reverse().join("/")}:
-                      </span>
-                      {(() => {
-                        const comp = postosDaBase.filter(
-                          (p) => statusNoDiaRefPorPosto.get(p.idPosto || p.id)?.statusAgregado === "COMPLETO"
-                        ).length;
-                        const parc = postosDaBase.filter(
-                          (p) => statusNoDiaRefPorPosto.get(p.idPosto || p.id)?.statusAgregado === "PARCIAL"
-                        ).length;
-                        const desc = postosDaBase.filter(
-                          (p) => statusNoDiaRefPorPosto.get(p.idPosto || p.id)?.statusAgregado === "DESCOBERTO"
-                        ).length;
-
-                        return (
-                          <div className="flex items-center gap-1.5 font-mono text-[11px]">
-                            {comp > 0 && <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-semibold">{comp} C</span>}
-                            {parc > 0 && <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-semibold">{parc} P</span>}
-                            {desc > 0 && <span className="text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 font-semibold">{desc} D</span>}
-                          </div>
-                        );
-                      })()}
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-xs text-slate-600 font-medium">{grupo.taxaOcupacao}% ocupação</span>
+                      {grupo.totalDiasD > 0 && (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                          {grupo.totalDiasD} {grupo.totalDiasD === 1 ? "dia descoberto" : "dias descobertos"}
+                        </span>
+                      )}
                     </div>
                   </button>
 
-                  {/* Conteúdo da Base: Lista de Postos */}
-                  {baseAberta && (
-                    <div className="divide-y divide-slate-200">
-                      {postosDaBase.map((posto) => {
-                        const idPostoChave = posto.idPosto || posto.id;
-                        const idReferencia = posto.idReferencia || posto.idPosto || posto.id;
-                        const postoAberto = postosExpandidos.has(idPostoChave);
-                        const statusDiaPosto = statusNoDiaRefPorPosto.get(idPostoChave);
-                        const statusAgregado = statusDiaPosto?.statusAgregado || "COMPLETO";
-                        const vgs = obterVagasDoPosto(posto, vagasPorPosto);
-                        const tipoPostoObj = obterTipoPosto(posto.tipoPostoId);
-                        const tipoPostoNome = tipoPostoObj ? tipoPostoObj.nome : posto.tipoPostoId || "Adm/09h";
-                        const vagasExigidas = tipoPostoObj ? tipoPostoObj.vagas : vgs.length || 1;
-
-                        return (
-                          <div key={idPostoChave} className="bg-white">
-                            {/* Linha do Posto */}
-                            <div
-                              onClick={() => togglePosto(idPostoChave)}
-                              className={`p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50/60 cursor-pointer transition-colors ${
-                                postoAberto ? "bg-slate-50/50" : ""
-                              }`}
-                            >
-                              <div className="flex items-start sm:items-center gap-3">
-                                {postoAberto ? (
-                                  <ChevronDown className="w-4 h-4 text-slate-500 shrink-0 mt-0.5 sm:mt-0" />
-                                ) : (
-                                  <ChevronRight className="w-4 h-4 text-slate-500 shrink-0 mt-0.5 sm:mt-0" />
-                                )}
-
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 shrink-0">
-                                  <span className="font-mono font-bold text-xs bg-slate-900 text-white px-2.5 py-1 rounded-md shadow-2xs">
-                                    {posto.postoIdSGP || idPostoChave}
-                                  </span>
-                                  <span className="font-mono font-semibold text-xs bg-slate-100 text-slate-800 border border-slate-300 px-2 py-0.5 rounded-md">
-                                    ID Luiz: {posto.postoBase || idReferencia}
-                                  </span>
-                                </div>
-
-                                <div>
-                                  <div className="font-bold text-slate-900 text-xs sm:text-sm">
-                                    {posto.funcao}
-                                  </div>
-                                  <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
-                                    <span>Gerência: <strong className="text-slate-700">{posto.gerenciaPetrobras || "NÃO INFORMADA"}</strong></span>
-                                    <span>•</span>
-                                    <span>Regime: <strong className="text-slate-700">{tipoPostoNome}</strong></span>
-                                    <span>•</span>
-                                    <span className="font-semibold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded">
-                                      {vgs.length} {vgs.length === 1 ? "posição estrutural" : "posições estruturais"}
-                                    </span>
-                                    {apuracaoCicloPorPosto.get(idPostoChave)?.percentualCicloFormatado && (
-                                      <>
-                                        <span>•</span>
-                                        <span>Cumprimento: <strong className="font-mono text-slate-700 font-medium">{apuracaoCicloPorPosto.get(idPostoChave)?.percentualCicloFormatado}</strong></span>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-2 self-start sm:self-center">
-                                {statusAgregado === "COMPLETO" && (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                    <span>COMPLETO</span>
-                                  </span>
-                                )}
-                                {statusAgregado === "PARCIAL" && (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300">
-                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                                    <span>PARCIAL</span>
-                                  </span>
-                                )}
-                                {statusAgregado === "DESCOBERTO" && (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-800 border border-rose-300">
-                                    <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-                                    <span>DESCOBERTO</span>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Os blocos da árvore: Feristas do Posto + Posições */}
-                            {postoAberto && (
-                              <div className="p-3 sm:p-4 bg-slate-50/40 border-t border-slate-200/80 space-y-3 pl-6 sm:pl-10">
-                                {/* SEÇÃO FERISTAS DE COBERTURA VINCULADOS AO POSTO (Aba 07 — Nível do Posto) */}
-                                {(() => {
-                                  const idPostoParaFerista = posto.postoIdSGP || idPostoChave;
-                                  const feristasDestePosto = FERISTAS_REV04.filter(
-                                    (f) => f.postoIdSGP === idPostoParaFerista || f.postoIdSGP === posto.id || f.postoIdSGP === posto.idPosto
-                                  );
-                                  if (feristasDestePosto.length === 0) return null;
-                                  return (
-                                    <div className="bg-indigo-50/80 border border-indigo-200 rounded-lg p-3 space-y-2 shadow-2xs">
-                                      <div className="flex flex-wrap items-center justify-between gap-1 border-b border-indigo-200/60 pb-1.5">
-                                        <div className="flex items-center gap-2 text-xs font-bold text-indigo-950 uppercase tracking-wide">
-                                          <Users className="w-4 h-4 text-indigo-700" />
-                                          <span>Feristas de Cobertura Vinculados ao Posto ({feristasDestePosto.length})</span>
-                                        </div>
-                                        <span className="text-[10px] text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded font-medium border border-indigo-200">
-                                          Recurso de cobertura (não cria posição no posto)
-                                        </span>
-                                      </div>
-                                      <div className="flex flex-wrap gap-2 pt-1">
-                                        {feristasDestePosto.map((f) => (
-                                          <div
-                                            key={f.feristaIdSGP}
-                                            className="flex items-center gap-2 bg-white border border-indigo-200 px-2.5 py-1.5 rounded-md text-xs shadow-2xs"
-                                          >
-                                            <span className="font-bold text-indigo-950">{f.colaborador}</span>
-                                            {f.chapaRM && (
-                                              <span className="font-mono text-indigo-600 text-[11px]">
-                                                (Chapa {f.chapaRM})
-                                              </span>
-                                            )}
-                                            <span className="text-[10px] bg-slate-100 text-slate-600 font-mono px-1.5 py-0.5 rounded">
-                                              {f.feristaIdSGP}
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  );
-                                })()}
-
-                                {/* BLOCO A) QUEM OCUPA: Posições estruturais com status, titular/substituto/vaga, regime, horário e alertas */}
-                                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs space-y-2">
-                                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase tracking-wider">
-                                      <UserCheck className="w-4 h-4 text-emerald-600" />
-                                      <span>Posições Estruturais & Ocupação ({vgs.length} {vgs.length === 1 ? "Posição" : "Posições"})</span>
-                                    </div>
-                                    <span className="text-[11px] text-slate-400">
-                                      Apuração em {diaReferenciaStr.split("-").reverse().join("/")}
-                                    </span>
-                                  </div>
-
-                                  <div className="divide-y divide-slate-100">
-                                    {vgs.map((vaga) => {
-                                      const codigoVisual = (vaga as any).codigoPosicaoEstrutural || vaga.etiqueta || vaga.codigoVisual || obterCodigoVisualPosicao(vaga, posto);
-                                      const ehVagaReal = Boolean((vaga as any).ehVaga || (vaga as any).posicaoSemTitularMC === "SIM");
-                                      const ehAValidar = ehPosicaoAValidar(vaga) || (vaga as any).statusMapeamento === "A VALIDAR MAPEAMENTO";
-                                      const alocVigente = obterAlocacaoVigenteVaga(vaga.id, alocacoes, diaReferenciaStr);
-                                      const statusVagaDia = calcularStatusVagaDia(
-                                        vaga,
-                                        posto,
-                                        diaReferenciaStr,
-                                        alocacoes,
-                                        ocorrencias,
-                                        coberturas,
-                                        apontamentos,
-                                        marcacoesSet,
-                                        dataRefLote || "2026-09-15"
-                                      );
-
-                                      const coberturaVaga = coberturas.find((c) =>
-                                        isCoberturaAtivaParaPosicao(c, diaReferenciaStr, posto, vaga, alocVigente?.matricula)
-                                      );
-
-                                      const alocDet = (alocVigente as any)?.alocacaoDetalhe;
-                                      const alertaSemChapa = Boolean(alocDet?.alertaSemChapaRM || (!ehVagaReal && alocVigente && !alocVigente.matricula));
-                                      const alertaUnidadeDivergente = Boolean(alocDet?.alertaUnidadeDivergente || (alocVigente as any)?.unidadeConfere === "REVISAR");
-                                      const alertaMapeamentoAValidar = Boolean(alocDet?.alertaMapeamentoAValidar || ehAValidar || (vaga as any).statusMapeamentoREV03 === "A VALIDAR MAPEAMENTO");
-                                      const chapaAloc = alocVigente?.matricula || (vaga as any).chapaTitular;
-                                      const profAloc = chapaAloc ? mapaProfissionaisPorChapa.get(chapaAloc.trim()) : null;
-                                      const horarioFormatado = formatarHorarioExibicao(
-                                        profAloc?.horarioCodigo,
-                                        profAloc?.horarioDescricao || vaga.horario_rm || (vaga as any).horario || alocVigente?.horarioEscalaRm || posto.escala
-                                      );
-                                      const secaoFormatada = formatarSecaoExibicao(
-                                        profAloc?.secaoCodigo,
-                                        profAloc?.secaoDescricao
-                                      );
-                                      const horarioRMTexto = horarioFormatado;
-
-                                      const ehSubstituto = alocVigente?.motivo === "substituicao" || (alocVigente as any)?.tipoAlocacao?.includes("SUBSTITUT");
-
-                                      return (
-                                        <div key={vaga.id} className="py-2.5 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
-                                          <div className="flex flex-wrap items-center gap-2">
-                                            {/* Posição (Codigo_Posicao_Estrutural) */}
-                                            <span className="font-mono font-bold text-xs bg-blue-50 text-blue-900 border border-blue-200 px-2 py-0.5 rounded shrink-0">
-                                              Posição {codigoVisual}
-                                            </span>
-
-                                            {/* Quem Ocupa: Titular, Substituto ou VAGA */}
-                                            {ehVagaReal || !alocVigente ? (
-                                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded font-bold text-xs bg-amber-100 text-amber-900 border border-amber-300">
-                                                <UserX className="w-3.5 h-3.5 text-amber-700" />
-                                                VAGA / SEM TITULAR
-                                              </span>
-                                            ) : ehSubstituto ? (
-                                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded font-semibold text-xs bg-sky-100 text-sky-900 border border-sky-300">
-                                                <Users className="w-3.5 h-3.5 text-sky-700" />
-                                                SUBSTITUTO: {alocVigente.nome} {alocVigente.matricula ? `(${alocVigente.matricula})` : ""}
-                                              </span>
-                                            ) : (
-                                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded font-medium text-xs bg-emerald-50 text-emerald-950 border border-emerald-200">
-                                                <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
-                                                TITULAR: <strong>{alocVigente.nome}</strong> {alocVigente.matricula ? <span className="font-mono text-emerald-700 text-[11px]">({alocVigente.matricula})</span> : ""}
-                                              </span>
-                                            )}
-
-                                            {/* Tipo de Posto */}
-                                            <span className="text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 font-medium">
-                                              {tipoPostoNome}
-                                            </span>
-
-                                            {/* Escala / Horário RM */}
-                                            {/* Horário RM */}
-                                            <span className="text-[11px] font-mono text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 truncate max-w-[280px]" title={`Horário: ${horarioFormatado}`}>
-                                              🕒 {horarioFormatado}
-                                            </span>
-
-                                            {/* Seção RM */}
-                                            {secaoFormatada && secaoFormatada !== "–" && (
-                                              <span className="text-[11px] font-mono text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 truncate max-w-[240px]" title={`Seção: ${secaoFormatada}`}>
-                                                🏢 {secaoFormatada}
-                                              </span>
-                                            )}
-
-                                            {/* Alertas de Exceções (Regra 6) */}
-                                            {alertaSemChapa && (
-                                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-800 bg-rose-50 border border-rose-300 px-2 py-0.5 rounded">
-                                                <AlertCircle className="w-3 h-3 text-rose-600" />
-                                                Não localizado no RM
-                                              </span>
-                                            )}
-                                            {alertaUnidadeDivergente && (
-                                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded">
-                                                <AlertTriangle className="w-3 h-3 text-amber-600" />
-                                                Unidade RM divergente
-                                              </span>
-                                            )}
-                                            {alertaMapeamentoAValidar && (
-                                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-800 bg-purple-50 border border-purple-300 px-2 py-0.5 rounded">
-                                                <AlertTriangle className="w-3 h-3 text-purple-600" />
-                                                Mapeamento a validar
-                                              </span>
-                                            )}
-                                          </div>
-
-                                          <div className="flex items-center gap-2 self-start lg:self-center shrink-0">
-                                            {coberturaVaga && (
-                                              <span
-                                                className="text-[11px] font-medium bg-sky-50 text-sky-900 border border-sky-200 px-2 py-0.5 rounded cursor-help"
-                                                title={`Substituto: ${coberturaVaga.substitutoNome} (${coberturaVaga.substitutoMatricula}) • Período: ${coberturaVaga.dataInicio.split("-").reverse().slice(0, 2).join("/")} a ${coberturaVaga.dataFim.split("-").reverse().slice(0, 2).join("/")}`}
-                                              >
-                                                Substituição ativa • {coberturaVaga.dataInicio.split("-").reverse().slice(0, 2).join("/")} a {coberturaVaga.dataFim.split("-").reverse().slice(0, 2).join("/")}
-                                              </span>
-                                            )}
-
-                                            <BadgeStatus status={statusVagaDia.statusVaga} tamanho="sm" />
-
-                                            
-
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                const historico = obterHistoricoAlocacoesVaga(vaga.id, alocacoes);
-                                                setModalHistorico({
-                                                  vaga,
-                                                  posto,
-                                                  alocacoes: historico,
-                                                });
-                                              }}
-                                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900 bg-blue-50/60 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded transition-colors cursor-pointer"
-                                              title="Ver histórico de alocações da vaga"
-                                            >
-                                              <History className="w-3 h-3 text-blue-600" />
-                                              <span>Histórico</span>
-                                            </button>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                {/* BLOCO B) TIPO DE POSTO */}
-                                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs space-y-2">
-                                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
-                                    <Briefcase className="w-4 h-4 text-blue-600" />
-                                    <span>Tipo de Posto & Parâmetros Contratuais</span>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                                    <div className="bg-slate-50 p-2.5 rounded border border-slate-200">
-                                      <span className="text-[10px] text-slate-500 uppercase block font-semibold">Tipo do Posto</span>
-                                      <span className="font-bold text-slate-900 text-xs sm:text-sm mt-0.5 block">{tipoPostoNome}</span>
-                                    </div>
-
-                                    <div className="bg-slate-50 p-2.5 rounded border border-slate-200">
-                                      <span className="text-[10px] text-slate-500 uppercase block font-semibold">Item PPU</span>
-                                      <span className="font-bold text-slate-900 text-xs sm:text-sm mt-0.5 block">{posto.itemPPU || "3.6"}</span>
-                                    </div>
-
-                                    <div className="bg-slate-50 p-2.5 rounded border border-slate-200">
-                                      <span className="text-[10px] text-slate-500 uppercase block font-semibold">Vagas Exigidas</span>
-                                      <span className="font-bold text-slate-900 text-xs sm:text-sm mt-0.5 block">{vagasExigidas} {vagasExigidas === 1 ? "vaga" : "vagas"}</span>
-                                    </div>
-
-                                    <div className="bg-slate-50 p-2.5 rounded border border-slate-200">
-                                      <span className="text-[10px] text-slate-500 uppercase block font-semibold">Periculosidade</span>
-                                      <span
-                                        className={`inline-block font-bold text-xs px-2 py-0.5 rounded mt-0.5 ${
-                                          posto.periculosidade === "SIM"
-                                            ? "bg-amber-100 text-amber-800 border border-amber-300"
-                                            : "bg-slate-100 text-slate-700 border border-slate-200"
-                                        }`}
-                                      >
-                                        {posto.periculosidade || "NÃO"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* BLOCO C) ESCALA: posições pelo código visual, sem nome do colaborador */}
-                                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs space-y-3">
-                                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 uppercase tracking-wider">
-                                      <Clock className="w-4 h-4 text-purple-600" />
-                                      <span>Escala, Horário & Matriz do Ciclo (Dia 10 ao 09)</span>
-                                    </div>
-                                    <span className="text-[11px] text-slate-400">Clique na célula para inspecionar</span>
-                                  </div>
-
-                                  <div className="space-y-2.5">
-                                    {vgs.map((vaga) => {
-                                      const codigoVisual = obterCodigoVisualPosicao(vaga, posto);
-                                      const ehAValidar = ehPosicaoAValidar(vaga);
-                                      const alocVigente = obterAlocacaoVigenteVaga(vaga.id, alocacoes, diaReferenciaStr);
-                                      const horarioEEscala = obterHorarioEEscalaAbreviados(vaga, posto, alocVigente);
-
-                                      return (
-                                        <div key={vaga.id} className="p-2.5 bg-slate-50/70 rounded-lg border border-slate-200/80 space-y-1.5">
-                                          <div className="flex flex-wrap items-center justify-between text-xs">
-                                            <div className="flex items-center gap-2" title={alocVigente ? `Ocupante: ${alocVigente.nome} (${alocVigente.matricula})` : "Posição sem titular"}>
-                                              <span className="font-mono font-bold text-blue-900 bg-white border border-blue-200 px-1.5 py-0.5 rounded text-[11px]">
-                                                Posição {codigoVisual}
-                                              </span>
-                                              {ehAValidar && (
-                                                <span title="Posição A VALIDAR"><AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" /></span>
-                                              )}
-                                              <span className="text-[11px] text-slate-600 font-medium">
-                                                {horarioEEscala}
-                                              </span>
-                                            </div>
-                                          </div>
-
-                                          <div className="overflow-x-auto pb-1 pt-0.5">
-                                            <div className="flex items-center gap-1 min-w-max">
-                                              {diasCiclo.map((d) => {
-                                                const apuracao = calcularStatusVagaDia(
-                                                  vaga,
-                                                  posto,
-                                                  d.dataStr,
-                                                  alocacoes,
-                                                  ocorrencias,
-                                                  coberturas,
-                                                  apontamentos,
-                                                  marcacoesSet,
-                                                  dataRefLote || "2026-09-15"
-                                                );
-
-                                                const estilo = getCelulaEstiloPosicao(apuracao.status);
-                                                const ehDiaSelecionado = d.dataStr === diaReferenciaStr;
-
-                                                return (
-                                                  <button
-                                                    key={d.dataStr}
-                                                    onClick={() => abrirInspecaoDia(vaga, posto, d.dataStr)}
-                                                    onMouseEnter={(e) =>
-                                                      mostrarTooltipHover(
-                                                        e,
-                                                        vaga,
-                                                        posto,
-                                                        d,
-                                                        apuracao,
-                                                        estilo,
-                                                        codigoVisual,
-                                                        alocVigente
-                                                      )
-                                                    }
-                                                    onMouseLeave={esconderTooltipHover}
-                                                    className={`w-7 h-8 flex flex-col items-center justify-center rounded border transition-all cursor-pointer ${
-                                                      estilo.classes
-                                                    } ${
-                                                      ehDiaSelecionado ? "ring-2 ring-blue-500 scale-105" : ""
-                                                    } ${
-                                                      d.isHoje ? "font-black" : ""
-                                                    }`}
-                                                    title={
-                                                      ativarTooltipHover
-                                                        ? undefined
-                                                        : `Posição ${codigoVisual} • Dia ${String(d.diaNumero).padStart(2, "0")}/${String(d.mes).padStart(2, "0")} (${d.diaSemana})\nStatus: ${estilo.label}\n${apuracao.motivoPublico}\nClique para ver evidências`
-                                                    }
-                                                  >
-                                                    <span className="text-[11px] leading-none font-bold">{estilo.sigla}</span>
-                                                    <span className="text-[8px] opacity-75 leading-none mt-0.5">{d.diaNumero}</span>
-                                                  </button>
-                                                );
-                                              })}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                  {aberto && (
+                    <div className="p-3 space-y-4 bg-slate-50/40">
+                      {postosVisiveis.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-slate-500 bg-white rounded border border-slate-200">
+                          Nenhuma exceção neste item. Todas as posições estão regulares.
+                        </div>
+                      ) : (
+                        postosVisiveis.map(({ posto, posicoes }) =>
+                          renderCartaoPosto(posto, posicoes, {
+                            unidade: posto.localAtuacao || posto.baseOperacional || posto.unidadeNome,
+                          })
+                        )
+                      )}
                     </div>
                   )}
                 </div>
@@ -3945,6 +4029,20 @@ export default function MapaOcupacaoPage() {
                     </div>
                   )}
 
+                  {/* REGISTROS DE PONTO DO DIA (previsto × realizado) — oculto para Fiscal Petrobras (LGPD) */}
+                  {!ehFiscal ? (
+                    <RegistrosPontoDia
+                      pessoas={pessoasPontoDrawer}
+                      pessoaAtiva={pessoaPontoAtiva}
+                      onSelecionarPessoa={setPessoaPontoAtiva}
+                      onAbrirEspelho={abrirEspelhoPeriodo}
+                    />
+                  ) : (
+                    <div className="bg-slate-50 border border-slate-200 rounded p-2 text-[11px] text-slate-500 italic">
+                      Marcações individuais de ponto não são exibidas ao perfil Fiscal Petrobras (LGPD). Consulte a situação consolidada do posto.
+                    </div>
+                  )}
+
                   {/* Evidência Operacional */}
                   <div className="pt-1">
                     <span className="text-[10px] text-slate-500 uppercase font-semibold block">Evidência Operacional</span>
@@ -3972,6 +4070,31 @@ export default function MapaOcupacaoPage() {
           </div>
         );
       })()}
+
+      {/* 6.1 MODAL DO ESPELHO DE PONTO COMPLETO DO PERÍODO */}
+      {espelhoPeriodoAberto && espelhoPeriodo && (
+        <ModalEspelhoPeriodo
+          aberto
+          onFechar={() => setEspelhoPeriodoAberto(null)}
+          nome={espelhoPeriodoAberto.nome}
+          chapa={espelhoPeriodoAberto.chapa}
+          periodoTexto={
+            diasCiclo.length > 0
+              ? `Ciclo ${diasCiclo[0].dataStr.split("-").reverse().join("/")} a ${diasCiclo[diasCiclo.length - 1].dataStr.split("-").reverse().join("/")} • Posição ${drawerInspecao ? obterCodigoVisualPosicao(drawerInspecao.vaga, drawerInspecao.posto) : ""}`
+              : ""
+          }
+          dias={espelhoPeriodo.dias}
+          resumo={espelhoPeriodo.resumo}
+          statusPosto={(dt) => {
+            const st = espelhoPeriodo.statusPorData.get(dt);
+            return st ? getCelulaEstiloPosicao(st.status) : undefined;
+          }}
+          onSelecionarDia={(dt) => {
+            selecionarDiaDrawer(dt);
+            setEspelhoPeriodoAberto(null);
+          }}
+        />
+      )}
 
       {/* 7. MODAL DE HISTÓRICO DE ALOCAÇÕES DA POSIÇÃO */}
       {modalHistorico && (

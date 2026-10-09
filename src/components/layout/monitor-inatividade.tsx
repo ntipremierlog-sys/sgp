@@ -7,20 +7,37 @@ import { TIMEOUT_INATIVIDADE_MS } from "@/lib/auth/tipos";
 
 // Aviso exibido quando faltar 2 minutos para expirar por inatividade
 const AVISO_ANTECEDENCIA_MS = 2 * 60 * 1000;
+// Intervalo mínimo entre renovações da sessão no servidor durante atividade
+const RENOVACAO_SERVIDOR_MS = 4 * 60 * 1000;
 
 export function MonitorInatividade() {
   const router = useRouter();
   const [tempoRestanteSegundos, setTempoRestanteSegundos] = useState<number | null>(null);
   const [exibirModalAviso, setExibirModalAviso] = useState<boolean>(false);
   const ultimaAtividadeRef = useRef<number>(Date.now());
+  const ultimaRenovacaoRef = useRef<number>(Date.now());
+
+  const renovarNoServidor = useCallback((forcar = false) => {
+    if (!forcar && Date.now() - ultimaRenovacaoRef.current < RENOVACAO_SERVIDOR_MS) return;
+    ultimaRenovacaoRef.current = Date.now();
+    fetch("/api/auth", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && d.autenticado === false) router.push("/login?expirado=inatividade");
+      })
+      .catch(() => {
+        // rede indisponível: tenta novamente na próxima atividade
+      });
+  }, [router]);
 
   const registrarAtividade = useCallback(() => {
     ultimaAtividadeRef.current = Date.now();
+    renovarNoServidor();
     if (exibirModalAviso) {
       setExibirModalAviso(false);
       setTempoRestanteSegundos(null);
     }
-  }, [exibirModalAviso]);
+  }, [exibirModalAviso, renovarNoServidor]);
 
   useEffect(() => {
     const eventos: (keyof WindowEventMap)[] = [
@@ -58,7 +75,9 @@ export function MonitorInatividade() {
         } catch {
           // ignore
         }
-        router.push("/login?expirado=inatividade");
+        fetch("/api/auth", { method: "DELETE" }).finally(() => {
+          router.push("/login?expirado=inatividade");
+        });
       } else if (restante <= AVISO_ANTECEDENCIA_MS) {
         // Entrou na janela de aviso
         setExibirModalAviso(true);
@@ -79,13 +98,16 @@ export function MonitorInatividade() {
 
   const continuarSessao = () => {
     ultimaAtividadeRef.current = Date.now();
+    renovarNoServidor(true);
     setExibirModalAviso(false);
     setTempoRestanteSegundos(null);
   };
 
   const sairAgora = () => {
     setExibirModalAviso(false);
-    router.push("/login");
+    fetch("/api/auth", { method: "DELETE" }).finally(() => {
+      router.push("/login");
+    });
   };
 
   if (!exibirModalAviso) return null;

@@ -22,6 +22,8 @@ import {
   PendenciaPontoItem,
 } from "./ponto-tipos";
 export type { MarcacaoPontoOriginal } from "./ponto-tipos";
+import { calcularPeriodoCompetencia, competenciaDoInicioCiclo } from "@/lib/servicos/periodo-competencia";
+import { FERIADOS_NACIONAIS } from "./feriados-nacionais";
 
 import {
   TipoPosto,
@@ -247,6 +249,13 @@ export interface OcorrenciaOperacional {
     crm?: string;
   };
   criadoEm: string;
+  // Gestão contratual de ausências (ET 9.4.1 / 9.4.2)
+  /** Data (YYYY-MM-DD) do registro de consulta à fiscalização Petrobras (férias). */
+  data_consulta_petrobras?: string | null;
+  /** Substituição aprovada pela fiscalização (sim/não). */
+  substituicao_aprovada?: boolean | null;
+  /** Chapa RM do substituto designado. */
+  substituto_chapa?: string | null;
 }
 
 export interface CoberturaOperacional {
@@ -255,6 +264,8 @@ export interface CoberturaOperacional {
   idPosto?: string;
   vagaId?: string;
   funcaoPosto: string;
+  /** Item da PPU em que a cobertura é medida pela Petrobras (ex.: "3.6"). */
+  itemPpu?: string;
   titularMatricula?: string;
   titularNome?: string;
   substitutoMatricula: string;
@@ -531,6 +542,16 @@ export interface EstadoOperacionalCompleto {
   perfilAtivo: string;
   /** IDs de coberturas do seed excluídas pelo usuário (impede que sejam reinjetadas ao recarregar). */
   coberturasExcluidasIds?: string[];
+  /** Pessoas da última MC importada sem posição no SGP (lista "A alocar"). */
+  pessoasAAlocar?: Array<{
+    linha?: number;
+    identificador?: string;
+    colaborador: string;
+    local?: string;
+    funcao?: string;
+    itemPpu?: string;
+    motivo?: string;
+  }>;
   unidadeSelecionada: string;
 }
 
@@ -1103,16 +1124,8 @@ export interface FeriadoContratual {
 }
 
 export const FERIADOS_OFICIAIS_CONTRATO: FeriadoContratual[] = [
-  // 1. Feriados Nacionais
-  { data: "2026-01-01", nome: "Confraternização Universal", tipo: "NACIONAL" },
-  { data: "2026-04-21", nome: "Tiradentes", tipo: "NACIONAL" },
-  { data: "2026-05-01", nome: "Dia Mundial do Trabalho", tipo: "NACIONAL" },
-  { data: "2026-09-07", nome: "Independência do Brasil", tipo: "NACIONAL" },
-  { data: "2026-10-12", nome: "Nossa Senhora Aparecida", tipo: "NACIONAL" },
-  { data: "2026-11-02", nome: "Finados", tipo: "NACIONAL" },
-  { data: "2026-11-15", nome: "Proclamação da República", tipo: "NACIONAL" },
-  { data: "2026-11-20", nome: "Dia Nacional de Zumbi e da Consciência Negra", tipo: "NACIONAL" },
-  { data: "2026-12-25", nome: "Natal", tipo: "NACIONAL" },
+  // 1. Feriados Nacionais (fonte única: src/lib/dados/feriados-nacionais.ts)
+  ...FERIADOS_NACIONAIS,
 
   // 2. Feriados Estaduais e Municipais por Base / Município
   // UFN-III (Três Lagoas - MS)
@@ -1286,44 +1299,33 @@ export function obterDataMaxPontoBase(
  */
 export interface PeriodoAcompanhamentoCiclo {
   ano: number;
+  /** Mês de INÍCIO do ciclo (dia 10). Não confundir com a competência. */
   mesReferencia: number;
+  /** Competência oficial AAAA-MM (mês de FIM do ciclo, convenção da MC). */
+  competencia?: string;
   dataInicio: string; // YYYY-MM-10
   dataFim: string;    // YYYY-MM-09 do mês seguinte
   datas: string[];
 }
 
+/**
+ * ATENÇÃO: recebe o mês de INÍCIO do ciclo, não a competência.
+ *   obterPeriodoCicloPadrao(2026, 8) → 10/08/2026 a 09/09/2026 = competência "2026-09".
+ * A regra de datas é delegada à fonte única `calcularPeriodoCompetencia`
+ * (src/lib/servicos/periodo-competencia.ts), para nunca divergir da MC.
+ * @deprecated Prefira `obterPeriodoCompetencia("AAAA-MM")` / `calcularPeriodoCompetencia`.
+ */
 export function obterPeriodoCicloPadrao(ano: number, mes: number): PeriodoAcompanhamentoCiclo {
   const mesRef = mes >= 1 && mes <= 12 ? mes : mes + 1;
-  const mesInicioStr = String(mesRef).padStart(2, "0");
-  const dataInicio = `${ano}-${mesInicioStr}-10`;
-
-  let anoFim = ano;
-  let mesFim = mesRef + 1;
-  if (mesFim > 12) {
-    mesFim = 1;
-    anoFim = ano + 1;
-  }
-  const mesFimStr = String(mesFim).padStart(2, "0");
-  const dataFim = `${anoFim}-${mesFimStr}-09`;
-
-  const datas: string[] = [];
-  const dtAtual = new Date(ano, mesRef - 1, 10);
-  const dtFim = new Date(anoFim, mesFim - 1, 9);
-
-  while (dtAtual <= dtFim) {
-    const y = dtAtual.getFullYear();
-    const m = String(dtAtual.getMonth() + 1).padStart(2, "0");
-    const d = String(dtAtual.getDate()).padStart(2, "0");
-    datas.push(`${y}-${m}-${d}`);
-    dtAtual.setDate(dtAtual.getDate() + 1);
-  }
+  const periodo = calcularPeriodoCompetencia(competenciaDoInicioCiclo(ano, mesRef));
 
   return {
     ano,
     mesReferencia: mesRef,
-    dataInicio,
-    dataFim,
-    datas,
+    competencia: periodo.competencia,
+    dataInicio: periodo.dataInicio,
+    dataFim: periodo.dataFim,
+    datas: periodo.datas,
   };
 }
 
@@ -3211,16 +3213,30 @@ export function cancelarOcorrencia(id: string): boolean {
   return true;
 }
 
+/**
+ * Item da PPU do posto (REV04). Base da medição da cobertura pela Petrobras.
+ */
+export function obterItemPpuDoPosto(postoCodigo?: string | null): string | undefined {
+  const chave = String(postoCodigo || "").trim();
+  if (!chave) return undefined;
+  const posto = (POSTOS_REV04 as any[]).find(
+    (p) => p.postoIdSGP === chave || p.id === chave || p.idPosto === chave || p.codigoPosto === chave
+  );
+  const item = String(posto?.itemPPU ?? posto?.item_ppu ?? "").trim();
+  return item || undefined;
+}
+
 export function adicionarCobertura(cob: Omit<CoberturaOperacional, "id" | "criadoEm">): CoberturaOperacional {
   garantirPeriodoNaoCongelado(cob.dataInicio, cob.dataFim, "registrar a cobertura");
   const estado = carregarEstado();
   const novo: CoberturaOperacional = {
     ...cob,
+    itemPpu: String(cob.itemPpu || "").trim() || obterItemPpuDoPosto(cob.idPosto || cob.postoCodigo),
     id: `cob-${Date.now()}`,
     criadoEm: new Date().toISOString().replace("T", " ").substring(0, 16),
   };
   salvarEstado({ coberturas: [novo, ...estado.coberturas] });
-  registrarLog("CRIAR_COBERTURA", `Cobertura (${novo.postoCodigo})`, `Designado ${novo.substitutoNome} para posto ${novo.postoCodigo}`, {
+  registrarLog("CRIAR_COBERTURA", `Cobertura (${novo.postoCodigo})`, `Designado ${novo.substitutoNome} para posto ${novo.postoCodigo}${novo.itemPpu ? ` · item PPU ${novo.itemPpu}` : ""}`, {
     valorNovo: JSON.stringify(novo),
     registroId: novo.id,
   });
@@ -3329,6 +3345,8 @@ export function registrarCoberturaComValidacao(dados: {
   motivo: string;
   tipoCobertura?: CoberturaOperacional["tipoCobertura"];
   justificativaNaoVinculado?: string;
+  /** Item da PPU da cobertura. Se omitido, usa o item do posto. */
+  itemPpu?: string;
 }): { sucesso: boolean; cobertura?: CoberturaOperacional; erro?: string } {
   const { vinculado } = validarVinculoFeristaPosto(dados.substitutoMatricula || dados.substitutoNome, dados.postoIdSGP);
 
@@ -3365,6 +3383,7 @@ export function registrarCoberturaComValidacao(dados: {
     idPosto: dados.postoIdSGP,
     vagaId: dados.posicaoId,
     funcaoPosto: "COBERTURA OPERACIONAL",
+    itemPpu: dados.itemPpu,
     titularMatricula: dados.titularMatricula,
     titularNome: dados.titularNome,
     substitutoMatricula: dados.substitutoMatricula,

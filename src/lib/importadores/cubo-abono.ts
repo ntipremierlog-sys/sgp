@@ -182,8 +182,10 @@ export function extrairQuantidadeHorasDias(valorRaw: unknown): { horas?: number;
     }
   }
 
+  // Cada linha do Cubo de Abono refere-se a UM dia de calendário. Jornadas de 12h/16h/24h
+  // não podem virar 2+ dias (antes: round(12/8)=2). Só acima de 24h considera-se mais de um dia.
   if (horas !== undefined && horas >= 8) {
-    dias = Math.max(1, Math.round(horas / 8));
+    dias = Math.max(1, Math.ceil(horas / 24));
   }
 
   return { horas, dias };
@@ -231,7 +233,7 @@ export function categorizarAusencia(descAbono: string): {
     d.includes("SANGUE") ||
     d.includes("ELEITORAL") ||
     d.includes("JURADO") ||
-    d.includes("TRE")
+    /\bTRE\b/.test(d)
   ) {
     return { categoria: "Folga compensatória", tipoOcorrencia: "ABONO_LEGAL" };
   }
@@ -272,7 +274,7 @@ export function categorizarAbonoItem5(descAbono: string): {
   if (d.includes("ABONADO") || d.includes("SUPERIOR") || d.includes("GESTOR")) {
     return { categoria: "ABONADO PELO SUPERIOR", tipoOcorrencia: "ABONO_LEGAL", ehConhecido: true };
   }
-  if (d.includes("ELEITORAL") || d.includes("TRE") || d.includes("JURADO") || d.includes("SANGUE")) {
+  if (d.includes("ELEITORAL") || /\bTRE\b/.test(d) || d.includes("JURADO") || d.includes("SANGUE")) {
     return { categoria: "ATESTADO COMP ELEITORAL", tipoOcorrencia: "ABONO_LEGAL", ehConhecido: true };
   }
   if (d.includes("FERIAS")) {
