@@ -49,3 +49,4 @@ next-env.d.ts
 
 # Credenciais locais (hash de senhas) - nunca versionar
 .sgp-dados/
+.env*

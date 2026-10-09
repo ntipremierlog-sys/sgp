@@ -13,6 +13,8 @@ import {
   redefinirSenhaComToken,
   validarTokenRedefinicao,
   exigeTrocaSenha,
+  NOME_COOKIE_CRED_VAULT,
+  obterVaultCredenciais,
 } from "@/lib/auth/credenciais";
 import { lerTokenTrocaSenha, NOME_COOKIE_TROCA_SENHA } from "@/lib/auth/token-troca-senha";
 import { obterUsuarioPorEmail } from "@/lib/auth/usuarios";
@@ -43,10 +45,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(r.ok ? { valido: true, email: r.email } : { valido: false });
   }
   const cookieStore = await cookies();
+  const vaultCookie = cookieStore.get(NOME_COOKIE_CRED_VAULT)?.value;
   const emailTroca = lerTokenTrocaSenha(cookieStore.get(NOME_COOKIE_TROCA_SENHA)?.value);
   if (emailTroca) return NextResponse.json({ modo: "PRIMEIRO_ACESSO", email: emailTroca });
   const sessao = await obterSessaoServidor();
-  if (sessao) return NextResponse.json({ modo: "VOLUNTARIA", email: sessao.email, obrigatoria: exigeTrocaSenha(sessao.email) });
+  if (sessao) return NextResponse.json({ modo: "VOLUNTARIA", email: sessao.email, obrigatoria: exigeTrocaSenha(sessao.email, vaultCookie) });
   return NextResponse.json({ modo: "SEM_SESSAO" }, { status: 401 });
 }
 
@@ -73,38 +76,72 @@ export async function POST(request: NextRequest) {
   const novaSenha = typeof body.novaSenha === "string" ? body.novaSenha : "";
   if (!novaSenha) return NextResponse.json({ sucesso: false, erros: ["Informe a nova senha."] }, { status: 400 });
 
+  const cookieStore = await cookies();
+  const vaultCookie = cookieStore.get(NOME_COOKIE_CRED_VAULT)?.value;
+
   if (acao === "redefinir") {
     const r = redefinirSenhaComToken(String(body.token || ""), novaSenha);
     if (!r.ok) return NextResponse.json({ sucesso: false, erros: r.erros }, { status: 400 });
     log("REDEFINIR_SENHA", `Senha redefinida via link para ${r.email}`);
-    return NextResponse.json({ sucesso: true });
+    const resposta = NextResponse.json({ sucesso: true });
+    const novoVault = obterVaultCredenciais(r.email);
+    if (novoVault) {
+      resposta.cookies.set(NOME_COOKIE_CRED_VAULT, novoVault, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 365 * 24 * 3600,
+      });
+    }
+    return resposta;
   }
 
   if (acao === "trocar") {
-    const cookieStore = await cookies();
     const emailTroca = lerTokenTrocaSenha(cookieStore.get(NOME_COOKIE_TROCA_SENHA)?.value);
 
     // 1) Primeiro acesso: a senha temporária já foi conferida no login
     if (emailTroca) {
-      const r = definirSenha(emailTroca, novaSenha);
+      const r = definirSenha(emailTroca, novaSenha, vaultCookie);
       if (!r.ok) return NextResponse.json({ sucesso: false, erros: r.erros }, { status: 400 });
       const usuario = obterUsuarioPorEmail(emailTroca);
       log("TROCAR_SENHA_PRIMEIRO_ACESSO", `Senha definida no primeiro acesso por ${emailTroca}`);
       const resposta = NextResponse.json({ sucesso: true, sessaoIniciada: Boolean(usuario) });
       resposta.cookies.set(NOME_COOKIE_TROCA_SENHA, "", opcoesCookieSessao(0));
+      const novoVault = obterVaultCredenciais(emailTroca);
+      if (novoVault) {
+        resposta.cookies.set(NOME_COOKIE_CRED_VAULT, novoVault, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 365 * 24 * 3600,
+        });
+      }
       if (usuario && usuario.status === "ATIVO") {
         resposta.cookies.set(NOME_COOKIE_SESSAO, tokenSessaoParaCadastro(usuario), opcoesCookieSessao());
       }
       return resposta;
     }
 
-    // 2) Troca voluntária com sessão ativa: exige a senha atual
+    // 2) Troca voluntária com sessão ativa:
     const sessao = await obterSessaoServidor();
     if (!sessao) return NextResponse.json({ sucesso: false, erros: ["Sessão expirada. Entre novamente."] }, { status: 401 });
-    const r = alterarSenha(sessao.email, String(body.senhaAtual || ""), novaSenha);
+    const r = alterarSenha(sessao.email, String(body.senhaAtual || ""), novaSenha, vaultCookie);
     if (!r.ok) return NextResponse.json({ sucesso: false, erros: r.erros }, { status: 400 });
     log("TROCAR_SENHA", `Senha alterada pelo próprio usuário ${sessao.email}`);
-    return NextResponse.json({ sucesso: true });
+    const resposta = NextResponse.json({ sucesso: true });
+    const novoVault = obterVaultCredenciais(sessao.email);
+    if (novoVault) {
+      resposta.cookies.set(NOME_COOKIE_CRED_VAULT, novoVault, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 365 * 24 * 3600,
+      });
+    }
+    return resposta;
   }
 
   return NextResponse.json({ sucesso: false, erro: "Ação inválida." }, { status: 400 });

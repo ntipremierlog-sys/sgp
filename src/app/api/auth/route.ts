@@ -7,7 +7,7 @@ import {
   tokenSessaoParaCadastro as tokenParaUsuario,
   NOME_COOKIE_SESSAO,
 } from "@/lib/auth/sessao";
-import { autenticarComSenha } from "@/lib/auth/credenciais";
+import { autenticarComSenha, NOME_COOKIE_CRED_VAULT, obterVaultCredenciais } from "@/lib/auth/credenciais";
 import { emitirTokenTrocaSenha, NOME_COOKIE_TROCA_SENHA, VALIDADE_TROCA_SENHA_S } from "@/lib/auth/token-troca-senha";
 import { registrarLog } from "@/lib/dados/estado-operacional";
 
@@ -47,7 +47,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ sucesso: false, erro: "Informe e-mail e senha." }, { status: 400 });
     }
 
-    const resultado = autenticarComSenha(email, senha);
+    const vaultCookie = request.cookies.get(NOME_COOKIE_CRED_VAULT)?.value;
+    const resultado = autenticarComSenha(email, senha, vaultCookie);
 
     if (!resultado.ok) {
       const mensagens: Record<typeof resultado.motivo, { texto: string; status: number }> = {
@@ -105,6 +106,16 @@ export async function POST(request: NextRequest) {
 
     // Define cookie HTTP-Only seguro
     resposta.cookies.set(NOME_COOKIE_SESSAO, tokenParaUsuario(usuarioAlvo), opcoesCookieSessao());
+    const vaultToken = obterVaultCredenciais(usuarioAlvo.email);
+    if (vaultToken) {
+      resposta.cookies.set(NOME_COOKIE_CRED_VAULT, vaultToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 365 * 24 * 3600,
+      });
+    }
     return resposta;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Falha na autenticação";

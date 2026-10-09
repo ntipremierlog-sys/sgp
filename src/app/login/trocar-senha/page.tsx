@@ -21,6 +21,7 @@ function FormularioTrocarSenha() {
   const destinoSeguro = destino && destino.startsWith("/") && !destino.startsWith("//") ? destino : "/";
 
   const [modo, setModo] = useState<Modo>("carregando");
+  const [obrigatoria, setObrigatoria] = useState(false);
   const [email, setEmail] = useState("");
   const [senhaAtual, setSenhaAtual] = useState("");
   const [senha, setSenha] = useState("");
@@ -35,11 +36,12 @@ function FormularioTrocarSenha() {
       .then((d) => {
         setModo((d.modo as Modo) || "SEM_SESSAO");
         if (d.email) setEmail(d.email);
+        if (d.obrigatoria) setObrigatoria(true);
       })
       .catch(() => setModo("SEM_SESSAO"));
   }, []);
 
-  const primeiroAcesso = modo === "PRIMEIRO_ACESSO";
+  const primeiroAcesso = modo === "PRIMEIRO_ACESSO" || obrigatoria;
   const podeEnviar = senhaAtendePolitica(senha, email) && senha === confirmacao && (primeiroAcesso || senhaAtual.length > 0);
 
   const salvar = async (e: React.FormEvent) => {
