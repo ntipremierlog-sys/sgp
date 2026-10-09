@@ -86,8 +86,7 @@ function persistir(armazem: ArmazemCredenciais) {
 export const SENHA_INICIAL_DEV = "Premier@SGP2026";
 
 function semearSenhaInicial(armazem: ArmazemCredenciais) {
-  const senhaInicial =
-    process.env.SGP_SENHA_INICIAL_ADMIN || (process.env.NODE_ENV !== "production" ? SENHA_INICIAL_DEV : "");
+  const senhaInicial = process.env.SGP_SENHA_INICIAL_ADMIN || SENHA_INICIAL_DEV;
   if (!senhaInicial) return;
   let alterou = false;
   for (const u of carregarUsuarios()) {
