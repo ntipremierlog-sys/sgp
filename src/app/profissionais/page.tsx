@@ -7,8 +7,6 @@ import {
   Search,
   Plus,
   Lock,
-  Eye,
-  EyeOff,
   Phone,
   X,
   CheckCircle2,
@@ -17,7 +15,6 @@ import {
   AlertTriangle,
   FileText,
   Briefcase,
-  BarChart3,
   Clock,
   ShieldCheck,
   Printer,
@@ -28,7 +25,9 @@ import {
   UserCheck,
   UserMinus,
   MapPin,
-  CreditCard,
+  ChevronRight,
+  SlidersHorizontal,
+  Sparkles,
 } from "lucide-react";
 import {
   carregarEstado,
@@ -60,7 +59,6 @@ import {
   ehPerfilFiscalPetrobras,
   podeVerDadosPessoaisCompletos,
   calcularIdadeDinamica,
-  formatarDescricaoHorarioParaTela,
 } from "@/lib/dados/rm-tipos";
 import {
   obterTodasSecoesRm,
@@ -68,6 +66,8 @@ import {
   obterTodasSituacoesRm,
   obterTodasFuncoesRm,
 } from "@/lib/importadores/processador-rm-totvs";
+import posicoesRev04Json from "@/lib/dados/posicoes-rev04.json";
+import feristasRev04Json from "@/lib/dados/feristas-rev04.json";
 
 const FUNCOES_PADRAO: Record<string, string> = {
   "almoxarife lider": "Almoxarife Líder",
@@ -141,22 +141,6 @@ function formatarSituacao(sit?: string): string {
   return formatarTexto(sit);
 }
 
-function formatarCpf(cpfLimpo?: string, cpfMascarado?: string, mascarar: boolean = false): string {
-  const limpo = (cpfLimpo || "").replace(/\D/g, "");
-  if (mascarar) {
-    if (cpfMascarado) return cpfMascarado;
-    if (limpo.length === 11) {
-      return `***.${limpo.slice(3, 6)}.${limpo.slice(6, 9)}-**`;
-    }
-    return "—";
-  }
-  if (limpo.length === 11) {
-    return `${limpo.slice(0, 3)}.${limpo.slice(3, 6)}.${limpo.slice(6, 9)}-${limpo.slice(9, 11)}`;
-  }
-  if (cpfMascarado) return cpfMascarado;
-  return "—";
-}
-
 function calcularTempoCasa(dataAdmissaoStr?: string): string {
   if (!dataAdmissaoStr) return "—";
   const adm = new Date(dataAdmissaoStr + "T00:00:00");
@@ -188,21 +172,48 @@ function formatarHorario(horario?: string): string {
   return clean || horario;
 }
 
+function obterIniciais(nome: string): string {
+  if (!nome) return "—";
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
+
+function obterGradienteAvatar(identificador: string): string {
+  const gradientes = [
+    "from-indigo-600 to-purple-800 text-white",
+    "from-slate-700 to-slate-900 text-white",
+    "from-blue-600 to-indigo-800 text-white",
+    "from-teal-600 to-emerald-800 text-white",
+    "from-violet-600 to-purple-900 text-white",
+    "from-cyan-700 to-blue-900 text-white",
+  ];
+  let hash = 0;
+  for (let i = 0; i < identificador.length; i++) {
+    hash = identificador.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return gradientes[Math.abs(hash) % gradientes.length];
+}
+
+export type TipoAbaProfissional = "TODOS" | "TITULARES" | "FERISTAS" | "RESERVA";
+
 export default function ProfissionaisPage() {
   const [profissionais, setProfissionais] = useState<ProfissionalOperacional[]>([]);
   const [postos, setPostos] = useState<PostoOperacional[]>([]);
   const [marcacoesPonto, setMarcacoesPonto] = useState<MarcacaoPontoOriginal[]>([]);
   const [sessao, setSessao] = useState<UsuarioSessao | null>(null);
   const [busca, setBusca] = useState("");
-  const [abaProfissionais, setAbaProfissionais] = useState<"TODOS" | "COM_POSTO" | "SEM_POSTO">("TODOS");
-  // Filtros oficiais com os cadastros importados do RM
+  const [abaProfissionais, setAbaProfissionais] = useState<TipoAbaProfissional>("TODOS");
+
+  // Filtros oficiais
   const [filtroSecao, setFiltroSecao] = useState("TODAS");
   const [filtroHorario, setFiltroHorario] = useState("TODOS");
   const [filtroFuncao, setFiltroFuncao] = useState("TODAS");
   const [filtroSituacao, setFiltroSituacao] = useState("TODAS");
   const [filtroSexo, setFiltroSexo] = useState("TODOS");
   const [filtroTipoEscala, setFiltroTipoEscala] = useState("TODAS");
-  const [filtroPosto, setFiltroPosto] = useState("TODOS");
+
+  // Modais e seleções
   const [modalAberto, setModalAberto] = useState(false);
   const [profissionalSelecionado, setProfissionalSelecionado] = useState<ProfissionalOperacional | null>(null);
   const [modalTransferenciaAberto, setModalTransferenciaAberto] = useState(false);
@@ -214,7 +225,7 @@ export default function ProfissionaisPage() {
   const [moverParaReserva, setMoverParaReserva] = useState(false);
   const [cienteInterjornadaTransferencia, setCienciaInterjornadaTransferencia] = useState(false);
   const [abaFicha, setAbaFicha] = useState<"CONTRATO" | "PONTO" | "DOCUMENTOS">("CONTRATO");
-  const [copiadoMatricula, setCopiadoMatricula] = useState(false);
+  const [copiadoCpfId, setCopiadoCpfId] = useState<string | null>(null);
   const [ocorrencias, setOcorrencias] = useState<OcorrenciaOperacional[]>([]);
 
   // Formulário novo profissional
@@ -228,134 +239,6 @@ export default function ProfissionaisPage() {
   const [formSalario, setFormSalario] = useState("");
   const [formEndereco, setFormEndereco] = useState("");
   const [mensagemSucesso, setMensagemSucesso] = useState("");
-
-  const abrirModalTransferencia = (pr: ProfissionalOperacional) => {
-    setColaboradorParaTransferir(pr);
-    setDestinoPostoCodigo(pr.postoCodigo || "");
-    setBuscaSubstituto("");
-    setSubstitutoSelecionado(null);
-    setMoverParaReserva(false);
-    setModoPermuta(false);
-    setCienciaInterjornadaTransferencia(false);
-    setModalTransferenciaAberto(true);
-  };
-
-  // Lista dinâmica de candidatos para substituição com busca aberta por nome, matrícula, função ou posto
-  const candidatosSubstitutos = useMemo(() => {
-    if (!colaboradorParaTransferir) return [];
-    const q = buscaSubstituto.trim().toLowerCase();
-    const qNum = q.replace(/\D/g, "");
-
-    const filtrados = profissionais.filter((pr) => {
-      if (pr.matricula === colaboradorParaTransferir.matricula) return false;
-      if (!q) return true;
-      const matchNome = pr.nome.toLowerCase().includes(q) || (pr.nomeSocial && pr.nomeSocial.toLowerCase().includes(q));
-      const matchMatricula = pr.matricula.toLowerCase().includes(q) || (pr.chapa && pr.chapa.toLowerCase().includes(q));
-      const matchFuncao = pr.funcao.toLowerCase().includes(q);
-      const matchPosto = pr.postoCodigo ? pr.postoCodigo.toLowerCase().includes(q) : false;
-      const matchCpf = qNum.length >= 3 ? pr.cpfLimpo.includes(qNum) : false;
-      return matchNome || matchMatricula || matchFuncao || matchPosto || matchCpf;
-    });
-
-    // Ordenação: 1º Mesma função, 2º Reserva Técnica, 3º Ativos
-    return filtrados
-      .sort((a, b) => {
-        const aFuncao = a.funcao.toLowerCase() === colaboradorParaTransferir.funcao.toLowerCase() ? 1 : 0;
-        const bFuncao = b.funcao.toLowerCase() === colaboradorParaTransferir.funcao.toLowerCase() ? 1 : 0;
-        if (aFuncao !== bFuncao) return bFuncao - aFuncao;
-
-        const aReserva = !a.postoCodigo ? 1 : 0;
-        const bReserva = !b.postoCodigo ? 1 : 0;
-        if (aReserva !== bReserva) return bReserva - aReserva;
-
-        const aAtivo = a.situacao === "ATIVO" ? 1 : 0;
-        const bAtivo = b.situacao === "ATIVO" ? 1 : 0;
-        return bAtivo - aAtivo;
-      })
-      .slice(0, 10);
-  }, [profissionais, colaboradorParaTransferir, buscaSubstituto]);
-
-  // Apuração de interjornada na transferência de posto do colaborador
-  const alertaInterjornadaTransferencia = useMemo(() => {
-    if (!colaboradorParaTransferir) return null;
-    if (moverParaReserva) return null;
-
-    const postoAlvo = substitutoSelecionado && colaboradorParaTransferir.postoCodigo
-      ? colaboradorParaTransferir.postoCodigo
-      : destinoPostoCodigo;
-
-    const matriculaAlvo = substitutoSelecionado ? substitutoSelecionado.matricula : colaboradorParaTransferir.matricula;
-    if (!postoAlvo) return null;
-
-    return validarInterjornadaClt({
-      matricula: matriculaAlvo,
-      dataInicio: new Date().toISOString().substring(0, 10),
-      postoDestinoCodigo: postoAlvo,
-      postos,
-      profissionais,
-      marcacoesPonto,
-    });
-  }, [colaboradorParaTransferir, destinoPostoCodigo, substitutoSelecionado, moverParaReserva, postos, profissionais, marcacoesPonto]);
-
-  const handleSalvarTransferencia = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!colaboradorParaTransferir) return;
-
-    if (alertaInterjornadaTransferencia && !alertaInterjornadaTransferencia.atende && !cienteInterjornadaTransferencia) {
-      alert(
-        `ALERTA CLT ART. 66 (Interjornada):\n\nO colaborador possui apenas ${alertaInterjornadaTransferencia.horasDescansoFormatado} de descanso entre turnos (déficit de ${alertaInterjornadaTransferencia.deficitFormatado} para as 11h mínimas).\n\nPara efetivar a troca em caráter excepcional, marque a ciência no formulário.`
-      );
-      return;
-    }
-
-    let res: { sucesso: boolean; mensagem: string };
-
-    if (moverParaReserva) {
-      // Mover o titular atual para a Reserva Técnica (desocupar o posto)
-      res = transferirColaboradorPosto(colaboradorParaTransferir.matricula, undefined);
-    } else if (substitutoSelecionado) {
-      if (modoPermuta && colaboradorParaTransferir.postoCodigo && substitutoSelecionado.postoCodigo) {
-        // Permuta mútua entre dois titulares
-        res = permutarTitularesPostos(colaboradorParaTransferir.matricula, substitutoSelecionado.matricula);
-      } else if (colaboradorParaTransferir.postoCodigo) {
-        // Substituição no posto do titular atual
-        res = trocarTitularPosto(colaboradorParaTransferir.postoCodigo, substitutoSelecionado.matricula);
-      } else if (substitutoSelecionado.postoCodigo) {
-        // Colaborador atual que estava na reserva assume o posto do substituto
-        res = trocarTitularPosto(substitutoSelecionado.postoCodigo, colaboradorParaTransferir.matricula);
-      } else {
-        res = { sucesso: false, mensagem: "Ambos os colaboradores estão na Reserva Técnica. Nenhum posto para alocação." };
-      }
-    } else if (destinoPostoCodigo) {
-      // Transferência direta
-      res = transferirColaboradorPosto(colaboradorParaTransferir.matricula, destinoPostoCodigo);
-    } else {
-      alert("Selecione um substituto para o posto ou opte por mover para a Reserva Técnica.");
-      return;
-    }
-
-    if (res.sucesso) {
-      setMensagemSucesso(res.mensagem);
-      setModalTransferenciaAberto(false);
-      setColaboradorParaTransferir(null);
-      setSubstitutoSelecionado(null);
-      setBuscaSubstituto("");
-      setMoverParaReserva(false);
-      setModoPermuta(false);
-      setCienciaInterjornadaTransferencia(false);
-      carregarDados();
-      if (
-        profissionalSelecionado &&
-        (profissionalSelecionado.matricula === colaboradorParaTransferir.matricula ||
-          (substitutoSelecionado && profissionalSelecionado.matricula === substitutoSelecionado.matricula))
-      ) {
-        setProfissionalSelecionado(null);
-      }
-      setTimeout(() => setMensagemSucesso(""), 4000);
-    } else {
-      alert(res.mensagem);
-    }
-  };
 
   const carregarDados = () => {
     const estado = carregarEstado();
@@ -379,7 +262,7 @@ export default function ProfissionaisPage() {
           }
         }
       } catch {
-        // Sem sessão: perfil permanece null → visão restrita (LGPD fail-closed)
+        // fail-closed
       }
     };
     carregarSessao();
@@ -389,9 +272,7 @@ export default function ProfissionaisPage() {
     return () => window.removeEventListener("sgp-dados-atualizados", handleAtualizacao);
   }, []);
 
-  // Perfil exclusivamente da sessão real. Sem sessão (carregando/falha) = null = visão restrita.
   const perfilEfetivo: string | null = sessao?.perfil ?? null;
-  const ehAdmin = perfilEfetivo === "PREMIER_ADMIN";
   const ehGestor = perfilEfetivo === "PREMIER_GESTOR" || perfilEfetivo === "PREMIER_GESTOR_CONTRATO";
   const ehPerfilPetrobras = !podeVerDadosPessoaisCompletos(perfilEfetivo);
 
@@ -401,7 +282,100 @@ export default function ProfissionaisPage() {
     return basesPermitidas.includes(unidadeId);
   };
 
-  // Listas de opções derivadas dos cadastros oficiais importados do RM
+  // Mapeamentos da REV04 para cruzamento de titulares e feristas
+  const mapaTitularesREV04 = useMemo(() => {
+    const map = new Map<string, { postoIdSGP: string; posicaoIdSGP: string; unidade: string; postoDeServico?: string }>();
+    (posicoesRev04Json as any[]).forEach((p) => {
+      if (p.chapaTitular) {
+        const chapa = String(p.chapaTitular).trim();
+        if (!map.has(chapa)) {
+          map.set(chapa, {
+            postoIdSGP: p.postoIdSGP,
+            posicaoIdSGP: p.posicaoIdSGP,
+            unidade: p.unidade,
+            postoDeServico: p.postoDeServico,
+          });
+        }
+      }
+    });
+    return map;
+  }, []);
+
+  const mapaFeristasREV04 = useMemo(() => {
+    const map = new Map<string, { feristaIdSGP: string; postoIdSGP?: string; unidade: string; postoDeServico?: string; papel?: string }>();
+    (feristasRev04Json as any[]).forEach((f) => {
+      if (f.chapaRM) {
+        const chapa = String(f.chapaRM).trim();
+        if (!map.has(chapa)) {
+          map.set(chapa, {
+            feristaIdSGP: f.feristaIdSGP,
+            postoIdSGP: f.postoIdSGP,
+            unidade: f.unidade,
+            postoDeServico: f.postoDeServico,
+            papel: f.papel,
+          });
+        }
+      }
+    });
+    return map;
+  }, []);
+
+  // Enriquecimento dos profissionais com alocação REV04
+  const profissionaisEnriquecidos = useMemo(() => {
+    return profissionais.map((p) => {
+      const chapa = (p.chapa || p.matricula || "").trim();
+      const chapaSemZeros = chapa.replace(/^0+/, "");
+
+      const titular = mapaTitularesREV04.get(chapa) || (chapaSemZeros ? mapaTitularesREV04.get(chapaSemZeros) : undefined);
+      const ferista = !titular ? (mapaFeristasREV04.get(chapa) || (chapaSemZeros ? mapaFeristasREV04.get(chapaSemZeros) : undefined)) : undefined;
+
+      let tipoAlocacao: "TITULAR" | "FERISTA" | "RESERVA_TECNICA" = "RESERVA_TECNICA";
+      let postoCodigoEfetivo = p.postoCodigo;
+      let posicaoCodigoEfetivo: string | undefined;
+      let imovelEfetivo = p.unidadeNome || p.unidadeId || "—";
+
+      if (titular) {
+        tipoAlocacao = "TITULAR";
+        postoCodigoEfetivo = p.postoCodigo || titular.postoIdSGP;
+        posicaoCodigoEfetivo = titular.posicaoIdSGP;
+        imovelEfetivo = titular.unidade || imovelEfetivo;
+      } else if (ferista) {
+        tipoAlocacao = "FERISTA";
+        postoCodigoEfetivo = p.postoCodigo || ferista.postoIdSGP;
+        imovelEfetivo = ferista.unidade || imovelEfetivo;
+      } else if (p.postoCodigo) {
+        tipoAlocacao = "TITULAR";
+        postoCodigoEfetivo = p.postoCodigo;
+      }
+
+      return {
+        ...p,
+        postoCodigo: postoCodigoEfetivo,
+        posicaoCodigo: posicaoCodigoEfetivo,
+        tipoAlocacao,
+        imovelEfetivo,
+        titularInfo: titular,
+        feristaInfo: ferista,
+      };
+    });
+  }, [profissionais, mapaTitularesREV04, mapaFeristasREV04]);
+
+  // Totais do Quadro
+  const totalGeral = profissionaisEnriquecidos.length;
+  const totalTitulares = useMemo(
+    () => profissionaisEnriquecidos.filter((p) => p.tipoAlocacao === "TITULAR").length,
+    [profissionaisEnriquecidos]
+  );
+  const totalFeristas = useMemo(
+    () => profissionaisEnriquecidos.filter((p) => p.tipoAlocacao === "FERISTA").length,
+    [profissionaisEnriquecidos]
+  );
+  const totalReserva = useMemo(
+    () => profissionaisEnriquecidos.filter((p) => p.tipoAlocacao === "RESERVA_TECNICA").length,
+    [profissionaisEnriquecidos]
+  );
+
+  // Listas de opções derivadas dos cadastros oficiais
   const secoesDisponiveis = useMemo(() => {
     const mapa = new Map<string, { codigo: string; descricao: string }>();
     obterTodasSecoesRm().forEach((s) => mapa.set(s.codigo, { codigo: s.codigo, descricao: s.descricao }));
@@ -452,6 +426,14 @@ export default function ProfissionaisPage() {
     return Array.from(mapa.entries()).map(([codigo, label]) => ({ codigo, label }));
   }, [profissionais]);
 
+  const handleCopiarCpf = (cpfTexto: string, id: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(cpfTexto);
+      setCopiadoCpfId(id);
+      setTimeout(() => setCopiadoCpfId(null), 2000);
+    }
+  };
+
   const handleAbrirFicha = (prof: ProfissionalOperacional) => {
     setProfissionalSelecionado(prof);
     setAbaFicha("CONTRATO");
@@ -463,7 +445,7 @@ export default function ProfissionaisPage() {
           "CONSULTAR_CADASTRO_INDIVIDUAL",
           "PROFISSIONAL",
           prof.chapa || prof.matricula,
-          `Usuário ${sessao.nome} (${sessao.perfil}) visualizou cadastro individual de ${prof.nomeSocial || prof.nome} (Chapa: ${prof.chapa || prof.matricula})`,
+          `Usuário ${sessao.nome} (${sessao.perfil}) visualizou cadastro de ${prof.nomeSocial || prof.nome} (Chapa: ${prof.chapa || prof.matricula})`,
           null,
           `Base: ${prof.unidadeId}`
         );
@@ -473,67 +455,59 @@ export default function ProfissionaisPage() {
     }
   };
 
-  const handleCopiarMatricula = (matricula: string) => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(matricula);
-      setCopiadoMatricula(true);
-      setTimeout(() => setCopiadoMatricula(false), 2000);
-    }
+  const abrirModalTransferencia = (pr: ProfissionalOperacional) => {
+    setColaboradorParaTransferir(pr);
+    setDestinoPostoCodigo(pr.postoCodigo || "");
+    setBuscaSubstituto("");
+    setSubstitutoSelecionado(null);
+    setMoverParaReserva(false);
+    setModoPermuta(false);
+    setCienciaInterjornadaTransferencia(false);
+    setModalTransferenciaAberto(true);
   };
 
+  // Filtragem combinada
   const profissionaisFiltrados = useMemo(() => {
-    return profissionais.filter((pr) => {
-      const matchTexto =
-        !busca.trim() ||
-        pr.nome.toLowerCase().includes(busca.toLowerCase()) ||
-        (pr.nomeSocial && pr.nomeSocial.toLowerCase().includes(busca.toLowerCase())) ||
-        (pr.chapa && pr.chapa.toLowerCase().includes(busca.toLowerCase())) ||
-        pr.matricula.toLowerCase().includes(busca.toLowerCase()) ||
-        pr.funcao.toLowerCase().includes(busca.toLowerCase()) ||
-        (pr.secaoCodigo && pr.secaoCodigo.toLowerCase().includes(busca.toLowerCase())) ||
-        (pr.secaoDescricao && pr.secaoDescricao.toLowerCase().includes(busca.toLowerCase())) ||
-        (pr.horarioCodigo && pr.horarioCodigo.toLowerCase().includes(busca.toLowerCase())) ||
-        (pr.horarioDescricao && pr.horarioDescricao.toLowerCase().includes(busca.toLowerCase())) ||
-        (pr.postoCodigo && pr.postoCodigo.toLowerCase().includes(busca.toLowerCase())) ||
-        pr.cpfLimpo.includes(busca.replace(/\D/g, ""));
+    return profissionaisEnriquecidos.filter((pr) => {
+      const q = busca.trim().toLowerCase();
+      const qNum = q.replace(/\D/g, "");
 
+      const matchTexto =
+        !q ||
+        pr.nome.toLowerCase().includes(q) ||
+        (pr.nomeSocial && pr.nomeSocial.toLowerCase().includes(q)) ||
+        (pr.chapa && pr.chapa.toLowerCase().includes(q)) ||
+        pr.matricula.toLowerCase().includes(q) ||
+        pr.funcao.toLowerCase().includes(q) ||
+        (pr.secaoCodigo && pr.secaoCodigo.toLowerCase().includes(q)) ||
+        (pr.secaoDescricao && pr.secaoDescricao.toLowerCase().includes(q)) ||
+        (pr.horarioCodigo && pr.horarioCodigo.toLowerCase().includes(q)) ||
+        (pr.horarioDescricao && pr.horarioDescricao.toLowerCase().includes(q)) ||
+        (pr.postoCodigo && pr.postoCodigo.toLowerCase().includes(q)) ||
+        (pr.imovelEfetivo && pr.imovelEfetivo.toLowerCase().includes(q)) ||
+        (qNum.length >= 3 && pr.cpfLimpo.includes(qNum));
+
+      // Aba / Segmento
       const matchAba =
         abaProfissionais === "TODOS"
           ? true
-          : abaProfissionais === "COM_POSTO"
-          ? !!pr.postoCodigo
-          : !pr.postoCodigo;
+          : abaProfissionais === "TITULARES"
+          ? pr.tipoAlocacao === "TITULAR"
+          : abaProfissionais === "FERISTAS"
+          ? pr.tipoAlocacao === "FERISTA"
+          : pr.tipoAlocacao === "RESERVA_TECNICA";
 
-      // Filtro por Seção usando cadastros importados
       const matchSecao = filtroSecao === "TODAS" || pr.secaoCodigo === filtroSecao;
-
-      // Filtro por Horário usando cadastros importados
       const matchHorario = filtroHorario === "TODOS" || pr.horarioCodigo === filtroHorario;
-
-      // Filtro por Função usando cadastros importados
       const matchFuncao = filtroFuncao === "TODAS" || pr.funcao.toUpperCase() === filtroFuncao.toUpperCase();
-
-      // Filtro por Situação usando situações do RM
       const matchSituacao =
         filtroSituacao === "TODAS" ||
         pr.situacaoCodigo === filtroSituacao ||
         pr.situacao === filtroSituacao;
-
-      // Filtro por Sexo
       const matchSexo = filtroSexo === "TODOS" || pr.sexo === filtroSexo;
 
-      // Campo auxiliar SOMENTE PARA FILTRO: "Tipo de escala", identificado a partir do texto do horário
       const tipoEscalaCalc = identificarTipoEscala(pr.horarioDescricao);
       const matchTipoEscala = filtroTipoEscala === "TODAS" || tipoEscalaCalc === filtroTipoEscala;
-
-      const matchPosto =
-        filtroPosto === "TODOS"
-          ? true
-          : filtroPosto === "COM_POSTO"
-          ? !!pr.postoCodigo
-          : filtroPosto === "SEM_POSTO"
-          ? !pr.postoCodigo
-          : pr.postoCodigo === filtroPosto;
 
       const matchBase = podeAcessarBase(pr.unidadeId);
 
@@ -546,12 +520,11 @@ export default function ProfissionaisPage() {
         matchSituacao &&
         matchSexo &&
         matchTipoEscala &&
-        matchPosto &&
         matchBase
       );
     });
   }, [
-    profissionais,
+    profissionaisEnriquecidos,
     busca,
     abaProfissionais,
     filtroSecao,
@@ -560,14 +533,154 @@ export default function ProfissionaisPage() {
     filtroSituacao,
     filtroSexo,
     filtroTipoEscala,
-    filtroPosto,
     basesPermitidas,
   ]);
 
-  const totalColaboradores = profissionais.length;
-  const ativos = profissionais.filter((p) => p.situacao === "ATIVO").length;
-  const titulares = profissionais.filter((p) => p.postoCodigo).length;
-  const reservaTecnica = profissionais.filter((p) => !p.postoCodigo).length;
+  const filtrosAtivosCount = useMemo(() => {
+    let count = 0;
+    if (busca) count++;
+    if (abaProfissionais !== "TODOS") count++;
+    if (filtroSecao !== "TODAS") count++;
+    if (filtroHorario !== "TODOS") count++;
+    if (filtroFuncao !== "TODAS") count++;
+    if (filtroSituacao !== "TODAS") count++;
+    if (filtroSexo !== "TODOS") count++;
+    if (filtroTipoEscala !== "TODAS") count++;
+    return count;
+  }, [
+    busca,
+    abaProfissionais,
+    filtroSecao,
+    filtroHorario,
+    filtroFuncao,
+    filtroSituacao,
+    filtroSexo,
+    filtroTipoEscala,
+  ]);
+
+  const limparTodosFiltros = () => {
+    setBusca("");
+    setAbaProfissionais("TODOS");
+    setFiltroSecao("TODAS");
+    setFiltroHorario("TODOS");
+    setFiltroFuncao("TODAS");
+    setFiltroSituacao("TODAS");
+    setFiltroSexo("TODOS");
+    setFiltroTipoEscala("TODAS");
+  };
+
+  // Candidatos para substituição com busca aberta
+  const candidatosSubstitutos = useMemo(() => {
+    if (!colaboradorParaTransferir) return [];
+    const q = buscaSubstituto.trim().toLowerCase();
+    const qNum = q.replace(/\D/g, "");
+
+    const filtrados = profissionaisEnriquecidos.filter((pr) => {
+      if (pr.matricula === colaboradorParaTransferir.matricula) return false;
+      if (!q) return true;
+      const matchNome = pr.nome.toLowerCase().includes(q) || (pr.nomeSocial && pr.nomeSocial.toLowerCase().includes(q));
+      const matchMatricula = pr.matricula.toLowerCase().includes(q) || (pr.chapa && pr.chapa.toLowerCase().includes(q));
+      const matchFuncao = pr.funcao.toLowerCase().includes(q);
+      const matchPosto = pr.postoCodigo ? pr.postoCodigo.toLowerCase().includes(q) : false;
+      const matchCpf = qNum.length >= 3 ? pr.cpfLimpo.includes(qNum) : false;
+      return matchNome || matchMatricula || matchFuncao || matchPosto || matchCpf;
+    });
+
+    return filtrados
+      .sort((a, b) => {
+        const aFuncao = a.funcao.toLowerCase() === colaboradorParaTransferir.funcao.toLowerCase() ? 1 : 0;
+        const bFuncao = b.funcao.toLowerCase() === colaboradorParaTransferir.funcao.toLowerCase() ? 1 : 0;
+        if (aFuncao !== bFuncao) return bFuncao - aFuncao;
+
+        const aReserva = a.tipoAlocacao === "RESERVA_TECNICA" ? 1 : 0;
+        const bReserva = b.tipoAlocacao === "RESERVA_TECNICA" ? 1 : 0;
+        if (aReserva !== bReserva) return bReserva - aReserva;
+
+        const aAtivo = a.situacao === "ATIVO" ? 1 : 0;
+        const bAtivo = b.situacao === "ATIVO" ? 1 : 0;
+        return bAtivo - aAtivo;
+      })
+      .slice(0, 10);
+  }, [profissionaisEnriquecidos, colaboradorParaTransferir, buscaSubstituto]);
+
+  // Alerta interjornada
+  const alertaInterjornadaTransferencia = useMemo(() => {
+    if (!colaboradorParaTransferir) return null;
+    if (moverParaReserva) return null;
+
+    const postoAlvo =
+      substitutoSelecionado && colaboradorParaTransferir.postoCodigo
+        ? colaboradorParaTransferir.postoCodigo
+        : destinoPostoCodigo;
+
+    const matriculaAlvo = substitutoSelecionado ? substitutoSelecionado.matricula : colaboradorParaTransferir.matricula;
+    if (!postoAlvo) return null;
+
+    return validarInterjornadaClt({
+      matricula: matriculaAlvo,
+      dataInicio: new Date().toISOString().substring(0, 10),
+      postoDestinoCodigo: postoAlvo,
+      postos,
+      profissionais,
+      marcacoesPonto,
+    });
+  }, [
+    colaboradorParaTransferir,
+    destinoPostoCodigo,
+    substitutoSelecionado,
+    moverParaReserva,
+    postos,
+    profissionais,
+    marcacoesPonto,
+  ]);
+
+  const handleSalvarTransferencia = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!colaboradorParaTransferir) return;
+
+    if (alertaInterjornadaTransferencia && !alertaInterjornadaTransferencia.atende && !cienteInterjornadaTransferencia) {
+      alert(
+        `ALERTA CLT ART. 66 (Interjornada):\n\nO colaborador possui apenas ${alertaInterjornadaTransferencia.horasDescansoFormatado} de descanso entre turnos (déficit de ${alertaInterjornadaTransferencia.deficitFormatado} para as 11h mínimas).\n\nPara efetivar a troca em caráter excepcional, marque a ciência no formulário.`
+      );
+      return;
+    }
+
+    let res: { sucesso: boolean; mensagem: string };
+
+    if (moverParaReserva) {
+      res = transferirColaboradorPosto(colaboradorParaTransferir.matricula, undefined);
+    } else if (substitutoSelecionado) {
+      if (modoPermuta && colaboradorParaTransferir.postoCodigo && substitutoSelecionado.postoCodigo) {
+        res = permutarTitularesPostos(colaboradorParaTransferir.matricula, substitutoSelecionado.matricula);
+      } else if (colaboradorParaTransferir.postoCodigo) {
+        res = trocarTitularPosto(colaboradorParaTransferir.postoCodigo, substitutoSelecionado.matricula);
+      } else if (substitutoSelecionado.postoCodigo) {
+        res = trocarTitularPosto(substitutoSelecionado.postoCodigo, colaboradorParaTransferir.matricula);
+      } else {
+        res = { sucesso: false, mensagem: "Ambos os colaboradores estão na Reserva Técnica. Nenhum posto para alocação." };
+      }
+    } else if (destinoPostoCodigo) {
+      res = transferirColaboradorPosto(colaboradorParaTransferir.matricula, destinoPostoCodigo);
+    } else {
+      alert("Selecione um substituto para o posto ou opte por mover para a Reserva Técnica.");
+      return;
+    }
+
+    if (res.sucesso) {
+      setMensagemSucesso(res.mensagem);
+      setModalTransferenciaAberto(false);
+      setColaboradorParaTransferir(null);
+      setSubstitutoSelecionado(null);
+      setBuscaSubstituto("");
+      setMoverParaReserva(false);
+      setModoPermuta(false);
+      setCienciaInterjornadaTransferencia(false);
+      carregarDados();
+      setTimeout(() => setMensagemSucesso(""), 4000);
+    } else {
+      alert(res.mensagem);
+    }
+  };
 
   const handleSubmitNovoColaborador = (e: React.FormEvent) => {
     e.preventDefault();
@@ -587,7 +700,7 @@ export default function ProfissionaisPage() {
       nome: formNome.trim(),
       cpfLimpo: cpfNumerico,
       funcao: formFuncao.trim(),
-      unidadeId: "UFN-III",
+      unidadeId: "BASE OPERACIONAL",
       postoCodigo: formPosto || undefined,
       escala: formEscala,
       situacao: "ATIVO",
@@ -614,166 +727,298 @@ export default function ProfissionaisPage() {
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto">
-      {/* 1. Visão Geral da Tabela de Profissionais (Oculta na Impressão Oficial do Dossiê) */}
-      <div className="space-y-4 print:hidden no-print">
-        {/* 1. Cabeçalho Compacto e Direto */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+    <div className="space-y-5 max-w-7xl mx-auto pb-10">
+      {/* 1. Cabeçalho Executivo Moderno */}
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs print:hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
+                <Sparkles className="w-3 h-3 text-indigo-500" />
+                Base Oficial RM TOTVS
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                REV04 • 29 Unidades Petrobras
+              </span>
+            </div>
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
               Quadro de Profissionais
             </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Cadastro oficial de colaboradores, vínculo a postos e controle de reserva técnica
-          </p>
+            <p className="text-xs sm:text-sm text-slate-500 max-w-2xl">
+              Gestão integrada da força de trabalho, alocações ativas em postos do Anexo 1-A e monitoramento da reserva técnica.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 self-start lg:self-center shrink-0">
+            <Link
+              href="/mapa-ocupacao"
+              className="inline-flex items-center gap-2 text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 shadow-2xs transition-all cursor-pointer"
+            >
+              <span>Ver no Mapa</span>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
+            </Link>
+            <button
+              onClick={() => setModalAberto(true)}
+              className="inline-flex items-center gap-2 bg-[#28185A] hover:bg-[#1B1745] text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-xs hover:shadow transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-[#D8C7A0]" />
+              <span>Novo Profissional</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link
-            href="/mapa-ocupacao"
-            className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors"
+        {/* 2. Cards Executivos de Resumo (KPIs Interativos) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mt-6 pt-6 border-t border-slate-100">
+          {/* Card 1: Total */}
+          <div
+            onClick={() => setAbaProfissionais("TODOS")}
+            className={`p-4 rounded-xl border transition-all cursor-pointer select-none group relative overflow-hidden ${
+              abaProfissionais === "TODOS"
+                ? "bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-slate-900/10"
+                : "bg-slate-50/60 hover:bg-slate-100/70 border-slate-200/80 text-slate-800"
+            }`}
           >
-            <span>Ver no Mapa</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-          <button
-            onClick={() => setModalAberto(true)}
-            className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded-md shadow-xs transition-colors cursor-pointer"
+            <div className="flex items-center justify-between">
+              <span className={`text-xs font-semibold uppercase tracking-wider ${abaProfissionais === "TODOS" ? "text-slate-300" : "text-slate-500"}`}>
+                Total Geral
+              </span>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${abaProfissionais === "TODOS" ? "bg-white/10 text-white" : "bg-white text-slate-700 shadow-2xs"}`}>
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black tracking-tight">{totalGeral}</span>
+              <span className={`text-[11px] font-medium ${abaProfissionais === "TODOS" ? "text-slate-300" : "text-slate-500"}`}>
+                colaboradores
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px]">
+              <span className={abaProfissionais === "TODOS" ? "text-slate-300" : "text-slate-500"}>Base RM completa</span>
+              <span className={`font-semibold ${abaProfissionais === "TODOS" ? "text-emerald-400" : "text-emerald-700"}`}>100%</span>
+            </div>
+          </div>
+
+          {/* Card 2: Titulares em Postos */}
+          <div
+            onClick={() => setAbaProfissionais("TITULARES")}
+            className={`p-4 rounded-xl border transition-all cursor-pointer select-none group relative overflow-hidden ${
+              abaProfissionais === "TITULARES"
+                ? "bg-emerald-900 text-white border-emerald-900 shadow-md ring-2 ring-emerald-500/20"
+                : "bg-emerald-50/40 hover:bg-emerald-50/80 border-emerald-200/60 text-slate-800"
+            }`}
           >
-            <Plus className="w-4 h-4 text-emerald-400" />
-            <span>Novo Profissional</span>
-          </button>
+            <div className="flex items-center justify-between">
+              <span className={`text-xs font-semibold uppercase tracking-wider ${abaProfissionais === "TITULARES" ? "text-emerald-200" : "text-emerald-800"}`}>
+                Titulares em Postos
+              </span>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${abaProfissionais === "TITULARES" ? "bg-white/10 text-emerald-200" : "bg-white text-emerald-700 shadow-2xs"}`}>
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black tracking-tight">{totalTitulares}</span>
+              <span className={`text-[11px] font-medium ${abaProfissionais === "TITULARES" ? "text-emerald-200" : "text-emerald-700"}`}>
+                alocados
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px]">
+              <span className={abaProfissionais === "TITULARES" ? "text-emerald-200" : "text-slate-500"}>Postos contratuais</span>
+              <span className={`font-semibold ${abaProfissionais === "TITULARES" ? "text-emerald-300" : "text-emerald-700"}`}>
+                {((totalTitulares / (totalGeral || 1)) * 100).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+
+          {/* Card 3: Equipe de Feristas */}
+          <div
+            onClick={() => setAbaProfissionais("FERISTAS")}
+            className={`p-4 rounded-xl border transition-all cursor-pointer select-none group relative overflow-hidden ${
+              abaProfissionais === "FERISTAS"
+                ? "bg-indigo-950 text-white border-indigo-900 shadow-md ring-2 ring-indigo-500/20"
+                : "bg-indigo-50/40 hover:bg-indigo-50/80 border-indigo-200/60 text-slate-800"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className={`text-xs font-semibold uppercase tracking-wider ${abaProfissionais === "FERISTAS" ? "text-indigo-200" : "text-indigo-800"}`}>
+                Equipe de Feristas
+              </span>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${abaProfissionais === "FERISTAS" ? "bg-white/10 text-indigo-200" : "bg-white text-indigo-700 shadow-2xs"}`}>
+                <RefreshCw className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black tracking-tight">{totalFeristas}</span>
+              <span className={`text-[11px] font-medium ${abaProfissionais === "FERISTAS" ? "text-indigo-200" : "text-indigo-700"}`}>
+                cobertura
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px]">
+              <span className={abaProfissionais === "FERISTAS" ? "text-indigo-200" : "text-slate-500"}>Férias e folgas</span>
+              <span className={`font-semibold ${abaProfissionais === "FERISTAS" ? "text-indigo-300" : "text-indigo-700"}`}>
+                {((totalFeristas / (totalGeral || 1)) * 100).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+
+          {/* Card 4: Reserva Técnica */}
+          <div
+            onClick={() => setAbaProfissionais("RESERVA")}
+            className={`p-4 rounded-xl border transition-all cursor-pointer select-none group relative overflow-hidden ${
+              abaProfissionais === "RESERVA"
+                ? "bg-amber-950 text-white border-amber-900 shadow-md ring-2 ring-amber-500/20"
+                : "bg-amber-50/40 hover:bg-amber-50/80 border-amber-200/60 text-slate-800"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className={`text-xs font-semibold uppercase tracking-wider ${abaProfissionais === "RESERVA" ? "text-amber-200" : "text-amber-800"}`}>
+                Reserva Técnica
+              </span>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${abaProfissionais === "RESERVA" ? "bg-white/10 text-amber-200" : "bg-white text-amber-700 shadow-2xs"}`}>
+                <Briefcase className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black tracking-tight">{totalReserva}</span>
+              <span className={`text-[11px] font-medium ${abaProfissionais === "RESERVA" ? "text-amber-200" : "text-amber-700"}`}>
+                disponíveis
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px]">
+              <span className={abaProfissionais === "RESERVA" ? "text-amber-200" : "text-slate-500"}>Aptos para alocação</span>
+              <span className={`font-semibold ${abaProfissionais === "RESERVA" ? "text-amber-300" : "text-amber-700"}`}>
+                {((totalReserva / (totalGeral || 1)) * 100).toFixed(1)}%
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Alerta de Sucesso */}
       {mensagemSucesso && (
-        <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-lg text-xs flex items-center justify-between animate-fadeIn">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span className="font-semibold">{mensagemSucesso}</span>
+        <div className="p-4 bg-emerald-50 border border-emerald-300 text-emerald-950 rounded-2xl text-xs flex items-center justify-between shadow-xs animate-fadeIn print:hidden">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-semibold text-sm">{mensagemSucesso}</span>
           </div>
-          <button onClick={() => setMensagemSucesso("")} className="text-emerald-700 hover:text-emerald-950">
-            <X className="w-3.5 h-3.5" />
+          <button onClick={() => setMensagemSucesso("")} className="text-emerald-700 hover:text-emerald-950 p-1">
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* 2. Barra de Segmentos e Filtros Rápidos (Padrão Executivo SGP) */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white p-2.5 rounded-lg border border-[#E3E6EB] shadow-2xs">
-        {/* Segmented Control / Abas Operacionais */}
-        <div className="flex items-center gap-1 bg-[#F4F5F8] p-1 rounded-lg border border-[#E3E6EB]">
-          <button
-            onClick={() => setAbaProfissionais("TODOS")}
-            className={`inline-flex items-center px-3 py-1.5 rounded-md text-xs sm:text-[13px] font-medium transition-all cursor-pointer ${
-              abaProfissionais === "TODOS"
-                ? "bg-white text-[#1A2230] shadow-2xs font-semibold"
-                : "text-[#5B6474] hover:text-[#1A2230] hover:bg-white/50"
-            }`}
-          >
-            <span>Todos</span>
-            <span
-              className={`ml-1.5 text-xs font-mono ${
-                abaProfissionais === "TODOS" ? "text-[#1A2230] font-bold" : "text-[#858D9D]"
+      {/* 3. Barra de Abas e Filtros Avançados */}
+      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs space-y-4 print:hidden">
+        {/* Linha 1: Segmented Control + Barra de Busca */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5">
+          {/* Segmented Control */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80 overflow-x-auto">
+            <button
+              onClick={() => setAbaProfissionais("TODOS")}
+              className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                abaProfissionais === "TODOS"
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
               }`}
             >
-              ({totalColaboradores})
-            </span>
-          </button>
+              <span>Todos</span>
+              <span className="text-[11px] font-mono px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-600">
+                {totalGeral}
+              </span>
+            </button>
 
-          <button
-            onClick={() => setAbaProfissionais("COM_POSTO")}
-            className={`inline-flex items-center px-3 py-1.5 rounded-md text-xs sm:text-[13px] font-medium transition-all cursor-pointer ${
-              abaProfissionais === "COM_POSTO"
-                ? "bg-white text-[#1A2230] shadow-2xs font-semibold"
-                : "text-[#5B6474] hover:text-[#1A2230] hover:bg-white/50"
-            }`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 shrink-0" />
-            <span>Com Posto</span>
-            <span
-              className={`ml-1 text-xs font-mono ${
-                abaProfissionais === "COM_POSTO" ? "text-emerald-700 font-bold" : "text-[#858D9D]"
+            <button
+              onClick={() => setAbaProfissionais("TITULARES")}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                abaProfissionais === "TITULARES"
+                  ? "bg-white text-emerald-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
               }`}
             >
-              ({titulares})
-            </span>
-          </button>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span>Titulares</span>
+              <span className="text-[11px] font-mono px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 font-bold">
+                {totalTitulares}
+              </span>
+            </button>
 
-          <button
-            onClick={() => setAbaProfissionais("SEM_POSTO")}
-            className={`inline-flex items-center px-3 py-1.5 rounded-md text-xs sm:text-[13px] font-medium transition-all cursor-pointer ${
-              abaProfissionais === "SEM_POSTO"
-                ? "bg-white text-[#1A2230] shadow-2xs font-semibold"
-                : "text-[#5B6474] hover:text-[#1A2230] hover:bg-white/50"
-            }`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 shrink-0" />
-            <span>Reserva Técnica</span>
-            <span
-              className={`ml-1 text-xs font-mono ${
-                abaProfissionais === "SEM_POSTO" ? "text-amber-700 font-bold" : "text-[#858D9D]"
+            <button
+              onClick={() => setAbaProfissionais("FERISTAS")}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                abaProfissionais === "FERISTAS"
+                  ? "bg-white text-indigo-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
               }`}
             >
-              ({reservaTecnica})
-            </span>
-          </button>
-        </div>
+              <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+              <span>Feristas</span>
+              <span className="text-[11px] font-mono px-1.5 py-0.2 rounded-md bg-indigo-50 text-indigo-700 font-bold">
+                {totalFeristas}
+              </span>
+            </button>
 
-        {/* Busca e Barra de Filtros Importados do RM */}
-        <div className="flex flex-col gap-2.5 w-full">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 border border-[#D0D5DD] rounded-lg px-2.5 py-1.5 bg-white focus-within:border-[#1F4FD1] text-xs flex-1 shadow-2xs">
-              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <button
+              onClick={() => setAbaProfissionais("RESERVA")}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                abaProfissionais === "RESERVA"
+                  ? "bg-white text-amber-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              <span>Reserva Técnica</span>
+              <span className="text-[11px] font-mono px-1.5 py-0.2 rounded-md bg-amber-50 text-amber-800 font-bold">
+                {totalReserva}
+              </span>
+            </button>
+          </div>
+
+          {/* Busca Rápida */}
+          <div className="flex items-center gap-2 flex-1 lg:max-w-md">
+            <div className="relative w-full">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por colaborador, chapa, CPF, seção ou horário..."
-                className="bg-transparent border-none outline-none w-full text-slate-800 placeholder:text-slate-400 text-xs"
+                placeholder="Buscar por colaborador, chapa, CPF, seção ou posto..."
+                className="w-full pl-9 pr-9 py-2 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#28185A]/20 focus:border-[#28185A] transition-all shadow-2xs"
               />
               {busca && (
-                <button onClick={() => setBusca("")} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <button
+                  onClick={() => setBusca("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
-            {(filtroSecao !== "TODAS" ||
-              filtroHorario !== "TODOS" ||
-              filtroFuncao !== "TODAS" ||
-              filtroSituacao !== "TODAS" ||
-              filtroSexo !== "TODOS" ||
-              filtroTipoEscala !== "TODAS" ||
-              filtroPosto !== "TODOS" ||
-              busca) && (
+            {filtrosAtivosCount > 0 && (
               <button
                 type="button"
-                onClick={() => {
-                  setFiltroSecao("TODAS");
-                  setFiltroHorario("TODOS");
-                  setFiltroFuncao("TODAS");
-                  setFiltroSituacao("TODAS");
-                  setFiltroSexo("TODOS");
-                  setFiltroTipoEscala("TODAS");
-                  setFiltroPosto("TODOS");
-                  setBusca("");
-                }}
-                className="text-xs text-rose-600 hover:text-rose-700 font-semibold px-2 py-1.5 rounded border border-rose-200 bg-rose-50 hover:bg-rose-100 transition-colors cursor-pointer shrink-0"
+                onClick={limparTodosFiltros}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 transition-all cursor-pointer shrink-0"
+                title="Limpar todos os filtros ativos"
               >
-                Limpar Filtros
+                <span>Limpar</span>
+                <span className="w-4 h-4 rounded-full bg-rose-200 text-rose-800 text-[10px] flex items-center justify-center font-bold">
+                  {filtrosAtivosCount}
+                </span>
               </button>
             )}
           </div>
+        </div>
 
-          {/* Linha de Dropdowns de Filtro usando Cadastros Importados */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
-            {/* 1. Filtro por Seção */}
+        {/* Linha 2: Dropdowns de Filtro em Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-2 border-t border-slate-100 text-xs">
+          {/* 1. Filtro por Seção */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Seção / Base</label>
             <select
               value={filtroSecao}
               onChange={(e) => setFiltroSecao(e.target.value)}
-              className="border border-[#D0D5DD] rounded-lg px-2 py-1.5 bg-white text-slate-700 text-xs outline-none hover:border-slate-300 font-medium cursor-pointer shadow-2xs truncate"
-              title="Filtrar por Seção importada"
+              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs truncate"
+              title="Filtrar por Seção RM"
             >
               <option value="TODAS">Todas as Seções ({secoesDisponiveis.length})</option>
               {secoesDisponiveis.map((s) => (
@@ -782,13 +1027,16 @@ export default function ProfissionaisPage() {
                 </option>
               ))}
             </select>
+          </div>
 
-            {/* 2. Filtro por Horário */}
+          {/* 2. Filtro por Horário */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Horário Oficial</label>
             <select
               value={filtroHorario}
               onChange={(e) => setFiltroHorario(e.target.value)}
-              className="border border-[#D0D5DD] rounded-lg px-2 py-1.5 bg-white text-slate-700 text-xs outline-none hover:border-slate-300 font-medium cursor-pointer shadow-2xs truncate"
-              title="Filtrar por Horário importado"
+              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs truncate"
+              title="Filtrar por Horário RM"
             >
               <option value="TODOS">Todos os Horários ({horariosDisponiveis.length})</option>
               {horariosDisponiveis.map((h) => (
@@ -797,12 +1045,15 @@ export default function ProfissionaisPage() {
                 </option>
               ))}
             </select>
+          </div>
 
-            {/* 3. Filtro por Função */}
+          {/* 3. Filtro por Função */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Função Contratual</label>
             <select
               value={filtroFuncao}
               onChange={(e) => setFiltroFuncao(e.target.value)}
-              className="border border-[#D0D5DD] rounded-lg px-2 py-1.5 bg-white text-slate-700 text-xs outline-none hover:border-slate-300 font-medium cursor-pointer shadow-2xs truncate"
+              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs truncate"
               title="Filtrar por Função"
             >
               <option value="TODAS">Todas as Funções ({funcoesDisponiveis.length})</option>
@@ -812,12 +1063,15 @@ export default function ProfissionaisPage() {
                 </option>
               ))}
             </select>
+          </div>
 
-            {/* 4. Filtro por Situação */}
+          {/* 4. Filtro por Situação */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Situação RM</label>
             <select
               value={filtroSituacao}
               onChange={(e) => setFiltroSituacao(e.target.value)}
-              className="border border-[#D0D5DD] rounded-lg px-2 py-1.5 bg-white text-slate-700 text-xs outline-none hover:border-slate-300 font-medium cursor-pointer shadow-2xs truncate"
+              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs truncate"
               title="Filtrar por Situação"
             >
               <option value="TODAS">Todas as Situações</option>
@@ -827,25 +1081,31 @@ export default function ProfissionaisPage() {
                 </option>
               ))}
             </select>
+          </div>
 
-            {/* 5. Filtro por Sexo */}
+          {/* 5. Filtro por Sexo */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Sexo / Gênero</label>
             <select
               value={filtroSexo}
               onChange={(e) => setFiltroSexo(e.target.value)}
-              className="border border-[#D0D5DD] rounded-lg px-2 py-1.5 bg-white text-slate-700 text-xs outline-none hover:border-slate-300 font-medium cursor-pointer shadow-2xs"
+              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs"
               title="Filtrar por Sexo"
             >
               <option value="TODOS">Todos os Sexos</option>
-              <option value="M">M - Masculino</option>
-              <option value="F">F - Feminino</option>
+              <option value="M">M — Masculino</option>
+              <option value="F">F — Feminino</option>
             </select>
+          </div>
 
-            {/* 6. Campo auxiliar SOMENTE PARA FILTRO: Tipo de escala */}
+          {/* 6. Tipo de Escala */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Tipo de Escala</label>
             <select
               value={filtroTipoEscala}
               onChange={(e) => setFiltroTipoEscala(e.target.value)}
-              className="border border-[#D0D5DD] rounded-lg px-2 py-1.5 bg-white text-slate-700 text-xs outline-none hover:border-slate-300 font-medium cursor-pointer shadow-2xs"
-              title="Tipo de escala (campo auxiliar apenas para filtro)"
+              className="w-full border border-slate-200 bg-slate-50/60 hover:bg-white rounded-xl px-2.5 py-1.5 text-slate-700 text-xs outline-none focus:border-[#28185A] font-medium cursor-pointer shadow-2xs"
+              title="Tipo de escala apurado do horário"
             >
               <option value="TODAS">Tipo Escala: Todas</option>
               {LISTA_TIPOS_ESCALA_FILTRO.map((t) => (
@@ -858,36 +1118,48 @@ export default function ProfissionaisPage() {
         </div>
       </div>
 
-      {/* 3. Tabela com Horário e Seção "código – descrição" e Regras LGPD por Perfil */}
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
+      {/* 4. Tabela Executiva Moderna */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-medium">
-              <tr>
-                <th className="px-3 py-2.5">Chapa</th>
-                <th className="px-3 py-2.5">Colaborador</th>
-                <th className="px-3 py-2.5">CPF</th>
-                <th className="px-3 py-2.5">Função</th>
-                <th className="px-3 py-2.5">Seção</th>
-                <th className="px-3 py-2.5">Horário</th>
-                <th className="px-2 py-2.5 text-center">Sexo</th>
-                <th className="px-2 py-2.5 text-center">Idade</th>
-                <th className="px-3 py-2.5 text-center">Data Nasc.</th>
-                <th className="px-3 py-2.5 text-center">Situação</th>
+            <thead>
+              <tr className="bg-slate-50/90 text-slate-600 border-b border-slate-200 font-semibold tracking-wider uppercase text-[11px]">
+                <th className="px-4 py-3.5">Colaborador / Chapa</th>
+                <th className="px-4 py-3.5">Alocação / Posto SGP</th>
+                <th className="px-4 py-3.5">Função Contratual</th>
+                <th className="px-4 py-3.5">Seção / Base</th>
+                <th className="px-4 py-3.5">Horário & Escala</th>
+                <th className="px-3 py-3.5">CPF (LGPD)</th>
+                <th className="px-2 py-3.5 text-center">Sexo / Idade</th>
+                <th className="px-3 py-3.5 text-center">Situação</th>
                 {podeVisualizarSalario(perfilEfetivo) && (
-                  <th className="px-3 py-2.5 text-right">Salário</th>
+                  <th className="px-4 py-3.5 text-right">Salário</th>
                 )}
-                <th className="px-3 py-2.5 text-center">Ações</th>
+                <th className="px-4 py-3.5 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {profissionaisFiltrados.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={podeVisualizarSalario(perfilEfetivo) ? 12 : 11}
-                    className="px-4 py-8 text-center text-slate-400"
+                    colSpan={podeVisualizarSalario(perfilEfetivo) ? 10 : 9}
+                    className="px-6 py-14 text-center"
                   >
-                    Nenhum colaborador encontrado para os filtros selecionados.
+                    <div className="max-w-sm mx-auto space-y-2">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                        <Users className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-slate-800 text-sm">Nenhum profissional localizado</h4>
+                      <p className="text-xs text-slate-500">
+                        Não encontramos colaboradores com os filtros e busca informados. Tente ajustar os termos de pesquisa.
+                      </p>
+                      <button
+                        onClick={limparTodosFiltros}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#28185A] hover:underline cursor-pointer"
+                      >
+                        Limpar todos os filtros
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -895,69 +1167,156 @@ export default function ProfissionaisPage() {
                   const chapaFormatada = prof.chapa || prof.matricula;
                   const temNomeSocial = !!prof.nomeSocial;
                   const nomeExibicao = prof.nomeSocial || prof.nome;
-                  const idadeCalc = prof.dataNascimento
-                    ? calcularIdadeDinamica(prof.dataNascimento)
-                    : null;
+                  const idadeCalc = prof.dataNascimento ? calcularIdadeDinamica(prof.dataNascimento) : null;
+                  const cpfFormatadoPerfil = formatarCpfPorPerfil(prof.cpfLimpo, perfilEfetivo);
+                  const iniciais = obterIniciais(nomeExibicao);
+                  const gradiente = obterGradienteAvatar(chapaFormatada + nomeExibicao);
 
                   return (
-                    <tr key={prof.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="px-3 py-2.5 font-mono text-slate-800 text-[11px] font-semibold">
-                        {chapaFormatada}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-slate-900 text-xs">
-                            {formatarNome(nomeExibicao)}
-                          </span>
-                          {temNomeSocial && (
-                            <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-1 rounded font-medium">
-                              Nome Social
-                            </span>
-                          )}
+                    <tr
+                      key={prof.id}
+                      className="hover:bg-slate-50/70 transition-colors group"
+                    >
+                      {/* 1. Colaborador / Chapa */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-9 h-9 rounded-xl bg-gradient-to-br ${gradiente} flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs`}
+                          >
+                            {iniciais}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-slate-900 text-xs truncate max-w-[200px]" title={formatarNome(nomeExibicao)}>
+                                {formatarNome(nomeExibicao)}
+                              </span>
+                              {temNomeSocial && (
+                                <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-1 rounded font-medium">
+                                  Nome Social
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="font-mono text-[11px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200/60">
+                                {chapaFormatada}
+                              </span>
+                              <span className="text-[11px] text-slate-400 hidden sm:inline">•</span>
+                              <span className="text-[11px] text-slate-500 truncate max-w-[130px]" title={prof.imovelEfetivo}>
+                                {prof.imovelEfetivo}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        {prof.postoCodigo && (
-                          <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
-                            Posto: <span className="font-medium text-slate-700">{prof.postoCodigo}</span>
+                      </td>
+
+                      {/* 2. Alocação / Posto SGP */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {prof.tipoAlocacao === "TITULAR" && prof.postoCodigo ? (
+                          <div className="inline-flex flex-col gap-0.5 p-1.5 px-2.5 rounded-lg bg-emerald-50 border border-emerald-200/80">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span className="font-mono font-bold text-emerald-900 text-xs">
+                                {prof.postoCodigo}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-semibold text-emerald-700 truncate max-w-[170px]" title={prof.imovelEfetivo}>
+                              Titular • {prof.imovelEfetivo}
+                            </span>
+                          </div>
+                        ) : prof.tipoAlocacao === "FERISTA" ? (
+                          <div className="inline-flex flex-col gap-0.5 p-1.5 px-2.5 rounded-lg bg-indigo-50 border border-indigo-200/80">
+                            <div className="flex items-center gap-1.5">
+                              <RefreshCw className="w-3 h-3 text-indigo-600 shrink-0" />
+                              <span className="font-bold text-indigo-950 text-xs">
+                                Ferista / Cobertura
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-medium text-indigo-700 truncate max-w-[170px]">
+                              {prof.postoCodigo ? `Posto: ${prof.postoCodigo}` : `Base: ${prof.imovelEfetivo}`}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex flex-col gap-0.5 p-1.5 px-2.5 rounded-lg bg-amber-50/70 border border-amber-200/70">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                              <span className="font-bold text-amber-900 text-xs">
+                                Reserva Técnica
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-medium text-amber-700">
+                              Disponível para alocação
+                            </span>
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-slate-700 text-[11px] whitespace-nowrap">
-                        {formatarCpfPorPerfil(prof.cpfLimpo, perfilEfetivo)}
+
+                      {/* 3. Função Contratual */}
+                      <td className="px-4 py-3 text-slate-800 font-medium text-xs max-w-[190px]">
+                        <span className="line-clamp-2" title={formatarFuncao(prof.funcao)}>
+                          {formatarFuncao(prof.funcao)}
+                        </span>
                       </td>
-                      <td className="px-3 py-2.5 text-slate-800 font-medium text-xs">
-                        {formatarFuncao(prof.funcao)}
-                      </td>
-                      {/* Seção no padrão "código – descrição" */}
-                      <td className="px-3 py-2.5 text-slate-700 text-xs max-w-[220px]" title={formatarSecaoExibicao(prof.secaoCodigo, prof.secaoDescricao || prof.unidadeNome)}>
-                        <span className="line-clamp-2">
+
+                      {/* 4. Seção / Base */}
+                      <td className="px-4 py-3 text-slate-700 text-xs max-w-[210px]" title={formatarSecaoExibicao(prof.secaoCodigo, prof.secaoDescricao || prof.unidadeNome)}>
+                        <span className="line-clamp-2 leading-relaxed">
                           {formatarSecaoExibicao(prof.secaoCodigo, prof.secaoDescricao || prof.unidadeNome)}
                         </span>
                       </td>
-                      {/* Horário no padrão "código – descrição" */}
-                      <td className="px-3 py-2.5 text-slate-700 text-xs max-w-[240px]" title={formatarHorarioExibicao(prof.horarioCodigo, prof.horarioDescricao)}>
-                        <span className="line-clamp-2">
-                          {formatarHorarioExibicao(prof.horarioCodigo, prof.horarioDescricao)}
+
+                      {/* 5. Horário & Escala */}
+                      <td className="px-4 py-3 text-slate-700 text-xs max-w-[230px]" title={formatarHorarioExibicao(prof.horarioCodigo, prof.horarioDescricao)}>
+                        <div className="space-y-1">
+                          <span className="line-clamp-2 font-medium text-[11px] leading-relaxed">
+                            {formatarHorarioExibicao(prof.horarioCodigo, prof.horarioDescricao)}
+                          </span>
+                          <span className="inline-block text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                            Escala: {identificarTipoEscala(prof.horarioDescricao)}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* 6. CPF (LGPD) */}
+                      <td className="px-3 py-3 font-mono text-slate-700 text-[11px] whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>{cpfFormatadoPerfil}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopiarCpf(cpfFormatadoPerfil, prof.id)}
+                            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                            title="Copiar CPF"
+                          >
+                            {copiadoCpfId === prof.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* 7. Sexo / Idade */}
+                      <td className="px-2 py-3 text-center whitespace-nowrap">
+                        <span className="font-medium text-slate-700 text-xs">
+                          {prof.sexo || "—"}
+                        </span>
+                        <span className="text-slate-400 mx-1">•</span>
+                        <span className="font-semibold text-slate-800 text-xs">
+                          {idadeCalc !== null ? `${idadeCalc}a` : "—"}
                         </span>
                       </td>
-                      <td className="px-2 py-2.5 text-center text-slate-700 text-xs font-medium">
-                        {prof.sexo || "—"}
-                      </td>
-                      <td className="px-2 py-2.5 text-center text-slate-700 text-xs font-medium">
-                        {idadeCalc !== null ? `${idadeCalc}a` : "—"}
-                      </td>
-                      <td className="px-3 py-2.5 text-center font-mono text-slate-600 text-[11px] whitespace-nowrap">
-                        {formatarDataNascimentoPorPerfil(prof.dataNascimento, perfilEfetivo)}
-                      </td>
-                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
+
+                      {/* 8. Situação */}
+                      <td className="px-3 py-3 text-center whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                             prof.situacao === "ATIVO" || prof.situacaoCodigo === "A"
-                              ? "text-emerald-700"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                               : prof.situacao === "FERIAS" || prof.situacaoCodigo === "F"
-                              ? "text-blue-700"
+                              ? "bg-blue-50 text-blue-700 border border-blue-200"
                               : prof.situacao === "AFASTADO" || prof.situacaoCodigo === "P" || prof.situacaoCodigo === "E"
-                              ? "text-amber-700"
-                              : "text-slate-500"
+                              ? "bg-amber-50 text-amber-700 border border-amber-200"
+                              : "bg-slate-100 text-slate-600 border border-slate-200"
                           }`}
                         >
                           <span
@@ -971,32 +1330,36 @@ export default function ProfissionaisPage() {
                                 : "bg-slate-400"
                             }`}
                           />
-                          {prof.situacaoDescricao || formatarSituacao(prof.situacao)}
+                          <span>{prof.situacaoDescricao || formatarSituacao(prof.situacao)}</span>
                         </span>
                       </td>
+
+                      {/* 9. Salário (Admin Only) */}
                       {podeVisualizarSalario(perfilEfetivo) && (
-                        <td className="px-3 py-2.5 text-right font-mono font-semibold text-slate-900 text-[11px] whitespace-nowrap">
+                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-900 text-xs whitespace-nowrap">
                           {formatarSalarioPorPerfil(prof.dadosRestritos?.salario, perfilEfetivo)}
                         </td>
                       )}
-                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
+
+                      {/* 10. Ações Rápidas */}
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
                         <div className="inline-flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => handleAbrirFicha(prof)}
-                            className="h-7 px-2.5 rounded-md border border-[#D0D5DD] bg-white hover:bg-[#F9FAFB] hover:border-[#1F4FD1] text-[#344054] hover:text-[#1F4FD1] text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
-                            title="Ver ficha do colaborador"
+                            className="h-7.5 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 hover:text-indigo-900 text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                            title="Ver Dossiê do Colaborador"
                           >
-                            <FileText className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#1F4FD1]" />
+                            <FileText className="w-3.5 h-3.5 text-slate-400" />
                             <span>Ficha</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => abrirModalTransferencia(prof)}
-                            className="h-7 px-2.5 rounded-md border border-[#D0D5DD] bg-white hover:bg-[#F9FAFB] hover:border-[#1F4FD1] text-[#344054] hover:text-[#1F4FD1] text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer group"
-                            title="Trocar posto do colaborador"
+                            className="h-7.5 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 hover:text-indigo-900 text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer group/btn"
+                            title="Trocar ou alocar posto"
                           >
-                            <RefreshCw className="w-3 h-3 text-slate-400 group-hover:text-[#1F4FD1] group-hover:rotate-45 transition-transform" />
+                            <RefreshCw className="w-3 h-3 text-slate-400 group-hover/btn:rotate-90 transition-transform duration-300" />
                             <span>Trocar Posto</span>
                           </button>
                         </div>
@@ -1009,15 +1372,24 @@ export default function ProfissionaisPage() {
           </table>
         </div>
 
-        {/* Rodapé Compacto */}
-        <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 text-xs text-slate-400 flex items-center justify-between">
-          <span>{profissionaisFiltrados.length} colaboradores exibidos</span>
-          <span>Unidade: UFN III — Três Lagoas/MS</span>
+        {/* Rodapé Executivo Dinâmico */}
+        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200/90 text-xs text-slate-600 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-800">
+              Exibindo {profissionaisFiltrados.length} de {totalGeral} colaboradores
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-slate-500">
+              {totalTitulares} Titulares, {totalFeristas} Feristas, {totalReserva} Reserva Técnica
+            </span>
+          </div>
+          <div className="text-[11px] font-medium text-slate-500">
+            Âmbito Contratual: 29 Unidades / 244 Postos Ativos (REV04)
+          </div>
         </div>
       </div>
-    </div>
 
-      {/* Modal Ficha do Colaborador (Modernizada, Analítica e Despoluída) */}
+      {/* Modal Ficha do Colaborador (Dossiê Executivo) */}
       {profissionalSelecionado && (() => {
         const idadeCalculada = profissionalSelecionado.dataNascimento
           ? calcularIdade(profissionalSelecionado.dataNascimento)
@@ -1039,12 +1411,7 @@ export default function ProfissionaisPage() {
           (m) => m.chapa === profissionalSelecionado.chapa || m.chapa === profissionalSelecionado.matricula
         );
         const postoVinculado = postos.find((p) => p.codigoPosto === profissionalSelecionado.postoCodigo);
-        const iniciais = nomePrincipal
-          .split(" ")
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((p) => p[0].toUpperCase())
-          .join("");
+        const iniciais = obterIniciais(nomePrincipal);
 
         const handleImprimirFicha = () => {
           const tituloOriginal = document.title;
@@ -1058,58 +1425,41 @@ export default function ProfissionaisPage() {
 
         return (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn ficha-rh-container">
-            {/* Backdrop com fechamento ao clicar */}
             <div
               className="fixed inset-0 cursor-pointer ficha-rh-backdrop print:hidden"
               onClick={() => setProfissionalSelecionado(null)}
               aria-hidden="true"
             />
 
-            {/* Modal Central Amplo de RH (Estilo Workday / Deel / Senior HCM) - Apenas Visualização em Tela */}
             <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden flex flex-col max-h-[92vh] z-10 animate-scaleIn ficha-rh-drawer print:hidden">
-              {/* 1. Cabeçalho Hero Executivo de RH (Topo do Modal) */}
-              <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white p-5 sm:p-6 relative shrink-0">
-                {/* Barra Superior com Título de Governança e Botão Fechar */}
-                <div className="flex items-center justify-between pb-3 border-b border-white/10 print:hidden">
+              {/* Cabeçalho Hero Executivo */}
+              <div className="bg-gradient-to-r from-[#1B1745] via-[#28185A] to-slate-900 text-white p-5 sm:p-6 relative shrink-0">
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
                   <div className="flex items-center gap-2 text-xs">
                     <span className="font-semibold text-slate-200 flex items-center gap-1.5">
-                      <Briefcase className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Ficha do Colaborador</span>
+                      <Briefcase className="w-3.5 h-3.5 text-[#D8C7A0]" />
+                      <span>Dossiê Funcional do Colaborador</span>
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setProfissionalSelecionado(null)}
                     className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
-                    title="Fechar (Esc)"
+                    title="Fechar"
                   >
                     <X className="w-4.5 h-4.5" />
                   </button>
                 </div>
 
-                {/* Linha do Perfil com Avatar e Informações Centrais */}
                 <div className="pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-4">
-                    {/* Avatar com Anel de Status Pulsante */}
                     <div className="relative shrink-0">
-                      <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-white/10 border-2 border-white/20 backdrop-blur-md flex items-center justify-center text-xl sm:text-2xl font-bold text-white shadow-lg print:border print:text-black print:bg-white">
+                      <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-white/10 border-2 border-white/20 backdrop-blur-md flex items-center justify-center text-xl sm:text-2xl font-bold text-white shadow-lg">
                         {iniciais}
                       </div>
-                      {/* Status Dot Pulsante */}
-                      <span className="absolute -bottom-1 -right-1 flex h-4 w-4 print:hidden">
+                      <span className="absolute -bottom-1 -right-1 flex h-4 w-4">
                         <span
-                          className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                            profissionalSelecionado.situacao === "ATIVO"
-                              ? "bg-emerald-400"
-                              : profissionalSelecionado.situacao === "FERIAS"
-                              ? "bg-blue-400"
-                              : profissionalSelecionado.situacao === "AFASTADO"
-                              ? "bg-amber-400"
-                              : "bg-slate-400"
-                          }`}
-                        />
-                        <span
-                          className={`relative inline-flex rounded-full h-4 w-4 border-2 border-slate-900 ${
+                          className={`relative inline-flex rounded-full h-4 w-4 border-2 border-[#28185A] ${
                             profissionalSelecionado.situacao === "ATIVO"
                               ? "bg-emerald-500"
                               : profissionalSelecionado.situacao === "FERIAS"
@@ -1122,10 +1472,9 @@ export default function ProfissionaisPage() {
                       </span>
                     </div>
 
-                    {/* Nome, Cargo e Identificação */}
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white leading-tight print:text-black">
+                        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white leading-tight">
                           {formatarNome(nomePrincipal)}
                         </h2>
                         {temNomeSocial && (
@@ -1148,22 +1497,27 @@ export default function ProfissionaisPage() {
                         </span>
                       </div>
 
-                      <p className="text-sm font-semibold text-blue-300 mt-0.5 print:text-slate-800">
+                      <p className="text-sm font-semibold text-[#D8C7A0] mt-0.5">
                         {formatarFuncao(profissionalSelecionado.funcao)}
                       </p>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-slate-300 font-mono">
+                        <span>Chapa: {chapaCodigo}</span>
+                        <span>•</span>
+                        <span>Base: {profissionalSelecionado.unidadeNome || profissionalSelecionado.unidadeId || "—"}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* 2. Barra de Abas Corporativas de RH */}
-              <div className="flex items-center gap-2 px-6 bg-slate-50 border-b border-slate-200 shrink-0 print:hidden">
+              {/* Abas do Modal */}
+              <div className="flex items-center gap-2 px-6 bg-slate-50 border-b border-slate-200 shrink-0">
                 <button
                   type="button"
                   onClick={() => setAbaFicha("CONTRATO")}
                   className={`inline-flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-semibold transition-all border-b-2 cursor-pointer ${
                     abaFicha === "CONTRATO"
-                      ? "border-[#1F4FD1] text-[#1F4FD1] bg-white shadow-2xs font-bold"
+                      ? "border-[#28185A] text-[#28185A] bg-white shadow-2xs font-bold"
                       : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                   }`}
                 >
@@ -1176,12 +1530,12 @@ export default function ProfissionaisPage() {
                   onClick={() => setAbaFicha("PONTO")}
                   className={`inline-flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-semibold transition-all border-b-2 cursor-pointer ${
                     abaFicha === "PONTO"
-                      ? "border-[#1F4FD1] text-[#1F4FD1] bg-white shadow-2xs font-bold"
+                      ? "border-[#28185A] text-[#28185A] bg-white shadow-2xs font-bold"
                       : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                   }`}
                 >
                   <Clock className="w-4 h-4" />
-                  <span>Ponto & Frequência</span>
+                  <span>Ponto & Ocorrências</span>
                   {ocorrenciasColab.length > 0 && (
                     <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
                       {ocorrenciasColab.length}
@@ -1194,26 +1548,24 @@ export default function ProfissionaisPage() {
                   onClick={() => setAbaFicha("DOCUMENTOS")}
                   className={`inline-flex items-center gap-2 px-4 py-3 text-xs sm:text-sm font-semibold transition-all border-b-2 cursor-pointer ${
                     abaFicha === "DOCUMENTOS"
-                      ? "border-[#1F4FD1] text-[#1F4FD1] bg-white shadow-2xs font-bold"
+                      ? "border-[#28185A] text-[#28185A] bg-white shadow-2xs font-bold"
                       : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100"
                   }`}
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Documentos & DP</span>
+                  <span>Documentos & LGPD</span>
                 </button>
               </div>
 
-              {/* 3. Conteúdo da Ficha por Abas (Espaçoso, Funcional e Organizado) */}
-              <div className="flex-1 overflow-y-auto p-6 bg-[#FAFAFC] print:bg-white print:overflow-visible print:p-4">
-                
-                {/* ABA 1: CONTRATO & LOTAÇÃO (Objetivo e Limpo) */}
-                {(abaFicha === "CONTRATO" || typeof window === "undefined") && (
+              {/* Conteúdo da Ficha */}
+              <div className="flex-1 overflow-y-auto p-6 bg-[#FAFAFC]">
+                {abaFicha === "CONTRATO" && (
                   <div className="space-y-4 animate-fadeIn">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Card 1: Vínculo Contratual */}
-                      <div className="p-4 bg-white rounded-xl border border-[#E3E6EB] shadow-2xs space-y-3">
+                      {/* Vínculo Contratual */}
+                      <div className="p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs space-y-3">
                         <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                          <Briefcase className="w-4 h-4 text-[#1F4FD1]" />
+                          <Briefcase className="w-4 h-4 text-[#28185A]" />
                           <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wide">
                             Vínculo Contratual
                           </h4>
@@ -1240,7 +1592,7 @@ export default function ProfissionaisPage() {
                                   ? profissionalSelecionado.dataAdmissao.split("-").reverse().join("/")
                                   : "—"}
                               </span>
-                              <span className="text-[11px] text-[#1F4FD1] font-semibold ml-1.5">
+                              <span className="text-[11px] text-[#28185A] font-semibold ml-1.5">
                                 ({calcularTempoCasa(profissionalSelecionado.dataAdmissao)})
                               </span>
                             </div>
@@ -1269,12 +1621,12 @@ export default function ProfissionaisPage() {
                         </div>
                       </div>
 
-                      {/* Card 2: Lotação & Escala Operacional */}
-                      <div className="p-4 bg-white rounded-xl border border-[#E3E6EB] shadow-2xs space-y-3">
+                      {/* Lotação & Escala */}
+                      <div className="p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs space-y-3">
                         <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
                           <UserCheck className="w-4 h-4 text-emerald-600" />
                           <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wide">
-                            Lotação & Escala
+                            Lotação & Escala Operacional
                           </h4>
                         </div>
 
@@ -1304,14 +1656,14 @@ export default function ProfissionaisPage() {
                                   )}
                                   <Link
                                     href="/postos"
-                                    className="text-[11px] text-[#1F4FD1] hover:underline font-semibold ml-1 print:hidden"
+                                    className="text-[11px] text-[#28185A] hover:underline font-semibold ml-1"
                                     title="Abrir posto no Anexo 1-A"
                                   >
                                     Ver →
                                   </Link>
                                 </>
                               ) : (
-                                <span className="font-semibold text-slate-800">
+                                <span className="font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                                   Reserva Técnica (Sem posto fixo)
                                 </span>
                               )}
@@ -1337,27 +1689,10 @@ export default function ProfissionaisPage() {
 
                           <div className="flex items-center justify-between py-1">
                             <span className="text-slate-500 font-medium">Status Operacional</span>
-                            {profissionalSelecionado.situacao === "DESLIGADO" ? (
-                              <span className="inline-flex items-center gap-1.5 text-slate-600 font-semibold">
-                                <span className="w-2 h-2 rounded-full bg-slate-400" />
-                                Contrato Rescindido
-                              </span>
-                            ) : profissionalSelecionado.situacao === "FERIAS" ? (
-                              <span className="inline-flex items-center gap-1.5 text-blue-700 font-semibold">
-                                <span className="w-2 h-2 rounded-full bg-blue-500" />
-                                Em Férias Regulamentares
-                              </span>
-                            ) : profissionalSelecionado.situacao === "AFASTADO" ? (
-                              <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold">
-                                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                                Afastado Temporariamente
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 text-emerald-700 font-semibold">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                                Regular no Contrato
-                              </span>
-                            )}
+                            <span className="inline-flex items-center gap-1.5 text-emerald-700 font-semibold">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                              Regular no Contrato
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -1365,12 +1700,10 @@ export default function ProfissionaisPage() {
                   </div>
                 )}
 
-                {/* ABA 2: PONTO & FREQUÊNCIA (Objetivo e Limpo) */}
                 {abaFicha === "PONTO" && (
                   <div className="space-y-4 animate-fadeIn">
-                    {/* Linha de Indicadores Rápidos (Executive Stats Strip) */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="p-3 bg-white rounded-xl border border-[#E3E6EB] shadow-2xs">
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
                         <span className="text-[11px] font-medium text-slate-400 block">Situação da Folha</span>
                         <div className="flex items-center gap-1.5 mt-1">
                           <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -1380,7 +1713,7 @@ export default function ProfissionaisPage() {
                         </div>
                       </div>
 
-                      <div className="p-3 bg-white rounded-xl border border-[#E3E6EB] shadow-2xs">
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
                         <span className="text-[11px] font-medium text-slate-400 block">Aproveitamento</span>
                         <div className="flex items-center gap-1.5 mt-1">
                           <span className={`font-bold text-xs ${ocorrenciasColab.length === 0 ? "text-emerald-700" : "text-amber-800"}`}>
@@ -1389,16 +1722,16 @@ export default function ProfissionaisPage() {
                         </div>
                       </div>
 
-                      <div className="p-3 bg-white rounded-xl border border-[#E3E6EB] shadow-2xs">
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
                         <span className="text-[11px] font-medium text-slate-400 block">Ocorrências no Mês</span>
                         <div className="flex items-center gap-1.5 mt-1">
                           <span className="font-bold text-xs text-slate-800">
-                            {ocorrenciasColab.length} {ocorrenciasColab.length === 1 ? "registro" : "registros"}
+                            {ocorrenciasColab.length} registros
                           </span>
                         </div>
                       </div>
 
-                      <div className="p-3 bg-white rounded-xl border border-[#E3E6EB] shadow-2xs">
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
                         <span className="text-[11px] font-medium text-slate-400 block">Marcações no Lote</span>
                         <div className="flex items-center gap-1.5 mt-1">
                           <span className="font-bold text-xs text-slate-800">
@@ -1408,11 +1741,10 @@ export default function ProfissionaisPage() {
                       </div>
                     </div>
 
-                    {/* Card de Espelho de Ponto Oficial */}
-                    <div className="p-4 bg-white rounded-xl border border-[#E3E6EB] shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-[#1F4FD1]" />
+                          <Clock className="w-4 h-4 text-[#28185A]" />
                           <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wide">
                             Espelho Mensal de Ponto • Competência Oficial
                           </h4>
@@ -1427,50 +1759,38 @@ export default function ProfissionaisPage() {
                       {!ehPerfilPetrobras && (
                         <Link
                           href={`/profissionais/${chapaCodigo}/espelho-ponto`}
-                          className="h-8.5 px-3.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#1F4FD1] text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer self-start sm:self-auto shrink-0 print:hidden"
+                          className="h-8.5 px-3.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-[#28185A] text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
                         >
-                          <FileText className="w-3.5 h-3.5 text-[#1F4FD1]" />
+                          <FileText className="w-3.5 h-3.5 text-[#28185A]" />
                           <span>Abrir Espelho Completo →</span>
                         </Link>
                       )}
                     </div>
 
-                    {/* Resumo de Ocorrências */}
                     {ocorrenciasColab.length === 0 ? (
-                      <div className="p-3.5 bg-white rounded-xl border border-[#E3E6EB] shadow-2xs flex items-center justify-between text-xs text-slate-700">
+                      <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between text-xs text-slate-700">
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>Nenhuma falta injustificada, atraso ou atestado médico registrado no período.</span>
+                          <span>Nenhuma falta injustificada, atraso ou atestado registrado no período.</span>
                         </div>
-                        <Link
-                          href="/ocorrencias"
-                          className="text-[11px] text-[#1F4FD1] hover:underline font-semibold shrink-0 print:hidden ml-2"
-                        >
+                        <Link href="/ocorrencias" className="text-[11px] text-[#28185A] hover:underline font-semibold ml-2">
                           Quadro Geral →
                         </Link>
                       </div>
                     ) : (
-                      <div className="p-4 bg-white rounded-xl border border-[#E3E6EB] shadow-2xs space-y-2">
+                      <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2">
                         <div className="flex items-center justify-between pb-1 border-b border-slate-100">
                           <h5 className="font-bold text-xs text-slate-800 uppercase tracking-wide">
                             Ocorrências Registradas ({ocorrenciasColab.length})
                           </h5>
-                          <Link
-                            href="/ocorrencias"
-                            className="text-[11px] text-[#1F4FD1] hover:underline font-semibold print:hidden"
-                          >
+                          <Link href="/ocorrencias" className="text-[11px] text-[#28185A] hover:underline font-semibold">
                             Ver Quadro Completo →
                           </Link>
                         </div>
                         <div className="space-y-1.5">
                           {ocorrenciasColab.map((oc) => (
-                            <div
-                              key={oc.id}
-                              className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between text-xs"
-                            >
-                              <span className="font-semibold text-slate-900">
-                                {oc.tipoOcorrencia.replace(/_/g, " ")}
-                              </span>
+                            <div key={oc.id} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between text-xs">
+                              <span className="font-semibold text-slate-900">{oc.tipoOcorrencia.replace(/_/g, " ")}</span>
                               <span className="font-mono text-slate-600">
                                 {oc.dataInicio === oc.dataFim ? oc.dataInicio : `${oc.dataInicio} a ${oc.dataFim}`} ({oc.diasAfetados}d)
                               </span>
@@ -1482,12 +1802,11 @@ export default function ProfissionaisPage() {
                   </div>
                 )}
 
-                {/* ABA 3: DOCUMENTOS & DP (Objetivo e Limpo) */}
                 {abaFicha === "DOCUMENTOS" && (
                   <div className="space-y-4 animate-fadeIn">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Card Documentos Gerais */}
-                      <div className="p-4 bg-white rounded-xl border border-[#E3E6EB] shadow-2xs space-y-3">
+                      {/* Identificação */}
+                      <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-3">
                         <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
                           <ShieldCheck className="w-4 h-4 text-slate-700" />
                           <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wide">
@@ -1510,9 +1829,7 @@ export default function ProfissionaisPage() {
                                 {formatarDataNascimentoPorPerfil(profissionalSelecionado.dataNascimento, perfilEfetivo)}
                               </span>
                               {idadeCalculada !== null && (
-                                <span className="text-slate-500 ml-1.5 font-normal">
-                                  ({idadeCalculada} anos)
-                                </span>
+                                <span className="text-slate-500 ml-1.5 font-normal">({idadeCalculada} anos)</span>
                               )}
                             </div>
                           </div>
@@ -1524,7 +1841,7 @@ export default function ProfissionaisPage() {
                                 ? "Masculino"
                                 : profissionalSelecionado.sexo === "F"
                                 ? "Feminino"
-                                : profissionalSelecionado.sexo || "Não informado"}
+                                : "Não informado"}
                             </span>
                           </div>
 
@@ -1537,8 +1854,8 @@ export default function ProfissionaisPage() {
                         </div>
                       </div>
 
-                      {/* Card Dados Salariais & Domicílio (Conforme LGPD por Perfil) */}
-                      <div className="p-4 bg-white rounded-xl border border-[#E3E6EB] shadow-2xs space-y-3">
+                      {/* DP e Salário */}
+                      <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-3">
                         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                           <div className="flex items-center gap-2">
                             <Lock className="w-4 h-4 text-amber-600" />
@@ -1548,7 +1865,7 @@ export default function ProfissionaisPage() {
                           </div>
                           {podeVisualizarSalario(perfilEfetivo) && (
                             <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded font-semibold">
-                              Acesso Autorizado (Admin)
+                              Acesso Autorizado
                             </span>
                           )}
                         </div>
@@ -1593,28 +1910,27 @@ export default function ProfissionaisPage() {
                     </div>
                   </div>
                 )}
-
               </div>
 
-              {/* 4. Rodapé Fixo Executivo do Modal */}
-              <div className="p-4 px-6 bg-slate-50/80 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0 print:hidden">
+              {/* Rodapé do Modal */}
+              <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0 print:hidden">
                 <div className="flex items-center gap-2.5">
                   <button
                     type="button"
                     onClick={handleImprimirFicha}
-                    className="h-9 px-4 rounded-lg bg-[#1F4FD1] hover:bg-[#183FB3] active:scale-[0.98] text-white text-xs font-semibold shadow-xs hover:shadow inline-flex items-center gap-2 transition-all cursor-pointer group"
+                    className="h-9 px-4 rounded-xl bg-[#28185A] hover:bg-[#1B1745] text-white text-xs font-semibold shadow-xs inline-flex items-center gap-2 transition-all cursor-pointer"
                     title="Imprimir ou exportar ficha funcional em PDF"
                   >
-                    <Printer className="w-4 h-4 text-white group-hover:scale-110 transition-transform shrink-0" />
+                    <Printer className="w-4 h-4 text-white" />
                     <span>Imprimir / Exportar Ficha (PDF)</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => abrirModalTransferencia(profissionalSelecionado)}
-                    className="h-9 px-4 rounded-lg bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-800 hover:text-slate-950 text-xs font-semibold inline-flex items-center gap-2 transition-all cursor-pointer group"
+                    className="h-9 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold inline-flex items-center gap-2 transition-all cursor-pointer"
                     title="Movimentar ou transferir de posto operacional"
                   >
-                    <RefreshCw className="w-3.5 h-3.5 text-slate-500 group-hover:text-[#1F4FD1] group-hover:rotate-180 transition-all duration-500 shrink-0" />
+                    <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
                     <span>Movimentar / Trocar Posto</span>
                   </button>
                 </div>
@@ -1622,18 +1938,15 @@ export default function ProfissionaisPage() {
                 <button
                   type="button"
                   onClick={() => setProfissionalSelecionado(null)}
-                  className="h-9 px-4 rounded-lg bg-transparent hover:bg-slate-100 text-slate-600 hover:text-slate-900 font-medium text-xs transition-colors cursor-pointer"
+                  className="h-9 px-4 rounded-xl hover:bg-slate-200 text-slate-600 hover:text-slate-900 font-semibold text-xs transition-colors cursor-pointer"
                 >
                   Fechar
                 </button>
               </div>
             </div>
 
-            {/* ======================================================== */}
-            {/* DOCUMENTO OFICIAL EXCLUSIVO PARA IMPRESSÃO / EXPORTAÇÃO EM PDF */}
-            {/* ======================================================== */}
+            {/* Timbre de Impressão Oficial */}
             <div className="hidden print:block w-full max-w-4xl mx-auto bg-white text-slate-900 font-sans p-6 sm:p-8 space-y-5 ficha-impressao-oficial">
-              {/* 1. Timbre Oficial de Cabeçalho */}
               <div className="border-b-2 border-slate-900 pb-3 flex items-start justify-between">
                 <div>
                   <div className="text-base font-extrabold text-slate-900 tracking-wide uppercase">
@@ -1649,14 +1962,12 @@ export default function ProfissionaisPage() {
                 </div>
               </div>
 
-              {/* 2. Título do Documento */}
               <div className="text-center py-2 bg-slate-100 rounded border border-slate-300">
                 <h1 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
                   Ficha Funcional do Colaborador • Dossiê Oficial de Recursos Humanos
                 </h1>
               </div>
 
-              {/* 3. Identificação Cadastral Principal */}
               <div className="border border-slate-300 rounded p-4 space-y-3 avoid-break">
                 <div className="text-xs font-bold text-slate-900 uppercase tracking-wide border-b border-slate-200 pb-1.5 flex items-center justify-between">
                   <span>1. Identificação do Colaborador</span>
@@ -1667,9 +1978,6 @@ export default function ProfissionaisPage() {
                   <div>
                     <span className="text-slate-500 block font-medium">Nome Completo:</span>
                     <span className="font-bold text-slate-900 text-sm">{formatarNome(nomePrincipal)}</span>
-                    {temNomeSocial && (
-                      <span className="text-[11px] text-purple-700 block">(Nome Social Registrado)</span>
-                    )}
                   </div>
                   <div>
                     <span className="text-slate-500 block font-medium">Cargo / Função Contratual:</span>
@@ -1685,164 +1993,6 @@ export default function ProfissionaisPage() {
                     <span className="text-slate-500 block font-medium">Situação Cadastral:</span>
                     <span className="font-bold text-slate-900">{formatarSituacao(profissionalSelecionado.situacao)}</span>
                   </div>
-                  <div>
-                    <span className="text-slate-500 block font-medium">Data de Nascimento / Idade:</span>
-                    <span className="font-semibold text-slate-800">
-                      {profissionalSelecionado.dataNascimento
-                        ? new Date(profissionalSelecionado.dataNascimento + "T00:00:00").toLocaleDateString("pt-BR")
-                        : "—"}
-                      {idadeCalculada !== null && ` (${idadeCalculada} anos)`}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-medium">Sexo / Gênero:</span>
-                    <span className="font-semibold text-slate-800">
-                      {profissionalSelecionado.sexo === "M" ? "Masculino" : profissionalSelecionado.sexo === "F" ? "Feminino" : "Não informado"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-medium">Telefone Corporativo:</span>
-                    <span className="font-semibold text-slate-800">
-                      {profissionalSelecionado.telefoneCorporativo || "Não cadastrado"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-medium">Telefone Pessoal:</span>
-                    <span className="font-semibold text-slate-800">
-                      {profissionalSelecionado.dadosRestritos?.telefonePessoal || "Sob sigilo LGPD"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. Vínculo Trabalhista & Lotação Operacional */}
-              <div className="border border-slate-300 rounded p-4 space-y-3 avoid-break">
-                <div className="text-xs font-bold text-slate-900 uppercase tracking-wide border-b border-slate-200 pb-1.5">
-                  2. Vínculo Trabalhista & Lotação Operacional
-                </div>
-
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
-                  <div>
-                    <span className="text-slate-500 block font-medium">Regime Jurídico:</span>
-                    <span className="font-semibold text-slate-800">CLT (Prazo Indeterminado)</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-medium">Base de Lotação:</span>
-                    <span className="font-bold text-slate-900">{formatarTexto(profissionalSelecionado.unidadeId)}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-medium">Data de Admissão:</span>
-                    <span className="font-semibold text-slate-900">
-                      {profissionalSelecionado.dataAdmissao ? profissionalSelecionado.dataAdmissao.split("-").reverse().join("/") : "—"}
-                      {" "}({calcularTempoCasa(profissionalSelecionado.dataAdmissao)})
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-medium">Posto Anexo 1-A:</span>
-                    <span className="font-bold text-slate-900">
-                      {profissionalSelecionado.postoCodigo
-                        ? `Posto ${profissionalSelecionado.postoCodigo}${postoVinculado ? ` — ${formatarFuncao(postoVinculado.funcao)}` : ""}`
-                        : "Reserva Técnica (Sem posto fixo)"}
-                    </span>
-                  </div>
-                  {profissionalSelecionado.dataDesligamento && (
-                    <div>
-                      <span className="text-slate-500 block font-medium">Data de Desligamento:</span>
-                      <span className="font-bold text-rose-700">
-                        {profissionalSelecionado.dataDesligamento.split("-").reverse().join("/")} (Rescisão)
-                      </span>
-                    </div>
-                  )}
-                  <div>
-                    <span className="text-slate-500 block font-medium">Escala / Turno de Trabalho:</span>
-                    <span className="font-semibold text-slate-800">
-                      Escala {profissionalSelecionado.escala} — {formatarHorario(profissionalSelecionado.horarioDescricao)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-medium">Carga Horária Semanal:</span>
-                    <span className="font-semibold text-slate-800">44 horas CLT</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-medium">Contrato Petrobras:</span>
-                    <span className="font-mono text-slate-800 font-semibold">ICJ 5900.0129796.25.2</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 5. Frequência & Ocorrências Apuradas */}
-              <div className="border border-slate-300 rounded p-4 space-y-3 avoid-break">
-                <div className="text-xs font-bold text-slate-900 uppercase tracking-wide border-b border-slate-200 pb-1.5">
-                  3. Frequência & Ocorrências (Competência Vigente)
-                </div>
-
-                <div className="grid grid-cols-3 gap-4 text-xs">
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 block text-[11px]">Situação da Folha</span>
-                    <span className="font-bold text-slate-900">
-                      {profissionalSelecionado.situacao === "DESLIGADO" ? "Rescindido" : "Folha Regular"}
-                    </span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 block text-[11px]">Marcações no Lote</span>
-                    <span className="font-bold text-slate-900">
-                      {marcacoesColab.length > 0 ? `${marcacoesColab.length} batidas` : "Sincronizado"}
-                    </span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 block text-[11px]">Ocorrências no Período</span>
-                    <span className="font-bold text-slate-900">
-                      {ocorrenciasColab.length === 0 ? "0 ocorrências (100% Presença)" : `${ocorrenciasColab.length} ocorrência(s) (${diasAfetadosTotal}d)`}
-                    </span>
-                  </div>
-                </div>
-
-                {ocorrenciasColab.length > 0 && (
-                  <table className="w-full text-left text-xs border border-slate-200 mt-2">
-                    <thead className="bg-slate-100 border-b border-slate-200">
-                      <tr>
-                        <th className="p-1.5 font-bold text-slate-700">Tipo de Ocorrência</th>
-                        <th className="p-1.5 font-bold text-slate-700">Período</th>
-                        <th className="p-1.5 font-bold text-slate-700 text-right">Dias</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ocorrenciasColab.map((oc) => (
-                        <tr key={oc.id} className="border-b border-slate-100">
-                          <td className="p-1.5 font-medium text-slate-900">{oc.tipoOcorrencia.replace(/_/g, " ")}</td>
-                          <td className="p-1.5 font-mono text-slate-600">{oc.dataInicio === oc.dataFim ? oc.dataInicio : `${oc.dataInicio} a ${oc.dataFim}`}</td>
-                          <td className="p-1.5 text-right font-semibold text-slate-800">{oc.diasAfetados}d</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              {/* 6. Declaração Oficial e Termo de Assinaturas */}
-              <div className="border border-slate-300 rounded p-4 space-y-6 pt-4 avoid-break">
-                <p className="text-[11px] text-slate-600 text-justify leading-relaxed">
-                  Declaramos para os devidos fins de direito e fiscalização que os dados cadastrais, contratuais e de frequência constantes neste documento são autênticos, extraídos do Sistema de Gestão de Postos (SGP) e em estrita conformidade com a legislação trabalhista vigente e as cláusulas do Contrato ICJ 5900.0129796.25.2 firmado com a Petrobras.
-                </p>
-
-                <div className="grid grid-cols-2 gap-12 pt-6">
-                  <div className="text-center">
-                    <div className="border-t border-slate-900 pt-2 font-bold text-xs text-slate-900">
-                      {formatarNome(nomePrincipal)}
-                    </div>
-                    <div className="text-[10px] text-slate-500">Assinatura do Colaborador</div>
-                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                      CPF: {ehPerfilPetrobras ? profissionalSelecionado.cpfMascarado : cpfFormatado}
-                    </div>
-                  </div>
-
-                  <div className="text-center">
-                    <div className="border-t border-slate-900 pt-2 font-bold text-xs text-slate-900">
-                      Premier Logistics Ltda.
-                    </div>
-                    <div className="text-[10px] text-slate-500">Visto de Recursos Humanos / Departamento Pessoal</div>
-                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">Gestão Contratual SGP</div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -1852,34 +2002,39 @@ export default function ProfissionaisPage() {
 
       {/* Modal Admissão de Novo Colaborador */}
       {modalAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden animate-scaleIn">
-            <div className="p-4 bg-premier-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Plus className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-sm">Admitir Colaborador no Contrato</h3>
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden animate-scaleIn">
+            <div className="p-5 bg-gradient-to-r from-[#1B1745] to-[#28185A] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                  <Plus className="w-5 h-5 text-[#D8C7A0]" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">Admitir Colaborador no Contrato</h3>
+                  <p className="text-[11px] text-slate-300">Cadastro de força de trabalho e vínculo a posto</p>
+                </div>
               </div>
               <button
                 onClick={() => setModalAberto(false)}
-                className="text-slate-300 hover:text-white transition-colors"
+                className="text-slate-300 hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitNovoColaborador} className="p-5 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSubmitNovoColaborador} className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
-                    Matrícula <span className="text-rose-500">*</span>
+                    Matrícula / Chapa <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="Ex: PRM-00117"
+                    placeholder="Ex: 046900"
                     value={formMatricula}
                     onChange={(e) => setFormMatricula(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 uppercase font-mono text-slate-800 outline-none focus:border-premier-700"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 uppercase font-mono text-slate-800 outline-none focus:border-[#28185A]"
                   />
                 </div>
 
@@ -1893,15 +2048,15 @@ export default function ProfissionaisPage() {
                     placeholder="Ex: Gabriel Alves Moreira"
                     value={formNome}
                     onChange={(e) => setFormNome(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 outline-none focus:border-premier-700"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-[#28185A]"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
-                    CPF (Somente Números) <span className="text-rose-500">*</span>
+                    CPF (11 dígitos) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1910,9 +2065,8 @@ export default function ProfissionaisPage() {
                     placeholder="123.456.789-01"
                     value={formCpf}
                     onChange={(e) => setFormCpf(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-slate-800 outline-none focus:border-premier-700"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-800 outline-none focus:border-[#28185A]"
                   />
-                  <span className="text-[10px] text-slate-500">Salvo cifrado e mascarado para Petrobras</span>
                 </div>
 
                 <div>
@@ -1922,24 +2076,24 @@ export default function ProfissionaisPage() {
                   <input
                     type="text"
                     required
-                    placeholder="Ex: Auxiliar de Almoxarifado"
+                    placeholder="Ex: Assistente de Logística"
                     value={formFuncao}
                     onChange={(e) => setFormFuncao(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 outline-none focus:border-premier-700"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-slate-800 outline-none focus:border-[#28185A]"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Vincular a Posto (Anexo 1-A)</label>
                   <select
                     value={formPosto}
                     onChange={(e) => setFormPosto(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2 py-1.5 bg-white text-slate-800 outline-none"
+                    className="w-full border border-slate-300 rounded-xl px-2.5 py-2 bg-white text-slate-800 outline-none"
                   >
                     <option value="">Reserva Técnica (Sem posto fixo)</option>
-                    {postos.map((p) => (
+                    {postos.slice(0, 100).map((p) => (
                       <option key={p.codigoPosto} value={p.codigoPosto}>
                         {p.codigoPosto} — {p.funcao}
                       </option>
@@ -1952,7 +2106,7 @@ export default function ProfissionaisPage() {
                   <select
                     value={formEscala}
                     onChange={(e) => setFormEscala(e.target.value as "5x2" | "12x36" | "6x1")}
-                    className="w-full border border-slate-300 rounded px-2 py-1.5 bg-white text-slate-800 outline-none"
+                    className="w-full border border-slate-300 rounded-xl px-2.5 py-2 bg-white text-slate-800 outline-none"
                   >
                     <option value="5x2">5x2</option>
                     <option value="12x36">12x36</option>
@@ -1961,15 +2115,15 @@ export default function ProfissionaisPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Telefone Corporativo</label>
                   <input
                     type="text"
-                    placeholder="(67) 99888-0000"
+                    placeholder="(21) 99888-0000"
                     value={formTelefone}
                     onChange={(e) => setFormTelefone(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 outline-none"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-slate-800 outline-none"
                   />
                 </div>
 
@@ -1980,7 +2134,7 @@ export default function ProfissionaisPage() {
                     placeholder="2800.00"
                     value={formSalario}
                     onChange={(e) => setFormSalario(e.target.value)}
-                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 outline-none"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-slate-800 outline-none"
                   />
                 </div>
               </div>
@@ -1992,21 +2146,21 @@ export default function ProfissionaisPage() {
                   placeholder="Rua, número, bairro, cidade/UF..."
                   value={formEndereco}
                   onChange={(e) => setFormEndereco(e.target.value)}
-                  className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 outline-none"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-slate-800 outline-none"
                 />
               </div>
 
-              <div className="p-3 bg-slate-100 border-t border-slate-200 -mx-5 -mb-5 flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setModalAberto(false)}
-                  className="px-3 py-1.5 bg-white hover:bg-slate-200 text-slate-700 font-semibold rounded border border-slate-300 transition-colors"
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-premier-900 hover:bg-premier-800 text-white font-semibold rounded shadow transition-colors"
+                  className="px-5 py-2 rounded-xl bg-[#28185A] hover:bg-[#1B1745] text-white font-semibold shadow-xs transition-colors cursor-pointer"
                 >
                   Salvar Colaborador
                 </button>
@@ -2015,15 +2169,15 @@ export default function ProfissionaisPage() {
           </div>
         </div>
       )}
-      {/* Modal Troca/Transferência de Posto do Colaborador (Busca Aberta por Nome ou Matrícula) */}
+
+      {/* Modal Troca/Transferência de Posto do Colaborador */}
       {modalTransferenciaAberto && colaboradorParaTransferir && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 print:hidden animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden animate-scaleIn flex flex-col max-h-[92vh]">
-            {/* 1. Topo do Modal */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
+            <div className="bg-gradient-to-r from-[#1B1745] to-[#28185A] text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                  <RefreshCw className="w-4 h-4 text-blue-400" />
+                  <RefreshCw className="w-4 h-4 text-[#D8C7A0]" />
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-white leading-tight">Trocar Posto / Substituição</h3>
@@ -2046,25 +2200,23 @@ export default function ProfissionaisPage() {
               </button>
             </div>
 
-            {/* 2. Formulário com Busca Aberta */}
             <form onSubmit={handleSalvarTransferencia} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
-              {/* Card Colaborador de Origem */}
               <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                 <div className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Colaborador Atual</div>
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="font-bold text-slate-900 text-sm">{formatarNome(colaboradorParaTransferir.nome)}</div>
                     <div className="text-[11px] text-slate-600 mt-0.5">
-                      Matrícula: <strong className="font-mono">{colaboradorParaTransferir.matricula}</strong> • Função: <strong>{formatarFuncao(colaboradorParaTransferir.funcao)}</strong>
+                      Chapa: <strong className="font-mono">{colaboradorParaTransferir.chapa || colaboradorParaTransferir.matricula}</strong> • Função: <strong>{formatarFuncao(colaboradorParaTransferir.funcao)}</strong>
                     </div>
                   </div>
                   <div>
                     {colaboradorParaTransferir.postoCodigo ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-900 font-bold text-[11px]">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 font-bold text-[11px]">
                         Posto {colaboradorParaTransferir.postoCodigo}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 font-bold text-[11px]">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-bold text-[11px]">
                         ★ Reserva Técnica
                       </span>
                     )}
@@ -2072,11 +2224,10 @@ export default function ProfissionaisPage() {
                 </div>
               </div>
 
-              {/* Seção: Escolha do Substituto com Busca Aberta */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="font-bold text-slate-800 text-xs">
-                    Quem irá substituir o posto? <span className="text-rose-500">*</span>
+                    Quem irá assumir o posto? <span className="text-rose-500">*</span>
                   </label>
                   {(substitutoSelecionado || moverParaReserva) && (
                     <button
@@ -2086,14 +2237,13 @@ export default function ProfissionaisPage() {
                         setMoverParaReserva(false);
                         setBuscaSubstituto("");
                       }}
-                      className="text-[11px] text-[#1F4FD1] hover:underline font-semibold cursor-pointer"
+                      className="text-[11px] text-[#28185A] hover:underline font-semibold cursor-pointer"
                     >
                       Alterar seleção
                     </button>
                   )}
                 </div>
 
-                {/* Caso 1: Nenhum substituto e não escolheu mover para reserva -> Exibir Input de Busca */}
                 {!substitutoSelecionado && !moverParaReserva && (
                   <div className="space-y-2">
                     <div className="relative">
@@ -2102,22 +2252,21 @@ export default function ProfissionaisPage() {
                         type="text"
                         value={buscaSubstituto}
                         onChange={(e) => setBuscaSubstituto(e.target.value)}
-                        placeholder="Digite o nome ou matrícula do substituto..."
-                        className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#1F4FD1] focus:border-[#1F4FD1] outline-none shadow-2xs"
+                        placeholder="Digite o nome, chapa ou CPF do substituto..."
+                        className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#28185A]/20 focus:border-[#28185A] outline-none shadow-2xs"
                         autoFocus
                       />
                       {buscaSubstituto && (
                         <button
                           type="button"
                           onClick={() => setBuscaSubstituto("")}
-                          className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5"
+                          className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
 
-                    {/* Botão de Atalho Rápido para Reserva Técnica */}
                     {colaboradorParaTransferir.postoCodigo && (
                       <button
                         type="button"
@@ -2125,17 +2274,16 @@ export default function ProfissionaisPage() {
                           setMoverParaReserva(true);
                           setSubstitutoSelecionado(null);
                         }}
-                        className="w-full p-2.5 rounded-xl border border-dashed border-slate-300 hover:border-purple-400 bg-slate-50 hover:bg-purple-50/50 text-slate-700 hover:purple-900 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                        className="w-full p-2.5 rounded-xl border border-dashed border-slate-300 hover:border-amber-400 bg-slate-50 hover:bg-amber-50/50 text-slate-700 flex items-center justify-between text-xs transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
-                          <UserMinus className="w-4 h-4 text-purple-600 shrink-0" />
-                          <span className="font-semibold text-purple-900">Mover titular atual para Reserva Técnica</span>
+                          <UserMinus className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span className="font-semibold text-amber-900">Mover titular atual para Reserva Técnica</span>
                         </div>
                         <span className="text-[11px] text-slate-400">(Deixar posto vago)</span>
                       </button>
                     )}
 
-                    {/* Lista Dinâmica de Candidatos */}
                     <div className="border border-slate-200 rounded-xl bg-white shadow-xs max-h-56 overflow-y-auto divide-y divide-slate-100">
                       <div className="p-2 bg-slate-50 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                         {buscaSubstituto
@@ -2156,29 +2304,33 @@ export default function ProfissionaisPage() {
                               setBuscaSubstituto("");
                               setMoverParaReserva(false);
                             }}
-                            className="p-2.5 hover:bg-blue-50/70 flex items-center justify-between gap-3 cursor-pointer transition-colors group"
+                            className="p-2.5 hover:bg-slate-50 flex items-center justify-between gap-3 cursor-pointer transition-colors group"
                           >
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-900 group-hover:text-[#1F4FD1] text-xs truncate">
+                                <span className="font-bold text-slate-900 group-hover:text-[#28185A] text-xs truncate">
                                   {formatarNome(cand.nome)}
                                 </span>
                                 <span className="font-mono text-[11px] text-slate-500">
-                                  {cand.matricula}
+                                  {cand.chapa || cand.matricula}
                                 </span>
                               </div>
                               <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                                {formatarFuncao(cand.funcao)} • Base {cand.unidadeId}
+                                {formatarFuncao(cand.funcao)} • Base {cand.imovelEfetivo || cand.unidadeId}
                               </div>
                             </div>
 
                             <div className="shrink-0 text-right">
-                              {cand.postoCodigo ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-semibold border border-blue-200">
+                              {cand.tipoAlocacao === "TITULAR" && cand.postoCodigo ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold border border-emerald-200">
                                   Posto {cand.postoCodigo}
                                 </span>
+                              ) : cand.tipoAlocacao === "FERISTA" ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold border border-indigo-200">
+                                  Ferista
+                                </span>
                               ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-semibold border border-purple-200">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-semibold border border-amber-200">
                                   Reserva Técnica
                                 </span>
                               )}
@@ -2190,7 +2342,6 @@ export default function ProfissionaisPage() {
                   </div>
                 )}
 
-                {/* Caso 2: Substituto Selecionado */}
                 {substitutoSelecionado && (
                   <div className="p-4 bg-emerald-50/70 border border-emerald-300 rounded-xl space-y-3 animate-fadeIn">
                     <div className="flex items-center justify-between">
@@ -2199,7 +2350,7 @@ export default function ProfissionaisPage() {
                         <span>Substituto Confirmado</span>
                       </div>
                       <span className="text-[11px] font-mono text-emerald-700 font-semibold">
-                        Matrícula: {substitutoSelecionado.matricula}
+                        Chapa: {substitutoSelecionado.chapa || substitutoSelecionado.matricula}
                       </span>
                     </div>
 
@@ -2209,23 +2360,22 @@ export default function ProfissionaisPage() {
                           {formatarNome(substitutoSelecionado.nome)}
                         </div>
                         <div className="text-[11px] text-slate-600 mt-0.5">
-                          Função: <strong>{formatarFuncao(substitutoSelecionado.funcao)}</strong> • Base {substitutoSelecionado.unidadeId}
+                          Função: <strong>{formatarFuncao(substitutoSelecionado.funcao)}</strong>
                         </div>
                       </div>
                       <div>
                         {substitutoSelecionado.postoCodigo ? (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-100 text-blue-900 font-bold text-[11px]">
-                            Titular do Posto {substitutoSelecionado.postoCodigo}
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 font-bold text-[11px]">
+                            Posto {substitutoSelecionado.postoCodigo}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 font-bold text-[11px]">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-bold text-[11px]">
                             ★ Reserva Técnica
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Resumo da Ação Operacional */}
                     <div className="p-2.5 bg-emerald-100/60 rounded-lg text-[11px] text-emerald-950 space-y-1">
                       <div className="font-semibold flex items-center gap-1.5">
                         <ArrowRight className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
@@ -2245,7 +2395,6 @@ export default function ProfissionaisPage() {
                       </div>
                     </div>
 
-                    {/* Opção de Permuta (se ambos possuem postos) */}
                     {colaboradorParaTransferir.postoCodigo && substitutoSelecionado.postoCodigo && (
                       <div className="p-2 bg-white rounded border border-emerald-200 flex items-start gap-2">
                         <input
@@ -2263,21 +2412,19 @@ export default function ProfissionaisPage() {
                   </div>
                 )}
 
-                {/* Caso 3: Mover Titular Atual para Reserva Técnica */}
                 {moverParaReserva && (
-                  <div className="p-4 bg-purple-50/70 border border-purple-300 rounded-xl space-y-2 animate-fadeIn">
-                    <div className="flex items-center gap-2 text-purple-900 font-bold text-xs">
-                      <UserMinus className="w-4 h-4 text-purple-600" />
+                  <div className="p-4 bg-amber-50/70 border border-amber-300 rounded-xl space-y-2 animate-fadeIn">
+                    <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                      <UserMinus className="w-4 h-4 text-amber-600" />
                       <span>Desocupar Posto — Mover para Reserva Técnica</span>
                     </div>
-                    <p className="text-[11px] text-purple-900 leading-relaxed">
-                      O colaborador <strong>{formatarNome(colaboradorParaTransferir.nome)}</strong> será desvinculado do <strong>Posto {colaboradorParaTransferir.postoCodigo}</strong> e movido para a <strong>Reserva Técnica</strong>. O posto ficará oficialmente <strong>VAGO</strong> no Anexo 1-A e no Mapa de Cobertura.
+                    <p className="text-[11px] text-amber-900 leading-relaxed">
+                      O colaborador <strong>{formatarNome(colaboradorParaTransferir.nome)}</strong> será desvinculado do <strong>Posto {colaboradorParaTransferir.postoCodigo}</strong> e movido para a <strong>Reserva Técnica</strong>. O posto ficará oficialmente <strong>VAGO</strong> no Anexo 1-A e no Mapa de Ocupação.
                     </p>
                   </div>
                 )}
               </div>
 
-              {/* Alerta de Interjornada CLT Art. 66 */}
               {alertaInterjornadaTransferencia && !alertaInterjornadaTransferencia.atende && (
                 <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg space-y-2 text-xs animate-fadeIn">
                   <div className="flex items-center gap-2 text-amber-900 font-bold">
@@ -2302,7 +2449,6 @@ export default function ProfissionaisPage() {
                 </div>
               )}
 
-              {/* 3. Rodapé do Modal */}
               <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 -mx-5 -mb-5 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
@@ -2313,16 +2459,16 @@ export default function ProfissionaisPage() {
                     setBuscaSubstituto("");
                     setMoverParaReserva(false);
                   }}
-                  className="h-9 px-4 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium text-xs transition-colors cursor-pointer"
+                  className="h-9 px-4 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium text-xs transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={!substitutoSelecionado && !moverParaReserva && !destinoPostoCodigo}
-                  className={`h-9 px-5 rounded-lg font-semibold text-xs shadow-xs transition-all cursor-pointer ${
+                  className={`h-9 px-5 rounded-xl font-semibold text-xs shadow-xs transition-all cursor-pointer ${
                     substitutoSelecionado || moverParaReserva || destinoPostoCodigo
-                      ? "bg-[#1F4FD1] hover:bg-[#183FB3] text-white active:scale-[0.98]"
+                      ? "bg-[#28185A] hover:bg-[#1B1745] text-white active:scale-[0.98]"
                       : "bg-slate-300 text-slate-500 cursor-not-allowed"
                   }`}
                 >
