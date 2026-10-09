@@ -182,21 +182,6 @@ body {
     radial-gradient(900px 500px at 110% 110%, rgba(31, 79, 209, 0.25), transparent 60%),
     linear-gradient(160deg, #28185A 0%, #1B1745 45%, #0F1E36 100%);
 }
-.auth-linhas-douradas {
-  background-image: repeating-linear-gradient(
-    180deg,
-    rgba(216, 199, 160, 0.10) 0px,
-    rgba(216, 199, 160, 0.10) 2px,
-    transparent 2px,
-    transparent 14px
-  );
-  mask-image: radial-gradient(closest-side, #000 40%, transparent 100%);
-  animation: auth-flutuar 14s ease-in-out infinite alternate;
-}
-@keyframes auth-flutuar {
-  from { transform: translate3d(-2%, -1%, 0) scale(1); }
-  to   { transform: translate3d(2%, 1%, 0) scale(1.04); }
-}
 .auth-entrada {
   animation: auth-entrada 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
@@ -205,5 +190,5 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .auth-linhas-douradas, .auth-entrada { animation: none; }
+  .auth-entrada { animation: none; }
 }

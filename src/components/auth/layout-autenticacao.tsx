@@ -22,8 +22,6 @@ export function LayoutAutenticacao({
     <div className="min-h-full w-full grid lg:grid-cols-[1.05fr_1fr] bg-[#F6F5F9]">
       {/* Painel da marca */}
       <aside className="auth-painel-marca relative hidden lg:flex flex-col justify-between overflow-hidden px-14 py-12 text-white">
-        <div className="auth-linhas-douradas pointer-events-none absolute -inset-[20%]" aria-hidden />
-
         <div className="relative">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
