@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Credenciais de contas LOCAIS do SGP (somente servidor).
  *
  * - Senhas armazenadas como hash scrypt com sal aleatório (nunca em texto puro).
@@ -55,7 +55,7 @@ function carregarArmazem(): ArmazemCredenciais {
   if (globalArmazem.__sgpCredenciais) return globalArmazem.__sgpCredenciais;
   let armazem: ArmazemCredenciais = { credenciais: {}, tokens: [] };
   try {
-    if (fs.existsSync(ARQUIVO)) {
+    if (process.env.NODE_ENV !== "test" && fs.existsSync(ARQUIVO)) {
       const bruto = JSON.parse(fs.readFileSync(ARQUIVO, "utf-8"));
       if (bruto && typeof bruto === "object" && bruto.credenciais) armazem = bruto;
     }
