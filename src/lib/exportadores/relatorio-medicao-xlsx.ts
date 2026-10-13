@@ -58,7 +58,15 @@ function obterValorReferencialMensal(funcao: string): number {
   return 7500.0;
 }
 
-export function gerarPlanilhaMedicaoXlsx(competencia: string = "2026-09", filtroBase: string = "TODAS"): Buffer {
+export const TEXTO_VALOR_RESTRITO = "Restrito";
+
+export function gerarPlanilhaMedicaoXlsx(
+  competencia: string = "2026-09",
+  filtroBase: string = "TODAS",
+  opcoes: { ocultarFinanceiro?: boolean } = {}
+): Buffer {
+  // Valores em R$ só saem para perfis com liberação de Glosa financeira
+  const rs = (v: number): string => (opcoes.ocultarFinanceiro ? TEXTO_VALOR_RESTRITO : v.toFixed(2));
   const estado = carregarEstado();
   const todosPostos = obterTodosPostosContrato(estado.postos);
   const ocorrencias = estado.ocorrencias || [];
@@ -225,9 +233,9 @@ export function gerarPlanilhaMedicaoXlsx(competencia: string = "2026-09", filtro
     "SLA Alcançado (%)": `${b.taxaCumprimento.toFixed(1)}%`,
     "Meta Contratual": "95.0%",
     "Status SLA": b.atendeSla ? "CONFORME" : "NÃO CONFORME",
-    "Valor Referencial Mensal (R$)": b.valorTotalContrato.toFixed(2),
-    "Glosa Contratual Estimada (R$)": b.valorTotalGlosa.toFixed(2),
-    "Faturamento Líquido Estimado (R$)": b.faturamentoLiquido.toFixed(2),
+    "Valor Referencial Mensal (R$)": rs(b.valorTotalContrato),
+    "Glosa Contratual Estimada (R$)": rs(b.valorTotalGlosa),
+    "Faturamento Líquido Estimado (R$)": rs(b.faturamentoLiquido),
   }));
 
   dadosMemoria.push({
@@ -240,9 +248,9 @@ export function gerarPlanilhaMedicaoXlsx(competencia: string = "2026-09", filtro
     "SLA Alcançado (%)": `${totTaxaGlobal.toFixed(1)}%`,
     "Meta Contratual": "95.0%",
     "Status SLA": totTaxaGlobal >= 95.0 ? "CONFORME" : "NÃO CONFORME",
-    "Valor Referencial Mensal (R$)": totValorContrato.toFixed(2),
-    "Glosa Contratual Estimada (R$)": totValorGlosa.toFixed(2),
-    "Faturamento Líquido Estimado (R$)": totFaturamentoLiquido.toFixed(2),
+    "Valor Referencial Mensal (R$)": rs(totValorContrato),
+    "Glosa Contratual Estimada (R$)": rs(totValorGlosa),
+    "Faturamento Líquido Estimado (R$)": rs(totFaturamentoLiquido),
   });
 
   const wsMemoria = XLSX.utils.json_to_sheet(dadosMemoria);
@@ -305,7 +313,7 @@ export function gerarPlanilhaMedicaoXlsx(competencia: string = "2026-09", filtro
       "Descobertos": desc,
       "Folgas Escala": folg,
       "Taxa Entrega (%)": `${perc}%`,
-      "Glosa Estimada (R$)": glosaTotal.toFixed(2),
+      "Glosa Estimada (R$)": rs(glosaTotal),
     };
   });
 
@@ -344,7 +352,7 @@ export function gerarPlanilhaMedicaoXlsx(competencia: string = "2026-09", filtro
           "Titular / Situação": det.titularNome || (p.titularMatricula ? p.titularNome || "Titular" : "POSTO VAGO"),
           "Motivo / Evidência da Glosa": det.motivoPublico,
           "Impacto Contratual": "1 Glosa Diária (1/30 avos)",
-          "Valor Estimado (R$)": valorGlosa.toFixed(2),
+          "Valor Estimado (R$)": rs(valorGlosa),
         });
       }
     }
@@ -359,8 +367,8 @@ export function gerarPlanilhaMedicaoXlsx(competencia: string = "2026-09", filtro
       "Dia Mês": "—",
       "Titular / Situação": "—",
       "Motivo / Evidência da Glosa": "Nenhuma glosa aplicada no período (100% de cumprimento das escalas exigíveis).",
-      "Impacto Contratual": "R$ 0,00",
-      "Valor Estimado (R$)": "0.00",
+      "Impacto Contratual": opcoes.ocultarFinanceiro ? "—" : "R$ 0,00",
+      "Valor Estimado (R$)": rs(0),
     });
   }
 

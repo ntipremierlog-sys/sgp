@@ -189,7 +189,14 @@ export function ehItemPostoValido(codigo: string): boolean {
  */
 export function obterItemPPU(codigo: string): ItemPPU | undefined {
   const c = String(codigo || "").trim();
-  return MAPA_ITEM_PPU[c];
+  if (MAPA_ITEM_PPU[c]) return MAPA_ITEM_PPU[c];
+  // Normalização caso venha "01.01", "03.04" ou "1.01"
+  const partes = c.split(".");
+  if (partes.length === 2) {
+    const limpo = `${parseInt(partes[0], 10)}.${parseInt(partes[1], 10)}`;
+    if (MAPA_ITEM_PPU[limpo]) return MAPA_ITEM_PPU[limpo];
+  }
+  return undefined;
 }
 
 // =============================================================================
@@ -405,11 +412,11 @@ export function calcularMetricasPainel(
     postosPorImovel.get(imovel)!.push(p);
   }
 
-  let totalPostosMobilizados = listaPostos.length;
+  const totalPostosMobilizados = listaPostos.length;
   let totalPostosOcupados = 0;
   let totalVagasEmAberto = 0;
   let totalPostosComVaga = 0;
-  let totalPosicoes = listaPosicoes.length;
+  const totalPosicoes = listaPosicoes.length;
 
   const porImovel: Record<string, MetricasImovel> = {};
   const listaImoveis: MetricasImovel[] = [];

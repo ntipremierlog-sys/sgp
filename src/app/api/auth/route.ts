@@ -10,6 +10,7 @@ import {
 import { autenticarComSenha, NOME_COOKIE_CRED_VAULT, obterVaultCredenciais } from "@/lib/auth/credenciais";
 import { emitirTokenTrocaSenha, NOME_COOKIE_TROCA_SENHA, VALIDADE_TROCA_SENHA_S } from "@/lib/auth/token-troca-senha";
 import { registrarLog } from "@/lib/dados/estado-operacional";
+import { carregarArmazemPermissoes } from "@/lib/auth/permissoes-servidor";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,8 @@ export async function GET() {
     const resposta = NextResponse.json({
       autenticado: !!usuario,
       usuario: usuario || null,
+      // Liberações por perfil × módulo definidas na Administração (aplicadas no cliente sobre a matriz padrão)
+      permissoes: usuario ? carregarArmazemPermissoes().personalizacoes : {},
     });
     if (usuario) {
       const token = (await cookies()).get(NOME_COOKIE_SESSAO)?.value;

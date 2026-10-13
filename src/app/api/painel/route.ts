@@ -3,6 +3,7 @@ import { obterOcupacaoConsolidada } from "@/lib/servicos/adaptador-painel";
 import { registrarLog } from "@/lib/dados/estado-operacional";
 import { obterSessaoServidor } from "@/lib/auth/sessao";
 import { usuarioTemAcessoBase } from "@/lib/auth/permissoes";
+import { canServidor } from "@/lib/auth/permissoes-servidor";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +15,24 @@ export async function GET(request: NextRequest) {
     const dataHoje = searchParams.get("dataHoje") || "2026-09-16";
     const parametroAusente = searchParams.get("parametroAusente") === "true";
 
-    // Perfil obtido EXCLUSIVAMENTE da sessão autenticada no servidor
+    // Perfil obtido EXCLUSIVAMENTE da sessão autenticada no servidor.
+    // Sem sessão não há perfil presumido: responde 401 (nunca assumir perfil privilegiado).
     const usuarioSessao = await obterSessaoServidor();
-    const perfil = usuarioSessao ? usuarioSessao.perfil : "PREMIER_GESTOR";
+    if (!usuarioSessao) {
+      return NextResponse.json(
+        { sucesso: false, erro: "Autenticação necessária." },
+        { status: 401, headers: { "Cache-Control": "no-store, max-age=0" } }
+      );
+    }
+    const perfil = usuarioSessao.perfil;
+    if (!canServidor(usuarioSessao, "LER", "PAINEL")) {
+      return NextResponse.json(
+        { sucesso: false, erro: "Acesso não liberado para o seu perfil neste módulo." },
+        { status: 403, headers: { "Cache-Control": "no-store, max-age=0" } }
+      );
+    }
+    const podeVerGlosa = canServidor(usuarioSessao, "LER", "GLOSA_FINANCEIRA");
+    const podeVerDadosMedicos = canServidor(usuarioSessao, "LER", "DADOS_SENSIVEIS_LGPD");
 
     // Vínculo territorial de bases: se o usuário tiver restrição de base, aplica o escopo
     let baseEfetiva = baseId === "TODAS" ? undefined : baseId;
@@ -40,8 +56,9 @@ export async function GET(request: NextRequest) {
 
     // -------------------------------------------------------------------------
     // GOVERNANÇA LGPD E RBAC SERVER-SIDE (PARTE 6)
+    // Segue as liberações de "Glosa financeira" e "Dados médicos" (Administração → Permissões)
     // -------------------------------------------------------------------------
-    if (perfil === "PETROBRAS_FISCAL") {
+    if (!podeVerGlosa) {
       // 1. Omissão estrita de Glosa Estimada no backend (não trafega para o client)
       resultado.glosaEstimada = {
         valorTotal: null,
@@ -49,11 +66,13 @@ export async function GET(request: NextRequest) {
         status: "OMITIDO_LGPD",
         statusPostoVago: "DEFINIDO",
         fatorGlosa: null,
-        textoApoio: "Omitido para o perfil de fiscalização Petrobras",
+        textoApoio: "Omitido para o seu perfil de acesso",
         formulaExplicativa:
-          "Memória financeira e impacto de glosa são segregados para acesso exclusivo da gestão interna Premier (LGPD / Contrato)",
+          "Memória financeira e impacto de glosa são segregados para perfis com liberação de Glosa financeira (LGPD / Contrato)",
       };
+    }
 
+    if (!podeVerDadosMedicos) {
       // 2. Sanitização estrita de motivos de ausência (zero CID-10, CRM ou diagnósticos)
       Object.keys(resultado.matrizDetalhada).forEach((chave) => {
         const celula = resultado.matrizDetalhada[chave];

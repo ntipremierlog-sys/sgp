@@ -1636,12 +1636,12 @@ export default function ImportacoesPage() {
                       <div className="p-3.5 bg-amber-50/40 border border-amber-200 rounded-xl text-center shadow-xs">
                         <span className="text-[10px] font-bold text-amber-700 uppercase block">Inconsistências</span>
                         <span className="text-2xl font-bold text-amber-800">{(simulacao as any).inconsistencias?.length || 0}</span>
-                        <span className="text-[10px] text-amber-600 block mt-0.5">Valores '-' saneados e ligações por nome</span>
+                        <span className="text-[10px] text-amber-600 block mt-0.5">Valores &apos;-&apos; saneados e ligações por nome</span>
                       </div>
 
                       {/* 4. Pessoas A Alocar */}
                       <div className="p-3.5 bg-rose-50/40 border border-rose-200 rounded-xl text-center shadow-xs">
-                        <span className="text-[10px] font-bold text-rose-700 uppercase block">Pessoas "A alocar"</span>
+                        <span className="text-[10px] font-bold text-rose-700 uppercase block">Pessoas &quot;A alocar&quot;</span>
                         <span className="text-2xl font-bold text-rose-800">{(simulacao as any).pessoasAAlocar?.length || 0}</span>
                         <span className="text-[10px] text-rose-600 block mt-0.5">Sem posição no SGP (não criadas)</span>
                       </div>
@@ -1669,7 +1669,7 @@ export default function ImportacoesPage() {
                                 : "text-rose-800 hover:bg-rose-50"
                             }`}
                           >
-                            Pessoas "A alocar" ({(simulacao as any).pessoasAAlocar?.length || 0})
+                            Pessoas &quot;A alocar&quot; ({(simulacao as any).pessoasAAlocar?.length || 0})
                           </button>
                           <button
                             onClick={() => setAbaPreviaMC("IGNORADOS")}
@@ -1711,7 +1711,7 @@ export default function ImportacoesPage() {
                           <div className="p-3 bg-amber-50/60 rounded-lg border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
                             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                             <div className="text-[11px] leading-relaxed">
-                              <strong>Saneamento Contratual Aplicado:</strong> Valores <code>"-"</code> em campos numéricos foram tratados como vazios e registrados aqui para auditoria. Ligações por nome normalizado (quando não há ID) são identificadas para conferência.
+                              <strong>Saneamento Contratual Aplicado:</strong> Valores <code>&quot;-&quot;</code> em campos numéricos foram tratados como vazios e registrados aqui para auditoria. Ligações por nome normalizado (quando não há ID) são identificadas para conferência.
                             </div>
                           </div>
                           <div className="border border-slate-200 rounded-xl overflow-hidden">
@@ -1767,7 +1767,7 @@ export default function ImportacoesPage() {
                           <div className="p-3 bg-rose-50/60 rounded-lg border border-rose-200 text-xs text-rose-900 flex items-start gap-2">
                             <Info className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                             <div className="text-[11px] leading-relaxed">
-                              <strong>Regra de Ouro da Estrutura:</strong> Colaboradores da MC sem posição cadastrada no SGP não criam postos ou posições automaticamente. Eles são mantidos na lista <em>"A alocar"</em> para que a equipe de gestão vincule ou cadastre a posição formalmente.
+                              <strong>Regra de Ouro da Estrutura:</strong> Colaboradores da MC sem posição cadastrada no SGP não criam postos ou posições automaticamente. Eles são mantidos na lista <em>&quot;A alocar&quot;</em> para que a equipe de gestão vincule ou cadastre a posição formalmente.
                             </div>
                           </div>
                           <div className="border border-slate-200 rounded-xl overflow-hidden">
@@ -2034,7 +2034,7 @@ export default function ImportacoesPage() {
                         <div className="p-3 bg-emerald-50/60 rounded-lg border border-emerald-200 text-xs text-emerald-900 flex items-start gap-2">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                           <div className="text-[11px] leading-relaxed">
-                            <strong>Saneamento de Municípios Concluído:</strong> Cidades e Estados extraídos corretamente da coluna <code>Unidade_RM</code> (ex.: <em>BOAVENTURA (Itaboraí - RJ)</em> → Itaboraí / RJ). Corrigido o erro legado em que todos os imóveis apareciam como "Paulínia/SP". Prepostos associados da aba do Relatório Mensal de Atividades.
+                            <strong>Saneamento de Municípios Concluído:</strong> Cidades e Estados extraídos corretamente da coluna <code>Unidade_RM</code> (ex.: <em>BOAVENTURA (Itaboraí - RJ)</em> → Itaboraí / RJ). Corrigido o erro legado em que todos os imóveis apareciam como &quot;Paulínia/SP&quot;. Prepostos associados da aba do Relatório Mensal de Atividades.
                           </div>
                         </div>
                         <div className="border border-slate-200 rounded-xl overflow-hidden">

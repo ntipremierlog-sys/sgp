@@ -310,6 +310,8 @@ model Posto {
   ocupacoesDia        OcupacaoPostoDia[]
   apontamentos        Apontamento[]
 
+  @@index([imovelId], name: "idx_posto_imovel")
+  @@index([itemPpuCodigo], name: "idx_posto_item_ppu")
   @@map("posto")
 }
 
@@ -450,6 +452,9 @@ model Ocorrencia {
   coberturas          Cobertura[]
   ocupacoesDia        OcupacaoPostoDia[]
 
+  @@index([dataInicio, dataFim], name: "idx_ocorrencia_datas")
+  @@index([postoId], name: "idx_ocorrencia_posto")
+  @@index([status], name: "idx_ocorrencia_status")
   @@map("ocorrencia")
 }
 
@@ -500,6 +505,10 @@ model Cobertura {
   profissionalSubstituto    Profissional    @relation("SubstitutoCobertura", fields: [profissionalSubstitutoId], references: [id])
   ocupacoesDia              OcupacaoPostoDia[]
 
+  @@index([dataInicio, dataFim], name: "idx_cobertura_datas")
+  @@index([itemPpuCodigo], name: "idx_cobertura_item_ppu")
+  @@index([postoId], name: "idx_cobertura_posto")
+  @@index([status], name: "idx_cobertura_status")
   @@map("cobertura")
 }
 

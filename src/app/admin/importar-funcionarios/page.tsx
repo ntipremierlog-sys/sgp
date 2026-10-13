@@ -460,7 +460,7 @@ export default function ImportarFuncionariosRmPage() {
                 <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-center gap-2 text-xs text-amber-900">
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                   <span>
-                    <strong>Alerta de Seção:</strong> Foram detectadas linhas onde a 2ª ocorrência de "Descrição Seção" diverge da 1ª. A 1ª foi adotada como oficial.
+                    <strong>Alerta de Seção:</strong> Foram detectadas linhas onde a 2ª ocorrência de &quot;Descrição Seção&quot; diverge da 1ª. A 1ª foi adotada como oficial.
                   </span>
                 </div>
               )}
@@ -669,7 +669,7 @@ export default function ImportarFuncionariosRmPage() {
                   /* Tabela de Colaboradores Ausentes */
                   <div className="p-4 space-y-3">
                     <p className="text-xs text-slate-600">
-                      Os colaboradores abaixo constavam no SGP mas <strong>não foram encontrados neste arquivo</strong>. Conforme a regra de negócio, eles <strong>NÃO serão apagados</strong>, permanecendo marcados como <em>"Não consta na última carga"</em> para fins de histórico e auditoria.
+                      Os colaboradores abaixo constavam no SGP mas <strong>não foram encontrados neste arquivo</strong>. Conforme a regra de negócio, eles <strong>NÃO serão apagados</strong>, permanecendo marcados como <em>&quot;Não consta na última carga&quot;</em> para fins de histórico e auditoria.
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {previa.naoConstam.map((chapa) => (

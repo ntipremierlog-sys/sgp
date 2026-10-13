@@ -6,6 +6,7 @@ import type { NextRequest } from "next/server";
  * - Todas as telas exigem sessão válida (token assinado + inatividade < 30 min), exceto /login/*.
  * - A cada navegação o timestamp do token é renovado (sessão deslizante).
  * - /admin e /api/admin continuam restritos ao perfil PREMIER_ADMIN.
+ * - /api/painel, /api/ponto, /api/fechamento e /api/relatorios exigem sessão (401 JSON sem sessão).
  *
  * O algoritmo de assinatura (HMAC-SHA256 sobre o payload base64) é o mesmo de src/lib/auth/sessao.ts.
  */
@@ -140,6 +141,14 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Todas as telas + /api/admin; exclui demais APIs, arquivos estáticos e internos do Next
-  matcher: ["/((?!api/|_next/|marca/|templates/|favicon.ico|icon.png|.*\\..*).*)", "/api/admin/:path*"],
+  // Todas as telas + /api/admin + APIs de dados operacionais (exigem sessão).
+  // /api/auth fica de fora para permitir o login; exclui arquivos estáticos e internos do Next.
+  matcher: [
+    "/((?!api/|_next/|marca/|templates/|favicon.ico|icon.png|.*\\..*).*)",
+    "/api/admin/:path*",
+    "/api/painel/:path*",
+    "/api/ponto/:path*",
+    "/api/fechamento/:path*",
+    "/api/relatorios/:path*",
+  ],
 };

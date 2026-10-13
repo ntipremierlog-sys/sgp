@@ -8,8 +8,24 @@ import {
   obterDataReferenciaPonto,
   calcularStatusDia,
 } from "@/lib/dados/estado-operacional";
+import { obterSessaoServidor } from "@/lib/auth/sessao";
+import { canServidor } from "@/lib/auth/permissoes-servidor";
 
 export async function GET(request: NextRequest) {
+  const usuario = await obterSessaoServidor();
+  if (!usuario) {
+    return NextResponse.json({ sucesso: false, erro: "Autenticação necessária." }, { status: 401 });
+  }
+  if (!canServidor(usuario, "EXPORTAR", "RELATORIOS")) {
+    return NextResponse.json(
+      { sucesso: false, erro: "Exportação de Relatórios não liberada para o seu perfil." },
+      { status: 403 }
+    );
+  }
+  // Valores em R$ só saem para perfis com liberação de Glosa financeira
+  const ocultarFinanceiro = !canServidor(usuario, "EXPORTAR", "GLOSA_FINANCEIRA");
+  const rs = (v: number): string => (ocultarFinanceiro ? "Restrito" : v.toFixed(2));
+
   try {
     const { searchParams } = new URL(request.url);
     const competencia = searchParams.get("competencia") || "2026-09";
@@ -104,9 +120,9 @@ export async function GET(request: NextRequest) {
       { Campo: "GLOSAS CONTRATUAIS (D)", Valor: isTargetCongelado ? fAlvo?.resumoMetricas.glosas : descobertos },
       { Campo: "SLA ALCANÇADO (%)", Valor: `${(isTargetCongelado ? fAlvo?.resumoMetricas.taxaSla || 100 : taxaSla).toFixed(1)}%` },
       { Campo: "META CONTRATUAL SLA", Valor: "95.0%" },
-      { Campo: "VALOR BRUTO CONTRATUAL (R$)", Valor: (isTargetCongelado ? fAlvo?.resumoMetricas.valorContrato || 0 : valorTotalContrato).toFixed(2) },
-      { Campo: "VALOR TOTAL DE GLOSAS (R$)", Valor: (isTargetCongelado ? fAlvo?.resumoMetricas.valorGlosa || 0 : valorTotalGlosa).toFixed(2) },
-      { Campo: "FATURAMENTO LÍQUIDO APROVADO (R$)", Valor: (isTargetCongelado ? fAlvo?.resumoMetricas.faturamentoLiquido || 0 : faturamentoLiquido).toFixed(2) },
+      { Campo: "VALOR BRUTO CONTRATUAL (R$)", Valor: rs(isTargetCongelado ? fAlvo?.resumoMetricas.valorContrato || 0 : valorTotalContrato) },
+      { Campo: "VALOR TOTAL DE GLOSAS (R$)", Valor: rs(isTargetCongelado ? fAlvo?.resumoMetricas.valorGlosa || 0 : valorTotalGlosa) },
+      { Campo: "FATURAMENTO LÍQUIDO APROVADO (R$)", Valor: rs(isTargetCongelado ? fAlvo?.resumoMetricas.faturamentoLiquido || 0 : faturamentoLiquido) },
       { Campo: "HOMOLOGAÇÃO PETROBRAS", Valor: fAlvo?.homologacaoPetrobras?.homologado ? "HOMOLOGADO PELA FISCALIZAÇÃO" : "PENDENTE DE ATESTO FORMAL" },
       { Campo: "FISCAL TÉCNICO PETROBRAS", Valor: fAlvo?.homologacaoPetrobras?.fiscalNome || "Carlos Eduardo Mendes" },
       { Campo: "PARECER DA FISCALIZAÇÃO", Valor: fAlvo?.homologacaoPetrobras?.parecer || "Em fase de auditoria e conferência técnica" },
@@ -128,7 +144,7 @@ export async function GET(request: NextRequest) {
       "Diárias Cumpridas": f.resumoMetricas.efetivas,
       "Glosas": f.resumoMetricas.glosas,
       "SLA (%)": `${f.resumoMetricas.taxaSla.toFixed(1)}%`,
-      "Faturamento Líquido (R$)": f.resumoMetricas.faturamentoLiquido.toFixed(2),
+      "Faturamento Líquido (R$)": rs(f.resumoMetricas.faturamentoLiquido),
       "Homologação Petrobras": f.homologacaoPetrobras?.homologado ? "HOMOLOGADO" : "PENDENTE",
       "Fiscal": f.homologacaoPetrobras?.fiscalNome || "",
       "Hash SHA-256": f.hashIntegridadeSha256 || "",

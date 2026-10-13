@@ -1,4 +1,5 @@
 "use client";
+import { usePermissoes } from "@/lib/auth/use-permissoes";
 
 /**
  * SGP — Sistema de Gestão de Postos (Premier Logistics / Contrato Petrobras ICJ 5900.0129796.25.2)
@@ -82,6 +83,8 @@ function formatarBase(baseId?: string, baseNome?: string): { principal: string; 
 }
 
 export default function PresencaDiariaPage() {
+  const { pode: podePermissao } = usePermissoes();
+  const podeExportarPresenca = podePermissao("EXPORTAR", "MAPA_OCUPACAO");
   const router = useRouter();
   const [carregando, setCarregando] = useState(true);
 
@@ -476,6 +479,7 @@ export default function PresencaDiariaPage() {
             </button>
           </div>
 
+          {podeExportarPresenca && (
           <button
             onClick={handleExportarPresencaXlsx}
             className="h-8 px-3 rounded-lg border border-[#D0D5DD] bg-white hover:bg-[#F9FAFB] hover:border-[#1F4FD1] text-[#344054] hover:text-[#1F4FD1] text-xs font-semibold shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer"
@@ -483,6 +487,7 @@ export default function PresencaDiariaPage() {
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
             <span>Exportar</span>
           </button>
+          )}
         </div>
       </div>
 

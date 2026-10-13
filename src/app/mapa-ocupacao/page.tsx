@@ -1,4 +1,5 @@
 "use client";
+import { usePermissoes } from "@/lib/auth/use-permissoes";
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
@@ -445,6 +446,8 @@ function getSeloEstiloPercentualCiclo(percentual: number | null, formatado: stri
 }
 
 export default function MapaOcupacaoPage() {
+  const { pode: podePermissao } = usePermissoes();
+  const podeExportarMapa = podePermissao("EXPORTAR", "MAPA_OCUPACAO");
   const [postos, setPostos] = useState<PostoOperacional[]>([]);
   const [vagas, setVagas] = useState<VagaPosto[]>([]);
   const [alocacoes, setAlocacoes] = useState<AlocacaoVaga[]>([]);
@@ -2555,6 +2558,7 @@ export default function MapaOcupacaoPage() {
             </button>
           )}
 
+          {podeExportarMapa && (
           <button
             onClick={handleExportarXlsx}
             className="inline-flex items-center gap-1 text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 text-xs font-medium px-2.5 py-1 rounded shadow-2xs transition-colors cursor-pointer"
@@ -2563,6 +2567,7 @@ export default function MapaOcupacaoPage() {
             <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>XLSX</span>
           </button>
+          )}
         </div>
       </div>
 

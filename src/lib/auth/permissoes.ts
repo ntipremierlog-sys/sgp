@@ -275,6 +275,114 @@ export const MATRIZ_PERMISSOES: RegraPermissao[] = [
 ];
 
 /**
+ * Personalizações de Visualizar/Exportar definidas pelo Administrador na tela
+ * Administração → Permissões. Sobrepõem a matriz padrão acima.
+ * Estrutura: { [recurso]: { [perfil]: { ler, exportar } } }
+ */
+export interface LiberacaoModulo {
+  ler: boolean;
+  exportar: boolean;
+}
+export type PersonalizacoesPermissao = Partial<Record<Recurso, Partial<Record<PerfilUsuario, LiberacaoModulo>>>>;
+
+/** Perfis exibidos na tela de liberação (GESTOR_CONTRATO espelha GESTOR; PENDENTE nunca tem acesso). */
+export const PERFIS_CONFIGURAVEIS: PerfilUsuario[] = [
+  "PREMIER_ADMIN",
+  "PREMIER_GESTOR",
+  "PREMIER_SUPERVISOR",
+  "PREMIER_RH",
+  "PETROBRAS_FISCAL",
+  "PETROBRAS_GESTOR",
+  "AUDITOR",
+];
+
+/** Módulos restritos ao Administrador por regra do sistema (o middleware também os bloqueia). */
+export const RECURSOS_EXCLUSIVOS_ADMIN: Recurso[] = ["ADMINISTRACAO", "PARAMETROS_CONTRATO"];
+
+/** Recursos que não são telas, mas controlam dados exibidos/exportados dentro delas. */
+export const RECURSOS_DADOS_SENSIVEIS: Recurso[] = ["GLOSA_FINANCEIRA", "DADOS_SENSIVEIS_LGPD"];
+
+let personalizacoesAtuais: PersonalizacoesPermissao = {};
+
+/** Substitui as personalizações em vigor (cliente: vindas de /api/auth; servidor: do armazenamento). */
+export function definirPersonalizacoesPermissao(p: PersonalizacoesPermissao | null | undefined): void {
+  personalizacoesAtuais = p && typeof p === "object" ? p : {};
+}
+
+export function obterPersonalizacoesPermissao(): PersonalizacoesPermissao {
+  return personalizacoesAtuais;
+}
+
+function normalizarPerfil(perfil: PerfilUsuario): PerfilUsuario {
+  return perfil === "PREMIER_GESTOR_CONTRATO" ? "PREMIER_GESTOR" : perfil;
+}
+
+/** Indica se a célula perfil × módulo pode ser alterada na tela de liberação. */
+export function celulaEditavel(recurso: Recurso, perfil: PerfilUsuario): boolean {
+  const p = normalizarPerfil(perfil);
+  if (p === "PREMIER_ADMIN" || p === "PENDENTE_PERFIL") return false;
+  return !RECURSOS_EXCLUSIVOS_ADMIN.includes(recurso);
+}
+
+/** O módulo possui ação de exportação em algum perfil da matriz padrão. */
+export function recursoPossuiExportacao(recurso: Recurso): boolean {
+  const regra = MATRIZ_PERMISSOES.find((r) => r.recurso === recurso);
+  return !!regra && Object.values(regra.acoes).some((a) => a.includes("EXPORTAR"));
+}
+
+/**
+ * Ações efetivas do perfil no recurso: matriz padrão + personalização do administrador.
+ * - Sem "Visualizar" o perfil perde todas as ações do módulo.
+ * - "Exportar" só vale junto com "Visualizar".
+ * - Demais ações (criar/editar/excluir) seguem a matriz padrão.
+ */
+export function obterAcoesEfetivas(
+  recurso: Recurso,
+  perfil: PerfilUsuario,
+  personalizacoes: PersonalizacoesPermissao = personalizacoesAtuais
+): Acao[] {
+  const p = normalizarPerfil(perfil);
+  const regra = MATRIZ_PERMISSOES.find((r) => r.recurso === recurso);
+  if (!regra) return [];
+  const padrao = regra.acoes[p] || [];
+  if (!celulaEditavel(recurso, p)) return padrao;
+
+  const ov = personalizacoes[recurso]?.[p];
+  if (!ov) return padrao;
+  if (!ov.ler) return [];
+
+  const acoes = new Set<Acao>(padrao.filter((a) => a !== "EXPORTAR"));
+  acoes.add("LER");
+  if (ov.exportar && recursoPossuiExportacao(recurso)) acoes.add("EXPORTAR");
+  return Array.from(acoes);
+}
+
+/** Liberação efetiva (Visualizar/Exportar) — usada para montar a tela de administração. */
+export function obterLiberacaoEfetiva(
+  recurso: Recurso,
+  perfil: PerfilUsuario,
+  personalizacoes: PersonalizacoesPermissao = personalizacoesAtuais
+): LiberacaoModulo {
+  const acoes = obterAcoesEfetivas(recurso, perfil, personalizacoes);
+  const gerenciar = acoes.includes("GERENCIAR");
+  return {
+    ler: gerenciar || acoes.includes("LER"),
+    exportar: recursoPossuiExportacao(recurso) && (gerenciar || acoes.includes("EXPORTAR")),
+  };
+}
+
+/** Liberação da matriz padrão (sem personalizações) — usada no botão "Restaurar padrão". */
+export function obterLiberacaoPadrao(recurso: Recurso, perfil: PerfilUsuario): LiberacaoModulo {
+  const regra = MATRIZ_PERMISSOES.find((r) => r.recurso === recurso);
+  const acoes = regra?.acoes[normalizarPerfil(perfil)] || [];
+  const gerenciar = acoes.includes("GERENCIAR");
+  return {
+    ler: gerenciar || acoes.includes("LER"),
+    exportar: recursoPossuiExportacao(recurso) && (gerenciar || acoes.includes("EXPORTAR")),
+  };
+}
+
+/**
  * Função central de verificação de permissão
  * Ex: can(usuario, 'LER', 'ADMINISTRACAO')
  */
@@ -285,17 +393,13 @@ export function can(
 ): boolean {
   if (!usuario) return false;
   if (usuario.status !== "ATIVO") return false;
+  return perfilPode(usuario.perfil, acao, recurso);
+}
 
-  // Normalização de perfil gestor
-  let perfil = usuario.perfil;
-  if (perfil === "PREMIER_GESTOR_CONTRATO") {
-    perfil = "PREMIER_GESTOR";
-  }
-
-  const regra = MATRIZ_PERMISSOES.find((r) => r.recurso === recurso);
-  if (!regra) return false;
-
-  const acoesPermitidas = regra.acoes[perfil] || [];
+/** Verificação por perfil (para telas que só conhecem o perfil ativo). */
+export function perfilPode(perfil: string | null | undefined, acao: Acao, recurso: Recurso): boolean {
+  if (!perfil) return false;
+  const acoesPermitidas = obterAcoesEfetivas(recurso, perfil as PerfilUsuario);
   return acoesPermitidas.includes(acao) || acoesPermitidas.includes("GERENCIAR");
 }
 

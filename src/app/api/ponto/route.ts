@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { obterSessaoServidor } from "@/lib/auth/sessao";
+import { canServidor } from "@/lib/auth/permissoes-servidor";
 
 export const dynamic = "force-dynamic";
+
+function negado(status: 401 | 403) {
+  return NextResponse.json(
+    {
+      sucesso: false,
+      erro: status === 401 ? "Autenticação necessária." : "Acesso não liberado para o seu perfil.",
+    },
+    { status }
+  );
+}
 
 let cacheMarcacoes: any[] | null = null;
 let cacheDiasFolga: string[] | null = null;
@@ -49,6 +61,14 @@ function carregarDadosIniciaisServidor() {
 }
 
 export async function GET(request: NextRequest) {
+  const usuario = await obterSessaoServidor();
+  if (!usuario) return negado(401);
+  const podeVer =
+    canServidor(usuario, "LER", "MAPA_OCUPACAO") ||
+    canServidor(usuario, "LER", "POSTOS") ||
+    canServidor(usuario, "LER", "PROFISSIONAIS");
+  if (!podeVer) return negado(403);
+
   try {
     const { searchParams } = new URL(request.url);
     const dataFiltro = searchParams.get("data");
@@ -75,6 +95,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const usuario = await obterSessaoServidor();
+  if (!usuario) return negado(401);
+  if (!canServidor(usuario, "CRIAR", "IMPORTACOES")) return negado(403);
+
   try {
     const body = await request.json();
     const { lote, marcacoes, diasFolgaRm } = body;

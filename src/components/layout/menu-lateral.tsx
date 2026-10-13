@@ -22,9 +22,15 @@ import {
   Construction,
 } from "lucide-react";
 import { carregarEstado } from "@/lib/dados/estado-operacional";
-import { can } from "@/lib/auth/permissoes";
+import { can, definirPersonalizacoesPermissao } from "@/lib/auth/permissoes";
+import { EVENTO_PERMISSOES_ATUALIZADAS } from "@/lib/auth/use-permissoes";
 import { UsuarioSessao, Recurso } from "@/lib/auth/tipos";
 import { temConfiguracaoPendente, obterParametrosContrato } from "@/lib/auth/parametros";
+
+interface SubMenuItem {
+  rotulo: string;
+  href: string;
+}
 
 interface MenuItem {
   rotulo: string;
@@ -34,6 +40,7 @@ interface MenuItem {
   recurso?: Recurso;
   alertaPonto?: boolean;
   rotasAdicionais?: string[];
+  subitens?: SubMenuItem[];
 }
 
 interface GrupoMenu {
@@ -55,7 +62,17 @@ const gruposMenuConfig: GrupoMenu[] = [
   {
     titulo: "FISCALIZAÇÃO",
     itens: [
-      { rotulo: "Relatórios", href: "/relatorios", icone: FileSpreadsheet, recurso: "RELATORIOS" },
+      {
+        rotulo: "Relatórios",
+        href: "/relatorios",
+        icone: FileSpreadsheet,
+        recurso: "RELATORIOS",
+        rotasAdicionais: ["/relatorios/coberturas"],
+        subitens: [
+          { rotulo: "Ocupação por Posto", href: "/relatorios" },
+          { rotulo: "Coberturas", href: "/relatorios/coberturas" },
+        ],
+      },
       { rotulo: "Apontamentos Petrobras", href: "/apontamentos", icone: MessageSquare, temBadge: true, recurso: "APONTAMENTOS" },
       { rotulo: "Conformidade", href: "/conformidade", icone: ShieldCheck, recurso: "CONFORMIDADE" },
     ],
@@ -96,8 +113,9 @@ export function MenuLateral() {
         const res = await fetch("/api/auth");
         if (res.ok) {
           const data = await res.json();
+          definirPersonalizacoesPermissao(data.permissoes || {});
           if (data.autenticado && data.usuario) {
-            setSessao(data.usuario);
+            setSessao({ ...data.usuario });
             return;
           }
         }
@@ -110,10 +128,12 @@ export function MenuLateral() {
     window.addEventListener("sgp-dados-atualizados", atualizar);
     window.addEventListener("sgp-sessao-alterada", atualizar);
     window.addEventListener("sgp-parametros-atualizados", atualizar);
+    window.addEventListener(EVENTO_PERMISSOES_ATUALIZADAS, atualizar);
     return () => {
       window.removeEventListener("sgp-dados-atualizados", atualizar);
       window.removeEventListener("sgp-sessao-alterada", atualizar);
       window.removeEventListener("sgp-parametros-atualizados", atualizar);
+      window.removeEventListener(EVENTO_PERMISSOES_ATUALIZADAS, atualizar);
     };
   }, []);
 
@@ -145,8 +165,8 @@ export function MenuLateral() {
           // Filtra itens que o usuário autenticado tem permissão de ver
           const itensVisiveis = grupo.itens.filter((item) => {
             if (!item.recurso) return true;
-            // Se ainda não carregou a sessão, assume permissão básica (admin no dev)
-            if (!sessao) return item.recurso !== "ADMINISTRACAO";
+            // Sem sessão carregada não exibe módulos protegidos (fail-closed)
+            if (!sessao) return false;
             return can(sessao, "LER", item.recurso);
           });
 
@@ -166,52 +186,92 @@ export function MenuLateral() {
                     pathname.startsWith(item.href + "/") ||
                     Boolean(item.rotasAdicionais?.some((r) => pathname === r || pathname.startsWith(r + "/")));
                   const mostrarPontoAlerta = item.alertaPonto && temPendenciaAdmin;
+                  const temSubitens = Boolean(item.subitens && item.subitens.length > 0);
+                  const subitensAbertos = Boolean(
+                    item.subitens && (
+                      pathname === item.href ||
+                      pathname.startsWith(item.href + "/") ||
+                      item.subitens.some((s) => pathname === s.href || pathname.startsWith(s.href + "/"))
+                    )
+                  );
 
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-all ${
-                        ativo
-                          ? "bg-[#1F3A66] text-white font-semibold shadow-xs"
-                          : "text-[#C9D2E0] hover:bg-[#162947] hover:text-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="relative">
-                          <Icone
-                            className={`w-4 h-4 shrink-0 ${
-                              ativo ? "text-[#1F4FD1] bg-white rounded p-0.5" : "text-[#7F90AA]"
-                            }`}
-                          />
-                          {/* Ponto discreto indicador de configurações pendentes */}
+                    <div key={item.href} className="space-y-0.5">
+                      <Link
+                        href={item.href}
+                        className={`flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-all ${
+                          ativo
+                            ? "bg-[#1F3A66] text-white font-semibold shadow-xs"
+                            : "text-[#C9D2E0] hover:bg-[#162947] hover:text-white"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="relative">
+                            <Icone
+                              className={`w-4 h-4 shrink-0 ${
+                                ativo ? "text-[#1F4FD1] bg-white rounded p-0.5" : "text-[#7F90AA]"
+                              }`}
+                            />
+                            {/* Ponto discreto indicador de configurações pendentes */}
+                            {mostrarPontoAlerta && (
+                              <span
+                                className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#F79009] ring-2 ring-[#0F1E36]"
+                                title="Configurações contratuais pendentes de preenchimento"
+                              />
+                            )}
+                          </div>
+                          <span className="truncate">{item.rotulo}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Ponto discreto indicador na lateral */}
                           {mostrarPontoAlerta && (
                             <span
-                              className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#F79009] ring-2 ring-[#0F1E36]"
-                              title="Configurações contratuais pendentes de preenchimento"
+                              className="w-1.5 h-1.5 rounded-full bg-[#F79009]"
+                              title="Parâmetro pendente"
                             />
                           )}
+
+                          {/* Contador vermelho de pendências */}
+                          {item.temBadge && totalPendencias > 0 && (
+                            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-[#B42318] text-white tabular-nums">
+                              {totalPendencias}
+                            </span>
+                          )}
                         </div>
-                        <span className="truncate">{item.rotulo}</span>
-                      </div>
+                      </Link>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Ponto discreto indicador na lateral */}
-                        {mostrarPontoAlerta && (
-                          <span
-                            className="w-1.5 h-1.5 rounded-full bg-[#F79009]"
-                            title="Parâmetro pendente"
-                          />
-                        )}
+                      {/* Sub-itens indentados para módulos que agrupam telas (ex.: Relatórios > Coberturas) */}
+                      {temSubitens && subitensAbertos && (
+                        <div className="ml-5 pl-2.5 border-l border-[#1E2E4A] space-y-0.5 pt-0.5 pb-1">
+                          {item.subitens!.map((sub) => {
+                            const subAtivo =
+                              pathname === sub.href ||
+                              (sub.href !== "/relatorios" && pathname.startsWith(sub.href)) ||
+                              (sub.href === "/relatorios" && pathname === "/relatorios");
 
-                        {/* Contador vermelho de pendências */}
-                        {item.temBadge && totalPendencias > 0 && (
-                          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-[#B42318] text-white tabular-nums">
-                            {totalPendencias}
-                          </span>
-                        )}
-                      </div>
-                    </Link>
+                            return (
+                              <Link
+                                key={sub.href}
+                                href={sub.href}
+                                className={`flex items-center gap-2 px-2 py-1.5 rounded text-[11px] font-medium transition-colors ${
+                                  subAtivo
+                                    ? "text-white font-semibold bg-[#162947]"
+                                    : "text-[#7F90AA] hover:text-[#C9D2E0] hover:bg-[#13233F]"
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                    subAtivo ? "bg-blue-400" : "bg-[#4E5D78]"
+                                  }`}
+                                />
+                                <span className="truncate">{sub.rotulo}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>

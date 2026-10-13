@@ -1,4 +1,5 @@
 "use client";
+import { usePermissoes } from "@/lib/auth/use-permissoes";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
@@ -221,6 +222,8 @@ function obterIniciais(nome: string): string {
 export type TipoAbaProfissional = "TODOS" | "TITULARES" | "FERISTAS" | "RESERVA";
 
 export default function ProfissionaisPage() {
+  const { pode: podePermissao } = usePermissoes();
+  const podeExportarProfissionais = podePermissao("EXPORTAR", "PROFISSIONAIS");
   const [profissionais, setProfissionais] = useState<ProfissionalOperacional[]>([]);
   const [postos, setPostos] = useState<PostoOperacional[]>([]);
   const [marcacoesPonto, setMarcacoesPonto] = useState<MarcacaoPontoOriginal[]>([]);
@@ -841,6 +844,7 @@ export default function ProfissionaisPage() {
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
+          {podeExportarProfissionais && (
           <button
             type="button"
             onClick={handleExportarCsv}
@@ -850,6 +854,7 @@ export default function ProfissionaisPage() {
             <Download className="w-4 h-4 text-slate-600" />
             <span>Exportar</span>
           </button>
+          )}
 
           <button
             type="button"

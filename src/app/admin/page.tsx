@@ -27,6 +27,7 @@ import {
   Database,
 } from "lucide-react";
 import { AbaLimpezaDados } from "@/components/admin/aba-limpeza-dados";
+import { AbaPermissoes } from "@/components/admin/aba-permissoes";
 import {
   carregarUsuarios,
   criarUsuario,
@@ -61,7 +62,7 @@ import {
 } from "@/lib/dados/secoes-horarios";
 import AcessoNegadoPage from "../acesso-negado/page";
 
-type AbaAdmin = "USUARIOS" | "PARAMETROS" | "SECOES" | "LIMPEZA";
+type AbaAdmin = "USUARIOS" | "PERMISSOES" | "PARAMETROS" | "SECOES" | "LIMPEZA";
 
 const BASES_DISPONIVEIS = [
   { id: "TODAS", nome: "Todas as Bases Contratuais" },
@@ -446,6 +447,19 @@ export default function AdminPage() {
         >
           <Users className="w-4 h-4" />
           <span>Usuários ({usuarios.length})</span>
+        </button>
+
+        <button
+          id="aba-admin-permissoes"
+          onClick={() => setAbaAtiva("PERMISSOES")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all shrink-0 cursor-pointer ${
+            abaAtiva === "PERMISSOES"
+              ? "border-[#1F4FD1] text-[#1F4FD1] bg-white"
+              : "border-transparent text-[#5B6474] hover:text-[#1A2230]"
+          }`}
+        >
+          <KeyRound className="w-4 h-4" />
+          <span>Permissões por Perfil</span>
         </button>
 
         <button
@@ -920,6 +934,11 @@ export default function AdminPage() {
           onNotificar={exibirAlerta}
         />
       )}
+
+      {/* ===================================================================== */}
+      {/* ABA: LIBERAÇÃO DE MÓDULOS POR PERFIL */}
+      {/* ===================================================================== */}
+      {abaAtiva === "PERMISSOES" && <AbaPermissoes onNotificar={exibirAlerta} />}
 
       {/* ===================================================================== */}
       {/* MODAIS ESSENCIAIS */}

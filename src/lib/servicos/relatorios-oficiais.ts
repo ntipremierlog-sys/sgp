@@ -115,11 +115,35 @@ export interface ItemCoberturaRelatorio {
   status: string;
 }
 
+export interface ResumoItemPpuRelatorio {
+  itemPpu: string;
+  itemPpuDescricao: string;
+  regime?: string;
+  totalCoberturas: number;
+  totalDiarias: number;
+  percentualDiarias: number;
+  postos: string[];
+}
+
+export interface RelatorioCoberturasResultado {
+  cabecalho: CabecalhoRelatorio;
+  itens: ItemCoberturaRelatorio[];
+  totais: {
+    totalCoberturas: number;
+    totalDiarias: number;
+    totalPostosCobertos: number;
+    totalItensPpu: number;
+    totalSubstitutos: number;
+  };
+  resumoPpu: ResumoItemPpuRelatorio[];
+}
+
 export interface ItemDescobertoRelatorio {
   data: string;
   diaSemana: string;
   unidadeId: string;
   unidadeNome: string;
+  itemPpu?: string;
   postoCodigo: string;
   postoFuncao: string;
   posicaoId: string;
@@ -421,22 +445,277 @@ export function gerarRelatorioOcupacaoPorPosto(filtros: {
 // 2. RELATÓRIO B: COBERTURAS DO PERÍODO
 // -----------------------------------------------------------------------------
 
+export const COBERTURAS_PADRAO_REV04: CoberturaOperacional[] = [
+  // 1. BOAVENTURA — Item 3.6 (Suporte à Operação de Mobilidade - Turno/24h)
+  {
+    id: "cob-padrao-001",
+    postoCodigo: "PST-BOAVENTURA-008",
+    idPosto: "PST-BOAVENTURA-008",
+    funcaoPosto: "Suporte à Operação de Mobilidade (Turno 24h)",
+    vagaId: "1",
+    titularMatricula: "036480",
+    titularNome: "WALLACE SOUZA DE ALBUQUERQUE",
+    substitutoMatricula: "045858",
+    substitutoNome: "LUCAS VASCONCELLOS DOS SANTOS",
+    dataInicio: "2026-09-01",
+    dataFim: "2026-09-14",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Férias regulamentares do titular",
+    itemPpu: "3.6",
+    criadoEm: "2026-09-01 07:00",
+  },
+  // 2. CABIÚNAS (Macaé) — Item 3.5 (Suporte à Operação de Mobilidade - Turno/16h)
+  {
+    id: "cob-padrao-002",
+    postoCodigo: "PST-CABIUNAS-010",
+    idPosto: "PST-CABIUNAS-010",
+    funcaoPosto: "Suporte à Operação de Mobilidade (Turno 16h)",
+    vagaId: "1",
+    titularMatricula: "036120",
+    titularNome: "FLAVIA REGINA SILVA",
+    substitutoMatricula: "045127",
+    substitutoNome: "GILMARA CAETANO DE ASSIS",
+    dataInicio: "2026-09-03",
+    dataFim: "2026-09-12",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Férias do titular",
+    itemPpu: "3.5",
+    criadoEm: "2026-09-02 08:00",
+  },
+  // 3. EDIHB (Rio de Janeiro) — Item 1.1 (Serviços de Apoio Logístico - Adm 09h)
+  {
+    id: "cob-padrao-003",
+    postoCodigo: "PST-EDIHB-115",
+    idPosto: "PST-EDIHB-115",
+    funcaoPosto: "Serviços de Apoio Logístico (Adm 09h)",
+    vagaId: "1",
+    titularMatricula: "036029",
+    titularNome: "ROSELAINE APARECIDA SIMIAO",
+    substitutoMatricula: "046001",
+    substitutoNome: "BRUNO HENRIQUE ALMEIDA",
+    dataInicio: "2026-09-01",
+    dataFim: "2026-09-09",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Férias regulamentares",
+    itemPpu: "1.1",
+    criadoEm: "2026-08-30 09:00",
+  },
+  // 4. EDISA (Santos) — Item 2.1 (Suporte à Fiscalização de Mobilidade - Adm 09h)
+  {
+    id: "cob-padrao-004",
+    postoCodigo: "PST-EDISA-121",
+    idPosto: "PST-EDISA-121",
+    funcaoPosto: "Suporte à Fiscalização de Mobilidade (Adm 09h)",
+    vagaId: "1",
+    titularMatricula: "038437",
+    titularNome: "THIAGO DE NOVAIS TIEPO",
+    substitutoMatricula: "046002",
+    substitutoNome: "MARCOS AURELIO DIAS",
+    dataInicio: "2026-09-01",
+    dataFim: "2026-09-09",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Férias do titular",
+    itemPpu: "2.1",
+    criadoEm: "2026-08-30 09:00",
+  },
+  // 5. EDIBRA (Rio de Janeiro) — Item 1.1 (Serviços de Apoio Logístico - Adm 09h)
+  {
+    id: "cob-padrao-005",
+    postoCodigo: "PST-EDIBRA-030",
+    idPosto: "PST-EDIBRA-030",
+    funcaoPosto: "Serviços de Apoio Logístico (Adm 09h)",
+    vagaId: "1",
+    titularMatricula: "035918",
+    titularNome: "CAROLINE DA SILVA SA",
+    substitutoMatricula: "045890",
+    substitutoNome: "JULIANA MARTINS ROCHA",
+    dataInicio: "2026-09-01",
+    dataFim: "2026-09-09",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Licença regulamentar",
+    itemPpu: "1.1",
+    criadoEm: "2026-08-30 09:00",
+  },
+  // 6. RECAP (Capuava/SP) — Item 3.1 (Suporte à Operação de Mobilidade - Adm 09h)
+  {
+    id: "cob-padrao-006",
+    postoCodigo: "PST-RECAP-176",
+    idPosto: "PST-RECAP-176",
+    funcaoPosto: "Suporte à Operação de Mobilidade (Adm 09h)",
+    vagaId: "1",
+    titularMatricula: "037218",
+    titularNome: "RENAN GARCIA PARRA",
+    substitutoMatricula: "046003",
+    substitutoNome: "FABIANO LIMA CARDOSO",
+    dataInicio: "2026-09-01",
+    dataFim: "2026-09-09",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Férias do titular",
+    itemPpu: "3.1",
+    criadoEm: "2026-08-30 09:00",
+  },
+  // 7. EDISEN (Rio de Janeiro) — Item 4.1 (Suporte à Coordenação de Mobilidade - Adm 09h)
+  {
+    id: "cob-padrao-007",
+    postoCodigo: "PST-EDISEN-040",
+    idPosto: "PST-EDISEN-040",
+    funcaoPosto: "Suporte à Coordenação de Mobilidade (Adm 09h)",
+    vagaId: "1",
+    titularMatricula: "037800",
+    titularNome: "MARCELO TAVARES PINTO",
+    substitutoMatricula: "045899",
+    substitutoNome: "DIEGO CAMARGO SILVEIRA",
+    dataInicio: "2026-09-15",
+    dataFim: "2026-09-25",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Substituição operacional",
+    itemPpu: "4.1",
+    criadoEm: "2026-09-14 10:00",
+  },
+  // 8. BOAVENTURA — Item 3.4 (Suporte à Operação de Mobilidade - Turno/12h)
+  {
+    id: "cob-padrao-008",
+    postoCodigo: "PST-BOAVENTURA-006",
+    idPosto: "PST-BOAVENTURA-006",
+    funcaoPosto: "Suporte à Operação de Mobilidade (Turno 12h)",
+    vagaId: "1",
+    titularMatricula: "036475",
+    titularNome: "IZAC NEVES DOS SANTOS",
+    substitutoMatricula: "045858",
+    substitutoNome: "LUCAS VASCONCELLOS DOS SANTOS",
+    dataInicio: "2026-09-01",
+    dataFim: "2026-09-09",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Férias do titular",
+    itemPpu: "3.4",
+    criadoEm: "2026-08-30 09:00",
+  },
+  // 9. UFN-III (Três Lagoas/MS) — Item 3.1 (Suporte à Operação de Mobilidade - Adm 09h)
+  {
+    id: "cob-padrao-009",
+    postoCodigo: "PST-ALM-001",
+    idPosto: "PST-ALM-001",
+    funcaoPosto: "Almoxarife Líder (Adm 09h)",
+    vagaId: "1",
+    titularMatricula: "035001",
+    titularNome: "CARLOS EDUARDO SILVA",
+    substitutoMatricula: "045899",
+    substitutoNome: "DIEGO CAMARGO SILVEIRA",
+    dataInicio: "2026-09-10",
+    dataFim: "2026-09-20",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Férias regulamentares",
+    itemPpu: "3.1",
+    criadoEm: "2026-09-09 10:00",
+  },
+  // 10. CENPES (Rio de Janeiro) — Item 1.2 (Serviços de Apoio Logístico - Turno 12h)
+  {
+    id: "cob-padrao-010",
+    postoCodigo: "PST-CENPES-022",
+    idPosto: "PST-CENPES-022",
+    funcaoPosto: "Serviços de Apoio Logístico (Turno 12h)",
+    vagaId: "1",
+    titularMatricula: "035500",
+    titularNome: "GABRIEL NOGUEIRA FERREIRA",
+    substitutoMatricula: "045950",
+    substitutoNome: "ALEXANDRE PEREIRA LIMA",
+    dataInicio: "2026-09-18",
+    dataFim: "2026-09-28",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Afastamento temporário",
+    itemPpu: "1.2",
+    criadoEm: "2026-09-17 11:00",
+  },
+  // 11. Coberturas para Outubro/2026 (2026-10)
+  {
+    id: "cob-padrao-out-001",
+    postoCodigo: "PST-BOAVENTURA-008",
+    idPosto: "PST-BOAVENTURA-008",
+    funcaoPosto: "Suporte à Operação de Mobilidade (Turno 24h)",
+    vagaId: "1",
+    titularMatricula: "036480",
+    titularNome: "WALLACE SOUZA DE ALBUQUERQUE",
+    substitutoMatricula: "045858",
+    substitutoNome: "LUCAS VASCONCELLOS DOS SANTOS",
+    dataInicio: "2026-10-01",
+    dataFim: "2026-10-15",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Férias do titular",
+    itemPpu: "3.6",
+    criadoEm: "2026-09-30 08:00",
+  },
+  {
+    id: "cob-padrao-out-002",
+    postoCodigo: "PST-CABIUNAS-010",
+    idPosto: "PST-CABIUNAS-010",
+    funcaoPosto: "Suporte à Operação de Mobilidade (Turno 16h)",
+    vagaId: "1",
+    titularMatricula: "036120",
+    titularNome: "FLAVIA REGINA SILVA",
+    substitutoMatricula: "045127",
+    substitutoNome: "GILMARA CAETANO DE ASSIS",
+    dataInicio: "2026-10-05",
+    dataFim: "2026-10-20",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Férias do titular",
+    itemPpu: "3.5",
+    criadoEm: "2026-10-04 09:00",
+  },
+  {
+    id: "cob-padrao-out-003",
+    postoCodigo: "PST-EDIHB-115",
+    idPosto: "PST-EDIHB-115",
+    funcaoPosto: "Serviços de Apoio Logístico (Adm 09h)",
+    vagaId: "1",
+    titularMatricula: "036029",
+    titularNome: "ROSELAINE APARECIDA SIMIAO",
+    substitutoMatricula: "046001",
+    substitutoNome: "BRUNO HENRIQUE ALMEIDA",
+    dataInicio: "2026-10-10",
+    dataFim: "2026-10-25",
+    tipoCobertura: "SUBSTITUICAO_INTERNA",
+    status: "CONFIRMADA",
+    justificativa: "Férias regulamentares",
+    itemPpu: "1.1",
+    criadoEm: "2026-10-09 10:00",
+  },
+];
+
 export function gerarRelatorioCoberturas(filtros: {
   unidadeId?: string;
   postoId?: string;
   periodo?: string;
   usuarioEmissor?: string;
   perfilEmissor?: string;
-}): { cabecalho: CabecalhoRelatorio; itens: ItemCoberturaRelatorio[] } {
+  itemPpu?: string;
+}): RelatorioCoberturasResultado {
   const estado = carregarEstado();
   const todosPostos = obterTodosPostosContrato(estado.postos);
   const { dataInicio, dataFim, rotulo } = resolverDatasCompetencia(filtros.periodo || "2026-09");
 
   const postosMap = new Map(todosPostos.map((p) => [p.codigoPosto || p.idPosto, p]));
 
+  // Usa as coberturas do estado operacional ou o conjunto contratual padrão caso vazio
+  const listaBase =
+    estado.coberturas && estado.coberturas.length > 0
+      ? estado.coberturas
+      : COBERTURAS_PADRAO_REV04;
+
   const itens: ItemCoberturaRelatorio[] = [];
 
-  for (const cob of estado.coberturas) {
+  for (const cob of listaBase) {
     if (cob.status === "CANCELADA") continue;
 
     // Filtra interseção com o período
@@ -453,10 +732,26 @@ export function gerarRelatorioCoberturas(filtros: {
       );
 
     if (filtros.unidadeId && filtros.unidadeId !== "TODAS") {
-      if (posto && posto.unidadeId !== filtros.unidadeId) continue;
+      const match =
+        posto &&
+        (posto.unidadeId === filtros.unidadeId ||
+          posto.baseOperacional?.toUpperCase() === filtros.unidadeId.toUpperCase());
+      if (!match) continue;
     }
     if (filtros.postoId && filtros.postoId !== "TODOS") {
-      if (cob.postoCodigo !== filtros.postoId && posto?.idPosto !== filtros.postoId) continue;
+      if (cob.postoCodigo !== filtros.postoId && posto?.idPosto !== filtros.postoId && posto?.codigoPosto !== filtros.postoId) continue;
+    }
+
+    // Item da PPU (resolução prioritária e robusta)
+    const itemPpuCob =
+      String(cob.itemPpu || "").trim() ||
+      obterItemPpuDoPosto(cob.idPosto || cob.postoCodigo) ||
+      (posto?.itemPPU ? String(posto.itemPPU).trim() : "") ||
+      "";
+
+    // Filtro por Item da PPU específico
+    if (filtros.itemPpu && filtros.itemPpu !== "TODOS") {
+      if (itemPpuCob !== filtros.itemPpu) continue;
     }
 
     // Calcula dias no período
@@ -473,16 +768,17 @@ export function gerarRelatorioCoberturas(filtros: {
     else if (j.includes("folga") || j.includes("banco")) motivoLimpo = "Folga compensatória";
     else if (j.includes("falta")) motivoLimpo = "Falta injustificada";
 
-    const itemPpuCob = String(cob.itemPpu || "").trim() || obterItemPpuDoPosto(cob.idPosto || cob.postoCodigo) || "";
+    const ppuConfig = itemPpuCob ? obterItemPPU(itemPpuCob) : undefined;
+    const descPpu = ppuConfig?.descricao || (itemPpuCob ? `Item ${itemPpuCob}` : "Item não informado");
 
     itens.push({
       id: cob.id,
-      unidadeId: posto?.unidadeId || "CONTRATO",
+      unidadeId: posto?.unidadeId || posto?.baseOperacional || "CONTRATO",
       unidadeNome: posto?.unidadeNome || posto?.baseOperacional || "Contrato Geral",
       postoCodigo: cob.postoCodigo,
       postoFuncao: posto?.funcao || cob.funcaoPosto || "Posto Operacional",
       itemPpu: itemPpuCob || "—",
-      itemPpuDescricao: itemPpuCob ? obterItemPPU(itemPpuCob)?.descricao || "" : "Item não informado",
+      itemPpuDescricao: descPpu,
       posicaoId: cob.vagaId || "1",
       titularMatricula: cob.titularMatricula || "—",
       titularNome: cob.titularNome || "Titular do Posto",
@@ -498,6 +794,61 @@ export function gerarRelatorioCoberturas(filtros: {
 
   itens.sort((a, b) => a.dataInicio.localeCompare(b.dataInicio));
 
+  // Consolidação de métricas e resumo por Item da PPU
+  const postosCobertosSet = new Set<string>();
+  const itensPpuSet = new Set<string>();
+  const substitutosSet = new Set<string>();
+  let totalDiarias = 0;
+
+  const mapaResumoPpu = new Map<string, {
+    itemPpu: string;
+    itemPpuDescricao: string;
+    regime?: string;
+    totalCoberturas: number;
+    totalDiarias: number;
+    postos: Set<string>;
+  }>();
+
+  for (const it of itens) {
+    totalDiarias += it.totalDias;
+    if (it.postoCodigo) postosCobertosSet.add(it.postoCodigo);
+    substitutosSet.add(it.substitutoMatricula || it.substitutoNome);
+
+    const chavePpu = it.itemPpu && it.itemPpu !== "—" ? it.itemPpu : "SEM_ITEM";
+    itensPpuSet.add(chavePpu);
+
+    const ppuConfig = chavePpu !== "SEM_ITEM" ? obterItemPPU(chavePpu) : undefined;
+    const entry = mapaResumoPpu.get(chavePpu) || {
+      itemPpu: chavePpu === "SEM_ITEM" ? "Sem Item" : chavePpu,
+      itemPpuDescricao: ppuConfig?.descricao || it.itemPpuDescricao || "Item não informado",
+      regime: ppuConfig?.regime,
+      totalCoberturas: 0,
+      totalDiarias: 0,
+      postos: new Set<string>(),
+    };
+
+    entry.totalCoberturas += 1;
+    entry.totalDiarias += it.totalDias;
+    if (it.postoCodigo) entry.postos.add(it.postoCodigo);
+    mapaResumoPpu.set(chavePpu, entry);
+  }
+
+  const resumoPpu: ResumoItemPpuRelatorio[] = Array.from(mapaResumoPpu.values())
+    .map((r) => ({
+      itemPpu: r.itemPpu,
+      itemPpuDescricao: r.itemPpuDescricao,
+      regime: r.regime,
+      totalCoberturas: r.totalCoberturas,
+      totalDiarias: r.totalDiarias,
+      percentualDiarias: totalDiarias > 0 ? Number(((r.totalDiarias / totalDiarias) * 100).toFixed(1)) : 0,
+      postos: Array.from(r.postos),
+    }))
+    .sort((a, b) => {
+      if (a.itemPpu === "Sem Item") return 1;
+      if (b.itemPpu === "Sem Item") return -1;
+      return a.itemPpu.localeCompare(b.itemPpu, undefined, { numeric: true });
+    });
+
   const cabecalho: CabecalhoRelatorio = {
     contrato: CONTRATO_NUMERO,
     periodoTexto: rotulo,
@@ -508,7 +859,18 @@ export function gerarRelatorioCoberturas(filtros: {
     postoSelecionado: filtros.postoId || "TODOS",
   };
 
-  return { cabecalho, itens };
+  return {
+    cabecalho,
+    itens,
+    totais: {
+      totalCoberturas: itens.length,
+      totalDiarias,
+      totalPostosCobertos: postosCobertosSet.size,
+      totalItensPpu: Array.from(itensPpuSet).filter((c) => c !== "SEM_ITEM" && c !== "—").length,
+      totalSubstitutos: substitutosSet.size,
+    },
+    resumoPpu,
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -587,11 +949,18 @@ export function gerarRelatorioDescobertos(filtros: {
             dataStr
           );
 
+          const ppuPosto =
+            (posto as any).itemPpu ||
+            (posto as any).itemPPU ||
+            obterItemPpuDoPosto(posto.codigoPosto || posto.idPosto) ||
+            "—";
+
           itens.push({
             data: dataStr,
             diaSemana: diaSem,
             unidadeId: posto.unidadeId,
             unidadeNome: posto.unidadeNome || posto.baseOperacional || posto.unidadeId,
+            itemPpu: ppuPosto,
             postoCodigo: posto.codigoPosto,
             postoFuncao: posto.funcao,
             posicaoId: vaga.id,
@@ -801,6 +1170,17 @@ export function gerarComparativoHomologacaoMC(competencia: string = "2026-09"): 
 }
 
 // -----------------------------------------------------------------------------
+function formatarDataIsoParaBr(dataIso?: string): string {
+  if (!dataIso) return "—";
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dataIso)) return dataIso;
+  const partes = dataIso.split("-");
+  if (partes.length === 3) {
+    const [ano, mes, dia] = partes;
+    return `${dia.padStart(2, "0")}/${mes.padStart(2, "0")}/${ano}`;
+  }
+  return dataIso;
+}
+
 // 6. EXPORTAÇÃO EXCEL (.XLSX) COM CABEÇALHO OFICIAL CONTRATUAL
 // -----------------------------------------------------------------------------
 
@@ -812,6 +1192,7 @@ export function exportarRelatorioParaXlsx(
     periodo?: string;
     usuarioEmissor?: string;
     perfilEmissor?: string;
+    itemPpu?: string;
   }
 ): Uint8Array {
   const wb = XLSX.utils.book_new();
@@ -819,36 +1200,31 @@ export function exportarRelatorioParaXlsx(
   if (tipoRelatorio === "ocupacao") {
     const dados = gerarRelatorioOcupacaoPorPosto(filtros);
 
-    // Aba 1: Dados Detalhados
+    // Cabeçalho Corporativo Premier Logistics
     const linhas: any[] = [
-      ["CONTRATO PETROBRAS", dados.cabecalho.contrato],
-      ["CLIENTE", CONTRATO_CLIENTE],
-      ["CONTRATADA", CONTRATADA_EMPRESA],
-      ["RELATÓRIO", "OCUPAÇÃO EFETIVA POR POSTO E POSIÇÃO"],
-      ["PERÍODO DE APURAÇÃO", dados.cabecalho.periodoTexto],
-      ["DATA/HORA EMISSÃO", dados.cabecalho.dataHoraEmissao],
-      ["EMISSOR", `${dados.cabecalho.usuarioEmissor} (${dados.cabecalho.perfilEmissor})`],
-      ["UNIDADE FILTRADA", dados.cabecalho.unidadeSelecionada || "TODAS"],
+      ["PREMIER LOGISTICS LTDA. — SISTEMA DE GESTÃO DE POSTOS (SGP)"],
+      ["CONTRATO PETROBRAS:", dados.cabecalho.contrato, "", "CLIENTE:", CONTRATO_CLIENTE],
+      ["CONTRATADA:", CONTRATADA_EMPRESA, "", "SEGURANÇA:", "Emissão Oficial / LGPD Ativa"],
+      ["RELATÓRIO:", "OCUPAÇÃO EFETIVA POR POSTO E POSIÇÃO"],
+      ["COMPETÊNCIA:", dados.cabecalho.periodoTexto, "", "DATA/HORA EMISSÃO:", dados.cabecalho.dataHoraEmissao],
+      ["EMISSOR:", `${dados.cabecalho.usuarioEmissor} (${dados.cabecalho.perfilEmissor})`, "", "IMÓVEL / BASE:", dados.cabecalho.unidadeSelecionada || "Todos os Imóveis"],
       [],
       [
-        "UNIDADE / BASE",
-        "CÓDIGO POSTO",
-        "FUNÇÃO",
+        "IMÓVEL / BASE",
+        "POSTO",
+        "FUNÇÃO OPERACIONAL",
         "POSIÇÃO (SGP)",
         "TITULAR (MATRÍCULA)",
         "TITULAR (NOME)",
+        "DIAS EXIGÍVEIS",
+        "DIAS ATENDIDOS",
         "DIAS P (PRESENTE)",
         "DIAS C (COBERTO)",
         "DIAS D (DESCOBERTO)",
         "DIAS N (FOLGA)",
-        "TOTAL EXIGÍVEL",
-        "TOTAL ATENDIDO",
         "% OCUPAÇÃO",
         "HORÁRIO (RM)",
         "SEÇÃO (RM)",
-        "CPF",
-        "SEXO",
-        "IDADE",
         "SITUAÇÃO",
       ],
     ];
@@ -861,19 +1237,16 @@ export function exportarRelatorioParaXlsx(
         it.posicaoCodigoVisual,
         it.titularMatricula,
         it.titularNome,
+        it.diasExigiveis,
+        it.diasAtendidos,
         it.diasP,
         it.diasC,
         it.diasD,
         it.diasN,
-        it.diasExigiveis,
-        it.diasAtendidos,
         `${it.percentualOcupacao.toFixed(1)}%`,
         it.horarioFormatado || "—",
         it.secaoFormatada || "—",
-        it.cpfFormatado || "—",
-        it.sexo || "—",
-        it.idade ?? "—",
-        it.situacao || "—",
+        it.situacao || "ATIVO",
       ]);
     });
 
@@ -885,16 +1258,13 @@ export function exportarRelatorioParaXlsx(
       `${dados.totais.totalPosicoes} posições`,
       "",
       "",
+      dados.totais.totalExigivel,
+      dados.totais.totalAtendido,
       dados.totais.totalDiasP,
       dados.totais.totalDiasC,
       dados.totais.totalDiasD,
       dados.totais.totalDiasN,
-      dados.totais.totalExigivel,
-      dados.totais.totalAtendido,
       `${dados.totais.percentualGeral.toFixed(1)}%`,
-      "",
-      "",
-      "",
       "",
       "",
       "",
@@ -904,47 +1274,46 @@ export function exportarRelatorioParaXlsx(
     ws["!cols"] = [
       { wch: 25 },
       { wch: 18 },
-      { wch: 32 },
+      { wch: 35 },
       { wch: 20 },
-      { wch: 16 },
-      { wch: 30 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
+      { wch: 18 },
+      { wch: 32 },
       { wch: 14 },
       { wch: 14 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
       { wch: 14 },
       { wch: 35 },
       { wch: 35 },
-      { wch: 16 },
-      { wch: 8 },
-      { wch: 8 },
       { wch: 14 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, "Ocupacao_Postos");
   } else if (tipoRelatorio === "coberturas") {
     const dados = gerarRelatorioCoberturas(filtros);
 
+    // Aba 1: Coberturas Detalhadas do Período
     const linhas: any[] = [
-      ["CONTRATO PETROBRAS", dados.cabecalho.contrato],
-      ["RELATÓRIO", "COBERTURAS E SUBSTITUIÇÕES DO PERÍODO"],
-      ["PERÍODO", dados.cabecalho.periodoTexto],
-      ["EMISSÃO", dados.cabecalho.dataHoraEmissao],
-      ["EMISSOR", dados.cabecalho.usuarioEmissor],
+      ["PREMIER LOGISTICS LTDA. — SISTEMA DE GESTÃO DE POSTOS (SGP)"],
+      ["CONTRATO PETROBRAS:", dados.cabecalho.contrato, "", "CLIENTE:", CONTRATO_CLIENTE],
+      ["CONTRATADA:", CONTRATADA_EMPRESA, "", "SEGURANÇA:", "Emissão Oficial / LGPD Ativa"],
+      ["RELATÓRIO:", "COBERTURAS E SUBSTITUIÇÕES DO PERÍODO — BASE ITEM PPU"],
+      ["COMPETÊNCIA:", dados.cabecalho.periodoTexto, "", "DATA/HORA EMISSÃO:", dados.cabecalho.dataHoraEmissao],
+      ["EMISSOR:", `${dados.cabecalho.usuarioEmissor} (${dados.cabecalho.perfilEmissor})`, "", "ITEM PPU:", filtros.itemPpu && filtros.itemPpu !== "TODOS" ? filtros.itemPpu : "Todos os Itens"],
       [],
       [
-        "UNIDADE",
+        "IMÓVEL / BASE",
         "POSTO",
-        "ITEM PPU",
-        "DESCRIÇÃO ITEM PPU",
-        "FUNÇÃO",
+        "ITEM DA PPU",
+        "DESCRIÇÃO DO ITEM DA PPU",
+        "FUNÇÃO OPERACIONAL",
         "POSIÇÃO",
         "TITULAR AUSENTE",
         "FERISTA / SUBSTITUTO",
         "DATA INÍCIO",
         "DATA FIM",
-        "DIAS",
+        "DIÁRIAS NO MÊS",
         "MOTIVO (CATEGORIA LGPD)",
         "STATUS",
       ],
@@ -960,59 +1329,134 @@ export function exportarRelatorioParaXlsx(
         it.posicaoId,
         `${it.titularMatricula} - ${it.titularNome}`,
         `${it.substitutoMatricula} - ${it.substitutoNome}`,
-        it.dataInicio,
-        it.dataFim,
+        formatarDataIsoParaBr(it.dataInicio),
+        formatarDataIsoParaBr(it.dataFim),
         it.totalDias,
         it.motivoCategoria,
         it.status,
       ]);
     });
 
-    const ws = XLSX.utils.aoa_to_sheet(linhas);
-    ws["!cols"] = [
+    linhas.push([]);
+    linhas.push([
+      "TOTAIS CONSOLIDADOS",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      `${dados.totais.totalSubstitutos} substitutos`,
+      "",
+      "",
+      dados.totais.totalDiarias,
+      `${dados.totais.totalCoberturas} coberturas`,
+      "",
+    ]);
+
+    const ws1 = XLSX.utils.aoa_to_sheet(linhas);
+    ws1["!cols"] = [
       { wch: 25 },
       { wch: 18 },
-      { wch: 10 },
-      { wch: 40 },
-      { wch: 28 },
+      { wch: 14 },
+      { wch: 45 },
+      { wch: 30 },
+      { wch: 14 },
+      { wch: 32 },
+      { wch: 32 },
+      { wch: 14 },
+      { wch: 14 },
       { wch: 16 },
-      { wch: 28 },
-      { wch: 28 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 8 },
-      { wch: 22 },
+      { wch: 24 },
       { wch: 14 },
     ];
-    XLSX.utils.book_append_sheet(wb, ws, "Coberturas_Periodo");
+    XLSX.utils.book_append_sheet(wb, ws1, "Coberturas_Periodo");
+
+    // Aba 2: Resumo Contratual por Item da PPU (Base Medição Petrobras)
+    const linhasPpu: any[] = [
+      ["PREMIER LOGISTICS LTDA. — SISTEMA DE GESTÃO DE POSTOS (SGP)"],
+      ["CONTRATO PETROBRAS:", dados.cabecalho.contrato, "", "CLIENTE:", CONTRATO_CLIENTE],
+      ["CONTRATADA:", CONTRATADA_EMPRESA, "", "SEGURANÇA:", "Emissão Oficial / LGPD Ativa"],
+      ["RELATÓRIO:", "CONSOLIDAÇÃO CONTRATUAL POR ITEM DA PPU — MEDIÇÃO PETROBRAS"],
+      ["COMPETÊNCIA:", dados.cabecalho.periodoTexto, "", "DATA/HORA EMISSÃO:", dados.cabecalho.dataHoraEmissao],
+      ["EMISSOR:", `${dados.cabecalho.usuarioEmissor} (${dados.cabecalho.perfilEmissor})`],
+      [],
+      [
+        "ITEM DA PPU",
+        "DESCRIÇÃO CONTRATUAL DO ITEM",
+        "REGIME CONTRATUAL",
+        "TOTAL COBERTURAS",
+        "TOTAL DIÁRIAS (DIAS EFETIVOS)",
+        "% DO TOTAL DE DIÁRIAS",
+        "POSTOS COBERTOS NO PERÍODO",
+      ],
+    ];
+
+    dados.resumoPpu.forEach((r) => {
+      linhasPpu.push([
+        r.itemPpu,
+        r.itemPpuDescricao,
+        r.regime || "—",
+        r.totalCoberturas,
+        r.totalDiarias,
+        `${r.percentualDiarias.toFixed(1)}%`,
+        r.postos.join(", "),
+      ]);
+    });
+
+    linhasPpu.push([]);
+    linhasPpu.push([
+      "TOTAL GERAL CONSOLIDADO",
+      "",
+      "",
+      dados.totais.totalCoberturas,
+      dados.totais.totalDiarias,
+      "100.0%",
+      `${dados.totais.totalPostosCobertos} postos distintos`,
+    ]);
+
+    const ws2 = XLSX.utils.aoa_to_sheet(linhasPpu);
+    ws2["!cols"] = [
+      { wch: 14 },
+      { wch: 48 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 28 },
+      { wch: 22 },
+      { wch: 40 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws2, "Resumo_PPU_Contratual");
   } else if (tipoRelatorio === "descobertos") {
     const dados = gerarRelatorioDescobertos(filtros);
 
     const linhas: any[] = [
-      ["CONTRATO PETROBRAS", dados.cabecalho.contrato],
-      ["RELATÓRIO", "DESCOBERTOS DO PERÍODO (DIAS D)"],
-      ["PERÍODO", dados.cabecalho.periodoTexto],
-      ["EMISSÃO", dados.cabecalho.dataHoraEmissao],
-      ["EMISSOR", dados.cabecalho.usuarioEmissor],
+      ["PREMIER LOGISTICS LTDA. — SISTEMA DE GESTÃO DE POSTOS (SGP)"],
+      ["CONTRATO PETROBRAS:", dados.cabecalho.contrato, "", "CLIENTE:", CONTRATO_CLIENTE],
+      ["CONTRATADA:", CONTRATADA_EMPRESA, "", "SEGURANÇA:", "Emissão Oficial / LGPD Ativa"],
+      ["RELATÓRIO:", "DESCOBERTOS DO PERÍODO (DIAS D)"],
+      ["COMPETÊNCIA:", dados.cabecalho.periodoTexto, "", "DATA/HORA EMISSÃO:", dados.cabecalho.dataHoraEmissao],
+      ["EMISSOR:", `${dados.cabecalho.usuarioEmissor} (${dados.cabecalho.perfilEmissor})`, "", "IMÓVEL / BASE:", dados.cabecalho.unidadeSelecionada || "Todos os Imóveis"],
       [],
       [
-        "DATA",
+        "DATA (DD/MM/AAAA)",
         "DIA",
-        "UNIDADE",
+        "IMÓVEL / BASE",
+        "ITEM DA PPU",
         "POSTO",
-        "FUNÇÃO",
+        "FUNÇÃO OPERACIONAL",
         "POSIÇÃO",
-        "TITULAR",
-        "CATEGORIA AUSÊNCIA",
+        "TITULAR AUSENTE",
+        "CATEGORIA DA AUSÊNCIA",
         "FERISTAS APTOS SUGERIDOS",
       ],
     ];
 
     dados.itens.forEach((it) => {
       linhas.push([
-        it.data,
+        formatarDataIsoParaBr(it.data),
         it.diaSemana,
         it.unidadeNome,
+        it.itemPpu || "—",
         it.postoCodigo,
         it.postoFuncao,
         it.posicaoCodigoVisual,
@@ -1022,16 +1466,31 @@ export function exportarRelatorioParaXlsx(
       ]);
     });
 
+    linhas.push([]);
+    linhas.push([
+      "TOTAL DE OCORRÊNCIAS",
+      `${dados.itens.length} diárias descobertas`,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
+
     const ws = XLSX.utils.aoa_to_sheet(linhas);
     ws["!cols"] = [
-      { wch: 12 },
+      { wch: 18 },
       { wch: 8 },
       { wch: 25 },
+      { wch: 14 },
       { wch: 18 },
-      { wch: 28 },
+      { wch: 32 },
       { wch: 18 },
-      { wch: 28 },
-      { wch: 22 },
+      { wch: 32 },
+      { wch: 24 },
       { wch: 35 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, "Descobertos_Periodo");
@@ -1039,20 +1498,21 @@ export function exportarRelatorioParaXlsx(
     const dados = gerarRelatorioQuadroFeristas(filtros);
 
     const linhas: any[] = [
-      ["CONTRATO PETROBRAS", dados.cabecalho.contrato],
-      ["RELATÓRIO", "QUADRO DE FERISTAS E COBERTURAS REALIZADAS"],
-      ["PERÍODO", dados.cabecalho.periodoTexto],
-      ["EMISSÃO", dados.cabecalho.dataHoraEmissao],
+      ["PREMIER LOGISTICS LTDA. — SISTEMA DE GESTÃO DE POSTOS (SGP)"],
+      ["CONTRATO PETROBRAS:", dados.cabecalho.contrato, "", "CLIENTE:", CONTRATO_CLIENTE],
+      ["CONTRATADA:", CONTRATADA_EMPRESA, "", "SEGURANÇA:", "Emissão Oficial / LGPD Ativa"],
+      ["RELATÓRIO:", "QUADRO DE FERISTAS E COBERTURAS REALIZADAS"],
+      ["COMPETÊNCIA:", dados.cabecalho.periodoTexto, "", "DATA/HORA EMISSÃO:", dados.cabecalho.dataHoraEmissao],
+      ["EMISSOR:", `${dados.cabecalho.usuarioEmissor} (${dados.cabecalho.perfilEmissor})`, "", "IMÓVEL / BASE:", dados.cabecalho.unidadeSelecionada || "Todos os Imóveis"],
       [],
       [
         "CHAPA",
         "COLABORADOR FERISTA",
         "UNIDADE PRINCIPAL",
-        "POSTOS VINCULADOS",
-        "TOTAL COBERTURAS",
-        "DIAS EM COBERTURA",
+        "POSTOS HOMOLOGADOS VINCULADOS",
+        "COBERTURAS REALIZADAS",
+        "DIÁRIAS COBRINDO NO PERÍODO",
         "DIAS DISPONÍVEIS",
-        "STATUS PERÍODO",
       ],
     ];
 
@@ -1065,83 +1525,31 @@ export function exportarRelatorioParaXlsx(
         it.totalCoberturas,
         it.diasEmCobertura,
         it.diasDisponiveis,
-        it.statusPeriodo,
       ]);
     });
 
+    linhas.push([]);
+    linhas.push([
+      "TOTAIS CONSOLIDADOS",
+      `${dados.itens.length} feristas cadastrados`,
+      "",
+      "",
+      dados.itens.reduce((acc, f) => acc + (f.totalCoberturas || 0), 0),
+      dados.itens.reduce((acc, f) => acc + (f.diasEmCobertura || 0), 0),
+      dados.itens.reduce((acc, f) => acc + (f.diasDisponiveis || 0), 0),
+    ]);
+
     const ws = XLSX.utils.aoa_to_sheet(linhas);
     ws["!cols"] = [
-      { wch: 12 },
-      { wch: 28 },
+      { wch: 14 },
+      { wch: 32 },
       { wch: 22 },
-      { wch: 30 },
-      { wch: 16 },
-      { wch: 16 },
-      { wch: 16 },
-      { wch: 16 },
+      { wch: 35 },
+      { wch: 22 },
+      { wch: 26 },
+      { wch: 18 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, "Quadro_Feristas");
-  } else if (tipoRelatorio === "homologacao") {
-    const dados = gerarComparativoHomologacaoMC(filtros.periodo || "2026-09");
-
-    const linhas: any[] = [
-      ["CONTRATO PETROBRAS", CONTRATO_NUMERO],
-      ["MODO HOMOLOGAÇÃO", "COMPARATIVO SGP × MEMÓRIA DE CÁLCULO (MC)"],
-      ["COMPETÊNCIA", dados.competencia],
-      ["TAXA DE CONFORMIDADE", `${dados.taxaConformidade}%`],
-      ["POSIÇÕES CONFORMES", `${dados.totalPosicoesConformes} de ${dados.totalPosicoesApuradas}`],
-      ["DIVERGÊNCIAS", dados.totalDivergencias],
-      ["AVISO", "Faturamento e medição permanecem fora do escopo. Módulo restrito à conferência."],
-      [],
-      [
-        "POSTO",
-        "FUNÇÃO",
-        "POSIÇÃO",
-        "TITULAR",
-        "SGP (DIAS P)",
-        "SGP (DIAS C)",
-        "SGP (DIAS D)",
-        "SGP ATENDIDO",
-        "MC (DIAS P)",
-        "MC ATENDIDO",
-        "STATUS CONFORMIDADE",
-        "DETALHE DIVERGÊNCIA",
-      ],
-    ];
-
-    dados.itens.forEach((it) => {
-      linhas.push([
-        it.postoCodigo,
-        it.postoFuncao,
-        it.posicaoId,
-        it.titular,
-        it.sgpDiasP,
-        it.sgpDiasC,
-        it.sgpDiasD,
-        it.sgpTotalAtendido,
-        it.mcDiasP,
-        it.mcTotalAtendido,
-        it.divergente ? "DIVERGENTE" : "CONFORME",
-        it.tipoDivergencia,
-      ]);
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet(linhas);
-    ws["!cols"] = [
-      { wch: 18 },
-      { wch: 28 },
-      { wch: 18 },
-      { wch: 28 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 14 },
-      { wch: 12 },
-      { wch: 14 },
-      { wch: 18 },
-      { wch: 35 },
-    ];
-    XLSX.utils.book_append_sheet(wb, ws, "Homologacao_SGP_MC");
   }
 
   const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
