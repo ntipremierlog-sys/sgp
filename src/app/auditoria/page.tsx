@@ -2,15 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import {
-  History,
-  Search,
-  RotateCcw,
-  Eye,
-  FileDiff,
-  X,
-  AlertOctagon,
-} from "lucide-react";
+import { Search, AlertOctagon, X } from "lucide-react";
 import { carregarEstado, LogAuditoriaOperacional } from "@/lib/dados/estado-operacional";
 
 function formatarDataHora(ts: string): string {
@@ -26,73 +18,188 @@ function formatarDataHora(ts: string): string {
 function rotuloAcao(acao: string): string {
   switch (acao) {
     case "ALTERAR_ESCALA":
-      return "Alteração de Escala";
+      return "Alteração de escala";
     case "ALTERAR_TITULAR":
-      return "Alteração de Titular";
+      return "Alteração de titular";
     case "CRIAR_COBERTURA":
-      return "Nova Cobertura";
+      return "Nova cobertura";
     case "EXCLUIR_COBERTURA":
-      return "Exclusão de Cobertura";
+      return "Exclusão de cobertura";
     case "CRIAR_AUSENCIA":
-      return "Lançamento de Ausência";
+      return "Lançamento de ausência";
     case "EXCLUIR_AUSENCIA":
-      return "Exclusão de Ausência";
+      return "Exclusão de ausência";
     case "CONGELAR_COMPETENCIA":
-      return "Fechamento de Competência";
+      return "Fechamento de competência";
     case "HOMOLOGAR_MEDICAO_PETROBRAS":
       return "Homologação Petrobras";
     case "REABRIR_COMPETENCIA":
-      return "Reabertura de Competência";
+      return "Reabertura de competência";
     case "DESFAZER_LOTE_IMPORTACAO":
-      return "Cancelamento de Lote";
+      return "Cancelamento de lote";
     case "LIMPEZA_DADOS_DEMONSTRACAO":
-      return "Limpeza de Demonstração";
+      return "Limpeza de demonstração";
     case "IMPORTACAO_FUNCIONARIOS_RM":
-      return "Importação Funcionários RM";
+      return "Importação funcionários RM";
     case "IMPORTACAO_CUBO_ABONO":
-      return "Importação Abonos RM";
+      return "Importação abonos RM";
     case "IMPORTACAO_ALOCADOS_SIFAC":
-      return "Importação Alocados";
-    default:
-      return acao.replace(/_/g, " ");
+      return "Importação alocados";
+    case "CRIAR_POSICAO":
+      return "Criação de posição";
+    case "ALTERAR_POSICAO":
+      return "Alteração de posição";
+    case "EXCLUIR_POSICAO":
+      return "Exclusão de posição";
+    case "CRIAR_PROFISSIONAL":
+      return "Cadastro de profissional";
+    case "APONTAMENTO_NOVO":
+      return "Novo apontamento";
+    case "APONTAMENTO_RESPOSTA":
+      return "Resposta de apontamento";
+    default: {
+      const s = acao.replace(/_/g, " ").toLowerCase();
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
   }
 }
 
-function rotuloPerfil(perfil: string): string {
-  switch (perfil) {
-    case "PREMIER_ADMIN":
-      return "Administrador";
-    case "PREMIER_RH":
-      return "RH";
-    case "PREMIER_SUPERVISOR":
-      return "Preposto";
-    case "PREMIER_GESTOR":
-    case "PREMIER_GESTOR_CONTRATO":
-      return "Gerente";
-    case "PETROBRAS_FISCAL":
-      return "Fiscal";
-    case "PETROBRAS_GESTOR":
-      return "Gestor";
-    default:
-      return perfil.replace("PREMIER_", "").replace("PETROBRAS_", "");
+function extrairReferencia(log: LogAuditoriaOperacional): string {
+  const d = log.detalhes || "";
+
+  // Titular alterado para Mayara Fiuza Louzada (Matrícula: 035928)
+  const mTitular = d.match(/Titular alterado para (.+?)(?: \(Matr[íi]cula: ([^)]+)\))?(?:\.|$)/i);
+  if (mTitular) {
+    const nome = mTitular[1].trim();
+    const mat = mTitular[2] ? ` · ${mTitular[2].trim()}` : "";
+    return `${nome}${mat}`;
   }
+
+  // Designado Fulano para posto PST-REFAP-204
+  const mCob = d.match(/Designado (.+?) para posto ([^\s·]+)/i);
+  if (mCob) {
+    return `${mCob[1].trim()} · ${mCob[2].trim()}`;
+  }
+
+  // Férias / Ausência para Fulano
+  const mAus = d.match(/(?:Férias|Atestado|Falta|Licença|Ausência) para (.+?)(?: —|$)/i);
+  if (mAus) {
+    return mAus[1].trim();
+  }
+
+  // Cadastro do profissional Fulano
+  const mProf = d.match(/Cadastro do profissional (.+?)$/i);
+  if (mProf) {
+    return mProf[1].trim();
+  }
+
+  // Cadastro do posto Operador - PST-01
+  const mPosto = d.match(/posto (.+?) - ([^\s]+)$/i);
+  if (mPosto) {
+    return `${mPosto[1].trim()} · ${mPosto[2].trim()}`;
+  }
+
+  // Buscar em JSON de valorNovo ou valorAnterior
+  for (const raw of [log.valorNovo, log.valorAnterior]) {
+    if (raw && typeof raw === "string" && raw.startsWith("{")) {
+      try {
+        const obj = JSON.parse(raw);
+        const nome = obj.nome || obj.substitutoNome || obj.profissionalNome || obj.titularNome;
+        const cod = obj.matricula || obj.chapa || obj.postoCodigo || obj.codigoPosto || obj.itemPpu;
+        if (nome && cod) return `${nome} · ${cod}`;
+        if (nome) return nome;
+        if (cod && obj.funcao) return `${cod} · ${obj.funcao}`;
+      } catch {}
+    }
+  }
+
+  // Entidade com código entre parênteses: Posição (POS-01) ou Posto (PST-01)
+  const mEnt = log.entidade?.match(/\(([^)]+)\)/);
+  if (mEnt && log.registroId && mEnt[1] !== log.registroId) {
+    return `${mEnt[1]} · ${log.registroId}`;
+  }
+  if (mEnt) {
+    return mEnt[1];
+  }
+
+  if (log.registroId && log.entidade) {
+    return `${log.entidade} · ${log.registroId}`;
+  }
+
+  return log.registroId || log.entidade || "—";
 }
 
-function formatarJson(str?: string | null): string {
-  if (!str) return "—";
-  try {
-    const obj = JSON.parse(str);
-    return JSON.stringify(obj, null, 2);
-  } catch {
-    return str;
+function resumirValor(val: unknown): string {
+  if (val === null || val === undefined || val === "") return "";
+  if (typeof val === "string") {
+    if (val.startsWith("{")) {
+      try {
+        const obj = JSON.parse(val);
+        if (obj.nome && obj.matricula) return `${obj.nome} (${obj.matricula})`;
+        if (obj.nome) return obj.nome;
+        if (obj.substitutoNome) return obj.substitutoNome;
+        if (obj.horario || obj.escala || obj.grupo) return obj.horario || obj.escala || obj.grupo;
+        if (obj.status) return obj.status;
+        const vals = Object.values(obj).filter((v) => typeof v === "string" || typeof v === "number");
+        if (vals.length > 0) return String(vals.slice(0, 2).join(" · "));
+      } catch {}
+    }
+    return val;
   }
+  return String(val);
+}
+
+function extrairAlteracao(log: LogAuditoriaOperacional): string {
+  const ant = log.valorAnterior ? resumirValor(log.valorAnterior) : "";
+  const nvo = log.valorNovo ? resumirValor(log.valorNovo) : "";
+
+  if (ant && nvo) {
+    return `${ant} → ${nvo}`;
+  }
+  if (ant && !nvo) {
+    return `${ant} → —`;
+  }
+  if (!ant && nvo) {
+    return `— → ${nvo}`;
+  }
+  return "";
+}
+
+function filtrarPorPeriodo(timestamp: string, periodo: string): boolean {
+  if (periodo === "TODOS" || !periodo) return true;
+  if (!timestamp) return false;
+
+  const dataLog = new Date(timestamp.replace(" ", "T"));
+  if (isNaN(dataLog.getTime())) return true;
+
+  const agora = new Date();
+  const hojeInicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+
+  if (periodo === "HOJE") {
+    return dataLog >= hojeInicio;
+  }
+  if (periodo === "7_DIAS") {
+    const seteDiasAtras = new Date(hojeInicio);
+    seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+    return dataLog >= seteDiasAtras;
+  }
+  if (periodo === "30_DIAS") {
+    const trintaDiasAtras = new Date(hojeInicio);
+    trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
+    return dataLog >= trintaDiasAtras;
+  }
+  if (periodo === "MES_ATUAL") {
+    return dataLog.getFullYear() === agora.getFullYear() && dataLog.getMonth() === agora.getMonth();
+  }
+  return true;
 }
 
 export default function AuditoriaPage() {
   const [logs, setLogs] = useState<LogAuditoriaOperacional[]>([]);
   const [busca, setBusca] = useState("");
+  const [filtroPeriodo, setFiltroPeriodo] = useState("TODOS");
+  const [filtroUsuario, setFiltroUsuario] = useState("TODOS");
   const [filtroAcao, setFiltroAcao] = useState("TODAS");
-  const [filtroPerfil, setFiltroPerfil] = useState("TODOS");
   const [acessoBloqueado, setAcessoBloqueado] = useState(false);
   const [carregandoAuth, setCarregandoAuth] = useState(true);
   const [logModal, setLogModal] = useState<LogAuditoriaOperacional | null>(null);
@@ -135,38 +242,56 @@ export default function AuditoriaPage() {
     return () => window.removeEventListener("sgp-dados-atualizados", handleAtualizacao);
   }, []);
 
-  const acoesDisponiveis = useMemo(() => {
-    const setAcoes = new Set<string>();
-    logs.forEach((l) => setAcoes.add(l.acao));
-    return Array.from(setAcoes).sort();
+  const usuariosDisponiveis = useMemo(() => {
+    const setU = new Set<string>();
+    logs.forEach((l) => {
+      if (l.usuario) setU.add(l.usuario);
+    });
+    return Array.from(setU).sort();
   }, [logs]);
 
-  const perfisDisponiveis = useMemo(() => {
-    const setP = new Set<string>();
-    logs.forEach((l) => setP.add(l.perfil));
-    return Array.from(setP).sort();
+  const acoesDisponiveis = useMemo(() => {
+    const setA = new Set<string>();
+    logs.forEach((l) => {
+      if (l.acao) setA.add(l.acao);
+    });
+    return Array.from(setA).sort();
   }, [logs]);
 
   const logsFiltrados = useMemo(() => {
     return logs.filter((log) => {
       const termo = busca.toLowerCase().trim();
+      const ref = extrairReferencia(log).toLowerCase();
+      const alt = extrairAlteracao(log).toLowerCase();
+      const acaoNome = rotuloAcao(log.acao).toLowerCase();
+
       const matchTexto =
         !termo ||
         log.usuario.toLowerCase().includes(termo) ||
         log.acao.toLowerCase().includes(termo) ||
-        rotuloAcao(log.acao).toLowerCase().includes(termo) ||
-        log.entidade.toLowerCase().includes(termo) ||
+        acaoNome.includes(termo) ||
+        ref.includes(termo) ||
+        alt.includes(termo) ||
         log.detalhes.toLowerCase().includes(termo) ||
         (log.registroId && log.registroId.toLowerCase().includes(termo));
 
+      const matchPeriodo = filtrarPorPeriodo(log.timestamp, filtroPeriodo);
+      const matchUsuario = filtroUsuario === "TODOS" || log.usuario === filtroUsuario;
       const matchAcao = filtroAcao === "TODAS" || log.acao === filtroAcao;
-      const matchPerfil = filtroPerfil === "TODOS" || log.perfil === filtroPerfil;
 
-      return matchTexto && matchAcao && matchPerfil;
+      return matchTexto && matchPeriodo && matchUsuario && matchAcao;
     });
-  }, [logs, busca, filtroAcao, filtroPerfil]);
+  }, [logs, busca, filtroPeriodo, filtroUsuario, filtroAcao]);
 
-  const temFiltroAtivo = busca !== "" || filtroAcao !== "TODAS" || filtroPerfil !== "TODOS";
+  const temFiltroAtivo =
+    busca !== "" || filtroPeriodo !== "TODOS" || filtroUsuario !== "TODOS" || filtroAcao !== "TODAS";
+
+  const limparFiltros = () => {
+    setBusca("");
+    setFiltroPeriodo("TODOS");
+    setFiltroUsuario("TODOS");
+    setFiltroAcao("TODAS");
+  };
 
   if (!carregandoAuth && acessoBloqueado) {
     return (
@@ -196,163 +321,133 @@ export default function AuditoriaPage() {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* Cabeçalho Limpo */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2">
-            <History className="w-5 h-5 text-slate-700" />
-            <h1 className="text-lg font-bold text-slate-800">Trilha de Auditoria</h1>
-            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md font-medium">
-              {logsFiltrados.length} {logsFiltrados.length === 1 ? "registro" : "registros"}
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Histórico cronológico de ações, alterações de escala e registros realizados no sistema.
-          </p>
-        </div>
+      {/* 1. Cabeçalho: apenas o título "Auditoria", sem ícone, sem subtítulo e sem linha divisória */}
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">Auditoria</h1>
       </div>
 
-      {/* Barra de Filtros Sóbria */}
-      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
-        {/* Campo de Busca */}
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+      {/* 2. Filtros em uma linha, sem caixa em volta: Período, Usuário, Ação e busca */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Período */}
+        <select
+          value={filtroPeriodo}
+          onChange={(e) => setFiltroPeriodo(e.target.value)}
+          className="h-8 px-2.5 text-xs rounded-md border border-slate-300 bg-white text-slate-700 font-normal cursor-pointer focus:outline-none focus:border-slate-400"
+        >
+          <option value="TODOS">Todo o período</option>
+          <option value="HOJE">Hoje</option>
+          <option value="7_DIAS">Últimos 7 dias</option>
+          <option value="30_DIAS">Últimos 30 dias</option>
+          <option value="MES_ATUAL">Mês atual</option>
+        </select>
+
+        {/* Usuário */}
+        <select
+          value={filtroUsuario}
+          onChange={(e) => setFiltroUsuario(e.target.value)}
+          className="h-8 px-2.5 text-xs rounded-md border border-slate-300 bg-white text-slate-700 font-normal cursor-pointer focus:outline-none focus:border-slate-400 max-w-[200px]"
+        >
+          <option value="TODOS">Todos os usuários</option>
+          {usuariosDisponiveis.map((u) => (
+            <option key={u} value={u}>
+              {u}
+            </option>
+          ))}
+        </select>
+
+        {/* Ação */}
+        <select
+          value={filtroAcao}
+          onChange={(e) => setFiltroAcao(e.target.value)}
+          className="h-8 px-2.5 text-xs rounded-md border border-slate-300 bg-white text-slate-700 font-normal cursor-pointer focus:outline-none focus:border-slate-400 max-w-[220px]"
+        >
+          <option value="TODAS">Todas as ações</option>
+          {acoesDisponiveis.map((a) => (
+            <option key={a} value={a}>
+              {rotuloAcao(a)}
+            </option>
+          ))}
+        </select>
+
+        {/* Busca */}
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
           <input
             type="text"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por usuário, ação, detalhe ou código..."
-            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-400"
+            placeholder="Buscar..."
+            className="w-full h-8 pl-8 pr-3 text-xs rounded-md border border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
           />
-          {busca && (
-            <button
-              onClick={() => setBusca("")}
-              className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
-              title="Limpar busca"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
 
-        {/* Filtros em linha */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Filtro por Ação */}
-          <select
-            value={filtroAcao}
-            onChange={(e) => setFiltroAcao(e.target.value)}
-            className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-slate-400"
+        {temFiltroAtivo && (
+          <button
+            onClick={limparFiltros}
+            className="h-8 px-2 text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
           >
-            <option value="TODAS">Todas as Ações</option>
-            {acoesDisponiveis.map((a) => (
-              <option key={a} value={a}>
-                {rotuloAcao(a)}
-              </option>
-            ))}
-          </select>
-
-          {/* Filtro por Perfil */}
-          <select
-            value={filtroPerfil}
-            onChange={(e) => setFiltroPerfil(e.target.value)}
-            className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-slate-400"
-          >
-            <option value="TODOS">Todos os Perfis</option>
-            {perfisDisponiveis.map((p) => (
-              <option key={p} value={p}>
-                {rotuloPerfil(p)}
-              </option>
-            ))}
-          </select>
-
-          {/* Limpar filtros */}
-          {temFiltroAtivo && (
-            <button
-              onClick={() => {
-                setBusca("");
-                setFiltroAcao("TODAS");
-                setFiltroPerfil("TODOS");
-              }}
-              className="h-8 px-2.5 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
-              title="Limpar todos os filtros"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Limpar</span>
-            </button>
-          )}
-        </div>
+            Limpar
+          </button>
+        )}
       </div>
 
-      {/* Tabela de Logs Simples e Direta (sem destaques de cor nos textos) */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+      {/* 3 e 4. Tabela: Data/Hora | Usuário | Ação | Referência | Alteração (uma linha por registro, fundo branco, bordas finas, sem cores) */}
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Data / Hora</th>
+                <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Data/Hora</th>
                 <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Usuário</th>
                 <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Ação</th>
-                <th className="py-2.5 px-4 font-semibold">Detalhes</th>
-                <th className="py-2.5 px-4 font-semibold text-center whitespace-nowrap">Alterações</th>
+                <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Referência</th>
+                <th className="py-2.5 px-4 font-semibold">Alteração</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {logsFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400 text-xs">
-                    Nenhum registro encontrado para os filtros informados.
+                  <td colSpan={5} className="py-10 text-center text-slate-400 text-xs">
+                    Nenhum registro encontrado.
                   </td>
                 </tr>
               ) : (
                 logsFiltrados.map((log) => {
+                  const ref = extrairReferencia(log);
+                  const alt = extrairAlteracao(log);
                   const temDiff = Boolean(log.valorAnterior || log.valorNovo);
 
                   return (
-                    <tr key={log.id} className="hover:bg-slate-50/60 transition-colors">
-                      {/* Data / Hora */}
-                      <td className="py-3 px-4 text-slate-500 whitespace-nowrap font-mono text-[11px]">
+                    <tr
+                      key={log.id}
+                      onClick={() => temDiff && setLogModal(log)}
+                      className={`border-b border-slate-100 hover:bg-slate-50/60 transition-colors ${
+                        temDiff ? "cursor-pointer" : ""
+                      }`}
+                    >
+                      {/* Data/Hora: "14/10/2026 15:06", fonte normal */}
+                      <td className="py-2.5 px-4 text-slate-600 whitespace-nowrap font-normal">
                         {formatarDataHora(log.timestamp)}
                       </td>
 
-                      {/* Usuário e Perfil */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="font-medium text-slate-800">{log.usuario}</div>
-                        <div className="text-[11px] text-slate-400 font-normal">
-                          {rotuloPerfil(log.perfil)}
-                        </div>
+                      {/* Usuário: só o nome, sem o perfil abaixo */}
+                      <td className="py-2.5 px-4 text-slate-900 whitespace-nowrap font-normal">
+                        {log.usuario}
                       </td>
 
-                      {/* Ação (texto limpo, sem caixas coloridas) */}
-                      <td className="py-3 px-4 whitespace-nowrap font-medium text-slate-700">
+                      {/* Ação: texto normal, sem caixa alta */}
+                      <td className="py-2.5 px-4 text-slate-800 whitespace-nowrap font-normal">
                         {rotuloAcao(log.acao)}
                       </td>
 
-                      {/* Detalhes */}
-                      <td className="py-3 px-4 text-slate-600 max-w-md">
-                        <div className="line-clamp-2 leading-relaxed" title={log.detalhes}>
-                          {log.detalhes}
-                        </div>
-                        {log.entidade && (
-                          <div className="text-[10px] text-slate-400 mt-0.5">
-                            {log.entidade} {log.registroId ? `• ${log.registroId}` : ""}
-                          </div>
-                        )}
+                      {/* Referência: colaborador ou posto em uma linha (ex.: "Mayara Fiuza Louzada · 035928") */}
+                      <td className="py-2.5 px-4 text-slate-700 whitespace-nowrap font-normal">
+                        {ref}
                       </td>
 
-                      {/* Botão de Ver Alterações */}
-                      <td className="py-3 px-4 text-center whitespace-nowrap">
-                        {temDiff ? (
-                          <button
-                            onClick={() => setLogModal(log)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 rounded-lg border border-slate-300 transition-colors cursor-pointer"
-                            title="Visualizar valores anteriores e novos"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Ver detalhes</span>
-                          </button>
-                        ) : (
-                          <span className="text-slate-300 text-xs font-mono">—</span>
-                        )}
+                      {/* Alteração: "antes → depois" quando houver; vazio quando não houver */}
+                      <td className="py-2.5 px-4 text-slate-600 font-normal">
+                        {alt || ""}
                       </td>
                     </tr>
                   );
@@ -363,92 +458,74 @@ export default function AuditoriaPage() {
         </div>
       </div>
 
-      {/* Modal de Detalhes Neutro */}
+      {/* Contagem de registros no rodapé */}
+      <div className="text-xs text-slate-500 px-1 pt-1">
+        {logsFiltrados.length} {logsFiltrados.length === 1 ? "registro" : "registros"}
+      </div>
+
+      {/* Modal sóbrio de inspeção detalhada caso o usuário clique em um registro com alterações */}
       {logModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full border border-slate-200 overflow-hidden space-y-0">
-            {/* Cabeçalho do Modal */}
-            <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileDiff className="w-4 h-4 text-slate-600" />
-                <h3 className="text-sm font-semibold text-slate-800">
-                  {rotuloAcao(logModal.acao)}
-                </h3>
-              </div>
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-lg max-w-xl w-full border border-slate-200 overflow-hidden">
+            <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-800">
+                {rotuloAcao(logModal.acao)}
+              </h3>
               <button
                 onClick={() => setLogModal(null)}
-                className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer transition-colors"
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Conteúdo do Modal */}
-            <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
-              {/* Metadados rápidos */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-600">
+            <div className="p-5 space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-2 text-slate-600 pb-2 border-b border-slate-100">
                 <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Usuário</span>
-                  <span className="font-semibold text-slate-800">{logModal.usuario}</span>
+                  <span className="text-slate-400 block text-[11px]">Usuário:</span>
+                  <span className="text-slate-800 font-medium">{logModal.usuario}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Perfil</span>
-                  <span className="font-medium text-slate-700">{rotuloPerfil(logModal.perfil)}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Data / Hora</span>
-                  <span className="font-mono text-slate-700">{formatarDataHora(logModal.timestamp)}</span>
+                  <span className="text-slate-400 block text-[11px]">Data/Hora:</span>
+                  <span className="text-slate-800">{formatarDataHora(logModal.timestamp)}</span>
                 </div>
               </div>
 
-              {/* Descrição */}
               <div>
-                <span className="text-[11px] font-semibold text-slate-700 block mb-1">
-                  Descrição da Ação:
-                </span>
-                <p className="text-slate-700 bg-white p-3 rounded-xl border border-slate-200 leading-relaxed">
-                  {logModal.detalhes}
-                </p>
+                <span className="text-slate-400 block text-[11px] mb-0.5">Referência:</span>
+                <span className="text-slate-800 font-medium">{extrairReferencia(logModal)}</span>
               </div>
 
-              {/* Comparativo de Valores Anterior e Novo em tons neutros */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              {logModal.detalhes && (
                 <div>
-                  <div className="font-semibold text-slate-700 mb-1 flex items-center gap-1.5 text-xs">
-                    <span className="w-2 h-2 rounded-full bg-slate-400" />
-                    Valor Anterior:
-                  </div>
-                  <pre className="bg-slate-50 text-slate-800 p-3 rounded-xl border border-slate-200 font-mono text-[11px] overflow-x-auto whitespace-pre-wrap max-h-56 leading-relaxed">
-                    {formatarJson(logModal.valorAnterior)}
-                  </pre>
-                </div>
-
-                <div>
-                  <div className="font-semibold text-slate-700 mb-1 flex items-center gap-1.5 text-xs">
-                    <span className="w-2 h-2 rounded-full bg-slate-600" />
-                    Valor Novo / Atual:
-                  </div>
-                  <pre className="bg-slate-50 text-slate-800 p-3 rounded-xl border border-slate-200 font-mono text-[11px] overflow-x-auto whitespace-pre-wrap max-h-56 leading-relaxed">
-                    {formatarJson(logModal.valorNovo)}
-                  </pre>
-                </div>
-              </div>
-
-              {/* Informações técnicas discretas de rodapé */}
-              {(logModal.ip || logModal.registroId) && (
-                <div className="pt-2 text-[11px] text-slate-400 font-mono flex items-center justify-between border-t border-slate-100">
-                  {logModal.registroId && <span>Registro ID: {logModal.registroId}</span>}
-                  {logModal.ip && <span>IP: {logModal.ip}</span>}
+                  <span className="text-slate-400 block text-[11px] mb-0.5">Detalhes:</span>
+                  <p className="text-slate-700 bg-slate-50 p-2.5 rounded border border-slate-200 leading-relaxed">
+                    {logModal.detalhes}
+                  </p>
                 </div>
               )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <span className="text-slate-500 font-medium block mb-1">Antes:</span>
+                  <pre className="bg-slate-50 text-slate-700 p-2.5 rounded border border-slate-200 text-[11px] overflow-x-auto whitespace-pre-wrap max-h-48">
+                    {logModal.valorAnterior || "—"}
+                  </pre>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-medium block mb-1">Depois:</span>
+                  <pre className="bg-slate-50 text-slate-700 p-2.5 rounded border border-slate-200 text-[11px] overflow-x-auto whitespace-pre-wrap max-h-48">
+                    {logModal.valorNovo || "—"}
+                  </pre>
+                </div>
+              </div>
             </div>
 
-            {/* Rodapé do Modal */}
             <div className="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end">
               <button
                 type="button"
                 onClick={() => setLogModal(null)}
-                className="h-8 px-4 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                className="h-7 px-3 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs cursor-pointer"
               >
                 Fechar
               </button>
