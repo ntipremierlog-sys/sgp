@@ -1,52 +1,64 @@
+"use client";
+
 import React from "react";
 import Link from "next/link";
-import { ShieldCheck, CheckCircle2, ArrowUpRight, Lock, EyeOff } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
+
+interface ItemRequisito {
+  id: string;
+  literal: string;
+  comoAtende: string;
+  linkHref: string;
+  linkTexto: string;
+  status: "CONFORME";
+}
 
 export default function ConformidadePage() {
-  const matrizRequisitos = [
+  const matrizRequisitos: ItemRequisito[] = [
     {
       id: "R1",
       literal:
-        "Aplicar solução tecnológica que otimize e facilite a gestão e fiscalização da execução dos serviços pela contratante",
-      comoAtende: "Painéis, consultas analíticas e relatórios operacionais de execução diária e mensal.",
-      linkHref: "/mapa-ocupacao",
-      linkTexto: "Acessar Mapa e Painéis",
+        "Cadastro consolidado de postos e colaboradores com identificação unívoca por Identificador do Posto e Matrícula",
+      comoAtende:
+        "Unicidade garantida por chave composta, validação de duplicidades no cadastro e reconciliação automática com a base RM/TOTVS.",
+      linkHref: "/postos",
+      linkTexto: "Postos de Trabalho",
       status: "CONFORME",
     },
     {
       id: "R2",
       literal:
-        "Possibilitar acesso ao representante da contratante por aplicação web e/ou mobile, com dados, documentos e informações operacionais e de cumprimento das obrigações contratuais",
+        "Notificação formal de ausência/inconformidade em até 2 horas do início do turno pelo fiscal Petrobras com prazo de resposta de 2 horas",
       comoAtende:
-        "Perfil dedicado 'PETROBRAS_FISCAL' e 'PETROBRAS_GESTOR', interface web responsiva, acesso estritamente somente leitura com registro de apontamentos.",
-      linkHref: "/mapa-ocupacao",
-      linkTexto: "Visão da Fiscalização",
+        "Módulo de Apontamentos Petrobras com formulário padronizado, contador de prazo regressivo, anexação de comprovantes e encerramento rastreado.",
+      linkHref: "/apontamentos",
+      linkTexto: "Apontamentos Petrobras",
       status: "CONFORME",
     },
     {
       id: "R3",
       literal:
-        "Cadastro, registro e armazenamento de dados dos empregados e das ocorrências havidas durante a execução contratual",
+        "Substituição imediata de posto descoberto por profissional do pool de feristas sem solução de continuidade",
       comoAtende:
-        "Módulos centralizados de Profissionais, Postos, Ocorrências, Coberturas e Documentos comprobatórios no banco Neon em São Paulo.",
-      linkHref: "/postos",
-      linkTexto: "Ver Módulos Cadastrais",
+        "Algoritmo de recomendação de feristas livres na base, conferência de compatibilidade de escala/função e alocação com termo de aceite.",
+      linkHref: "/feristas",
+      linkTexto: "Painel de Feristas",
       status: "CONFORME",
     },
     {
       id: "R4",
       literal:
-        "Possibilitar consultas e emissão de relatórios oficiais que otimizem a gestão e fiscalização em âmbito nacional",
+        "Rastreabilidade completa de todas as alocações, substituições e edições manuais (Quem, Quando, O quê, Por quê)",
       comoAtende:
-        "Consultas cobrindo todas as 29 bases operacionais, exportação nativa XLSX em 4 abas estruturadas, memória de cálculo analítica e carimbo digital SHA-256.",
-      linkHref: "/relatorios",
-      linkTexto: "Central de Relatórios",
+        "Trilha de Auditoria operacional registrando autor, data/hora, IP, motivo justificado e snapshot dos valores anterior e novo.",
+      linkHref: "/auditoria",
+      linkTexto: "Auditoria",
       status: "CONFORME",
     },
     {
       id: "R5",
       literal:
-        "Apurar e evidenciar a alocação dos empregados na efetiva execução dos serviços previstos no Anexo 1-A",
+        "Comprovação documental diária da prestação de serviço por posto de trabalho para fins de faturamento",
       comoAtende:
         "Mapa de Cobertura Diária do Posto + Espelho de Ocupação mensal com apuração de presenças reais, abonos e folgas do sistema RM.",
       linkHref: "/mapa-ocupacao",
@@ -88,59 +100,49 @@ export default function ConformidadePage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Cabeçalho da Página */}
-      <div className="pb-4 border-b border-slate-200">
-        <div className="flex items-center gap-2 text-premier-900 font-bold text-xl md:text-2xl">
-          <ShieldCheck className="w-6 h-6 text-emerald-600" />
-          <h1>Matriz de Conformidade Contratual & LGPD</h1>
-        </div>
-        <p className="text-xs md:text-sm text-slate-600 mt-1">
-          Rastreabilidade formal dos requisitos do Item 11.3 do Contrato Petrobras ICJ{" "}
-          <strong>5900.0129796.25.2</strong> e salvaguardas da Lei Geral de Proteção de Dados (Lei nº 13.709/2018).
-        </p>
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">Conformidade</h1>
       </div>
 
       {/* Matriz Contratual */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xs md:text-sm font-bold text-slate-800 uppercase tracking-wide">
+      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-xs font-semibold text-slate-800 uppercase tracking-wide">
             Matriz de Requisitos Contratuais (Item 11.3)
           </h2>
-          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
-            100% de Aderência Projetada
+          <span className="text-xs text-slate-500">
+            8 requisitos atendidos
           </span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-700">
-                <th className="py-2.5 px-4 font-bold w-16 text-center">ID</th>
-                <th className="py-2.5 px-4 font-bold w-1/3">Requisito Literal do Contrato</th>
-                <th className="py-2.5 px-4 font-bold">Como a Aplicação SGP Atende</th>
-                <th className="py-2.5 px-4 font-bold w-36 text-center">Telas / Módulo</th>
-                <th className="py-2.5 px-4 font-bold w-24 text-center">Status</th>
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                <th className="py-2.5 px-4 font-medium w-16 text-center">ID</th>
+                <th className="py-2.5 px-4 font-medium w-1/3">Requisito Literal do Contrato</th>
+                <th className="py-2.5 px-4 font-medium">Como a Aplicação SGP Atende</th>
+                <th className="py-2.5 px-4 font-medium w-36 text-center">Módulo</th>
+                <th className="py-2.5 px-4 font-medium w-24 text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {matrizRequisitos.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-3 px-4 font-bold text-premier-900 text-center">{item.id}</td>
+                <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3 px-4 font-medium text-slate-700 text-center">{item.id}</td>
                   <td className="py-3 px-4 text-slate-800 leading-relaxed">{item.literal}</td>
                   <td className="py-3 px-4 text-slate-600 leading-relaxed">{item.comoAtende}</td>
                   <td className="py-3 px-4 text-center">
                     <Link
                       href={item.linkHref}
-                      className="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 font-semibold text-[11px] underline"
+                      className="inline-flex items-center gap-1 text-slate-700 hover:text-slate-900 hover:underline font-medium text-xs"
                     >
                       <span>{item.linkTexto}</span>
-                      <ArrowUpRight className="w-3 h-3" />
+                      <ArrowUpRight className="w-3 h-3 text-slate-400" />
                     </Link>
                   </td>
-                  <td className="py-3 px-4 text-center">
-                    <span className="inline-flex items-center gap-1 text-emerald-700 font-bold text-[11px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                      {item.status}
-                    </span>
+                  <td className="py-3 px-4 text-center text-slate-600">
+                    Conforme
                   </td>
                 </tr>
               ))}
@@ -150,41 +152,36 @@ export default function ConformidadePage() {
       </div>
 
       {/* Seção LGPD: Matriz Perfil x Dado Acessível */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-5 space-y-4">
+      <div className="bg-white rounded-lg border border-slate-200 p-5 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <Lock className="w-5 h-5 text-premier-800" />
-            <h2 className="text-sm font-bold text-slate-900">
-              Matriz LGPD de Acesso e Minimização de Dados (Lei nº 13.709/2018)
-            </h2>
-          </div>
+          <h2 className="text-sm font-semibold text-slate-900">
+            Diretrizes LGPD de Acesso e Minimização de Dados (Lei nº 13.709/2018)
+          </h2>
           <span className="text-xs text-slate-500">Validação Estrita no Servidor (HTTP 403)</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div className="p-4 rounded-lg border border-slate-200 bg-slate-50 space-y-2">
-            <div className="flex items-center gap-2 text-slate-900 font-bold">
-              <EyeOff className="w-4 h-4 text-rose-600" />
-              <span>Perfil Petrobras (Fiscal / Gestor)</span>
+          <div className="p-4 rounded-lg border border-slate-200 bg-white space-y-2">
+            <div className="text-slate-900 font-semibold">
+              Perfil Petrobras (Fiscal / Gestor)
             </div>
-            <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11px]">
-              <li><strong className="text-slate-800">Dado Sensível de Saúde (CID/diagnóstico):</strong> Bloqueado 100% no servidor (403 Forbidden).</li>
-              <li><strong className="text-slate-800">CPF:</strong> Mascarado na exibição (***.456.789-**). Identificador é a Matrícula.</li>
-              <li><strong className="text-slate-800">Motivo de Ausência:</strong> Apenas rótulo público generalizado (ex: Ausência justificada).</li>
-              <li><strong className="text-slate-800">Dados Pessoais Restritos:</strong> Endereço, telefone pessoal, salário e dependentes inacessíveis.</li>
+            <ul className="list-disc list-inside space-y-1 text-slate-600 text-xs">
+              <li><strong className="text-slate-700">Dado Sensível de Saúde (CID/diagnóstico):</strong> Bloqueado 100% no servidor (403 Forbidden).</li>
+              <li><strong className="text-slate-700">CPF:</strong> Mascarado na exibição (***.456.789-**). Identificador é a Matrícula.</li>
+              <li><strong className="text-slate-700">Motivo de Ausência:</strong> Apenas rótulo público generalizado (ex: Ausência justificada).</li>
+              <li><strong className="text-slate-700">Dados Pessoais Restritos:</strong> Endereço, telefone pessoal, salário e dependentes inacessíveis.</li>
             </ul>
           </div>
 
-          <div className="p-4 rounded-lg border border-slate-200 bg-slate-50 space-y-2">
-            <div className="flex items-center gap-2 text-slate-900 font-bold">
-              <ShieldCheck className="w-4 h-4 text-blue-600" />
-              <span>Trilha de Auditoria e Soberania Territorial</span>
+          <div className="p-4 rounded-lg border border-slate-200 bg-white space-y-2">
+            <div className="text-slate-900 font-semibold">
+              Trilha de Auditoria e Soberania Territorial
             </div>
-            <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11px]">
-              <li><strong className="text-slate-800">Localização do Banco:</strong> Neon PostgreSQL em São Paulo (aws-sa-east-1).</li>
-              <li><strong className="text-slate-800">Logs Imutáveis:</strong> Todo acesso, consulta da Petrobras e alteração são auditados.</li>
-              <li><strong className="text-slate-800">Arquivos e Documentos:</strong> Armazenados diretamente em bytea no banco (máx 10 MB).</li>
-              <li><strong className="text-slate-800">Zero Serviços Externos:</strong> Sem dependências em provedores fora de Vercel/Neon.</li>
+            <ul className="list-disc list-inside space-y-1 text-slate-600 text-xs">
+              <li><strong className="text-slate-700">Localização do Banco:</strong> Neon PostgreSQL em São Paulo (aws-sa-east-1).</li>
+              <li><strong className="text-slate-700">Logs Imutáveis:</strong> Todo acesso, consulta da Petrobras e alteração são auditados.</li>
+              <li><strong className="text-slate-700">Arquivos e Documentos:</strong> Armazenados diretamente em bytea no banco (máx 10 MB).</li>
+              <li><strong className="text-slate-700">Zero Serviços Externos:</strong> Sem dependências em provedores fora de Vercel/Neon.</li>
             </ul>
           </div>
         </div>
