@@ -70,7 +70,7 @@ const gruposMenuConfig: GrupoMenu[] = [
           { rotulo: "Coberturas (PPU)", href: "/relatorios/coberturas" },
         ],
       },
-      { rotulo: "Apontamentos Petrobras", href: "/apontamentos", icone: MessageSquare, temBadge: true, recurso: "APONTAMENTOS" },
+      { rotulo: "Apontamentos", href: "/apontamentos", icone: MessageSquare, temBadge: true, recurso: "APONTAMENTOS" },
       { rotulo: "Conformidade", href: "/conformidade", icone: ShieldCheck, recurso: "CONFORMIDADE" },
     ],
   },

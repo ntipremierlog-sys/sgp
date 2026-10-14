@@ -17,6 +17,9 @@ import {
   LayoutGrid,
   List,
   Building2,
+  Briefcase,
+  ShieldCheck,
+  UserCheck,
 } from "lucide-react";
 import {
   carregarEstado,
@@ -59,6 +62,7 @@ export default function ApontamentosPage() {
   const [postos, setPostos] = useState<PostoOperacional[]>([]);
   const [perfilAtivo, setPerfilAtivo] = useState("PREMIER_ADMIN");
   const [busca, setBusca] = useState("");
+  const [filtroOrigem, setFiltroOrigem] = useState<"TODAS" | "PETROBRAS" | "PREMIER">("TODAS");
   const [filtroStatus, setFiltroStatus] = useState<"TODOS" | "PENDENTES" | "RESPONDIDOS">("TODOS");
   const [modoVisualizacao, setModoVisualizacao] = useState<"CARDS" | "TABELA">("CARDS");
 
@@ -67,20 +71,21 @@ export default function ApontamentosPage() {
   const [modalRespostaAberto, setModalRespostaAberto] = useState(false);
   const [apontamentoSelecionado, setApontamentoSelecionado] = useState<ApontamentoOperacional | null>(null);
 
-  // Formulário novo apontamento
+  // Formulário novo apontamento / observação
+  const [formOrigem, setFormOrigem] = useState<"PETROBRAS" | "PREMIER">("PETROBRAS");
   const [formPostoCodigo, setFormPostoCodigo] = useState("");
   const [formDataReferencia, setFormDataReferencia] = useState("2026-09-08");
   const [formTexto, setFormTexto] = useState("");
 
-  // Formulário de resposta Premier
+  // Formulário de resposta / manifestação
   const [formResposta, setFormResposta] = useState("");
   const [mensagemSucesso, setMensagemSucesso] = useState("");
 
   const carregarDados = () => {
     const estado = carregarEstado();
-    setApontamentos(estado.apontamentos);
-    setPostos(estado.postos);
-    setPerfilAtivo(estado.perfilAtivo);
+    setApontamentos(estado.apontamentos || []);
+    setPostos(estado.postos || []);
+    setPerfilAtivo(estado.perfilAtivo || "PREMIER_ADMIN");
   };
 
   useEffect(() => {
@@ -91,6 +96,16 @@ export default function ApontamentosPage() {
   }, []);
 
   const ehPerfilPetrobras = perfilAtivo.startsWith("PETROBRAS");
+
+  // Ao abrir o modal, pré-configura a origem recomendada para o perfil
+  const handleAbrirNovoModal = (origemInicial?: "PETROBRAS" | "PREMIER") => {
+    if (origemInicial) {
+      setFormOrigem(origemInicial);
+    } else {
+      setFormOrigem(ehPerfilPetrobras ? "PETROBRAS" : "PREMIER");
+    }
+    setModalNovoAberto(true);
+  };
 
   // Filtragem dinâmica
   const apontamentosFiltrados = useMemo(() => {
@@ -104,50 +119,64 @@ export default function ApontamentosPage() {
         (apt.respostaPremier && apt.respostaPremier.toLowerCase().includes(termo)) ||
         apt.criadoPor.toLowerCase().includes(termo);
 
+      const origemItem = apt.origem || "PETROBRAS";
+      const matchOrigem =
+        filtroOrigem === "TODAS" ||
+        (filtroOrigem === "PETROBRAS" && origemItem === "PETROBRAS") ||
+        (filtroOrigem === "PREMIER" && origemItem === "PREMIER");
+
       const matchStatus =
         filtroStatus === "TODOS" ||
         (filtroStatus === "PENDENTES" && (apt.status === "ABERTO" || apt.status === "EM_TRATAMENTO")) ||
         (filtroStatus === "RESPONDIDOS" && (apt.status === "RESPONDIDO" || apt.status === "ENCERRADO"));
 
-      return matchBusca && matchStatus;
+      return matchBusca && matchOrigem && matchStatus;
     });
-  }, [apontamentos, busca, filtroStatus]);
+  }, [apontamentos, busca, filtroOrigem, filtroStatus]);
 
   // Indicadores
   const totalApontamentos = apontamentos.length;
+  const totalPetrobras = apontamentos.filter((a) => (a.origem || "PETROBRAS") === "PETROBRAS").length;
+  const totalPremier = apontamentos.filter((a) => a.origem === "PREMIER").length;
   const pendentes = apontamentos.filter((a) => a.status === "ABERTO" || a.status === "EM_TRATAMENTO").length;
   const respondidos = apontamentos.filter((a) => a.status === "RESPONDIDO" || a.status === "ENCERRADO").length;
-  const taxaResolucao = totalApontamentos > 0 ? Math.round((respondidos / totalApontamentos) * 100) : 100;
 
   const handleCopiarTexto = (texto: string) => {
     navigator.clipboard.writeText(texto);
-    setMensagemSucesso("Texto do apontamento copiado para a área de transferência!");
+    setMensagemSucesso("Texto copiado para a área de transferência!");
     setTimeout(() => setMensagemSucesso(""), 3000);
   };
 
   const handleSubmitNovoApontamento = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formPostoCodigo || !formTexto.trim()) {
-      alert("Selecione o posto e informe o texto do apontamento.");
+      alert("Selecione o posto e informe o texto do apontamento/observação.");
       return;
     }
 
     const postoObj = postos.find((p) => p.codigoPosto === formPostoCodigo);
     if (!postoObj) return;
 
+    const autor =
+      formOrigem === "PETROBRAS"
+        ? ehPerfilPetrobras
+          ? "Fiscal Técnico Petrobras (Carlos Eduardo Mendes)"
+          : "Fiscalização Petrobras"
+        : "Marcos Valério (Preposto / Gestor Premier)";
+
     adicionarApontamento({
       postoCodigo: postoObj.codigoPosto,
       funcaoPosto: postoObj.funcao,
       dataReferencia: formDataReferencia,
       competencia: "Setembro / 2026",
+      origem: formOrigem,
       texto: formTexto.trim(),
-      criadoPor: ehPerfilPetrobras
-        ? "Fiscal Petrobras (Carlos Eduardo Mendes)"
-        : "Auditoria Contratual Petrobras",
+      criadoPor: autor,
       status: "ABERTO",
     });
 
-    setMensagemSucesso(`Apontamento formal registrado para o posto ${postoObj.codigoPosto}!`);
+    const rotuloTipo = formOrigem === "PETROBRAS" ? "Apontamento Petrobras" : "Observação Premier";
+    setMensagemSucesso(`${rotuloTipo} registrado com sucesso para o posto ${postoObj.codigoPosto}!`);
     setModalNovoAberto(false);
     setFormPostoCodigo("");
     setFormTexto("");
@@ -157,17 +186,21 @@ export default function ApontamentosPage() {
   const handleSubmitResposta = (e: React.FormEvent) => {
     e.preventDefault();
     if (!apontamentoSelecionado || !formResposta.trim()) {
-      alert("Informe a resposta ou contra-evidência da Premier.");
+      alert("Informe a resposta ou manifestação.");
       return;
     }
+
+    const autorResposta = ehPerfilPetrobras
+      ? "Fiscal Técnico Petrobras"
+      : "Gestor Premier (Marcos Valério)";
 
     responderApontamento(
       apontamentoSelecionado.id,
       formResposta.trim(),
-      "Gestor Premier (Marcos Valério)"
+      autorResposta
     );
 
-    setMensagemSucesso(`Manifestação gravada para o apontamento do posto ${apontamentoSelecionado.postoCodigo}!`);
+    setMensagemSucesso(`Manifestação gravada para o posto ${apontamentoSelecionado.postoCodigo}!`);
     setModalRespostaAberto(false);
     setApontamentoSelecionado(null);
     setFormResposta("");
@@ -180,43 +213,43 @@ export default function ApontamentosPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center shadow-sm">
+            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center shadow-xs">
               <MessageSquare className="w-4 h-4" />
             </div>
-            Apontamentos da Fiscalização Petrobras
+            Apontamentos
           </h1>
           <p className="text-xs md:text-sm text-slate-500 mt-1">
-            Análise aprofundada de inconformidades, notificações de postos e contra-evidências operacionais.
+            Registro e acompanhamento de apontamentos da fiscalização Petrobras e observações operacionais da Premier.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
           <Link
             href="/mapa-ocupacao"
-            className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-200 shadow-sm transition-all"
+            className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-200 shadow-xs transition-all"
           >
             <span>Mapa de Cobertura</span>
             <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
           </Link>
 
           <button
-            onClick={() => setModalNovoAberto(true)}
-            className="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm hover:shadow transition-all"
+            onClick={() => handleAbrirNovoModal()}
+            className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-xs hover:shadow transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Novo Apontamento</span>
+            <span>Novo Registro</span>
           </button>
         </div>
       </div>
 
       {/* Alerta de Feedback */}
       {mensagemSucesso && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg text-xs flex items-center justify-between shadow-sm animate-fadeIn">
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg text-xs flex items-center justify-between shadow-xs">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span className="font-medium">{mensagemSucesso}</span>
           </div>
-          <button onClick={() => setMensagemSucesso("")} className="text-emerald-700 hover:text-emerald-900">
+          <button onClick={() => setMensagemSucesso("")} className="text-emerald-700 hover:text-emerald-900 cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -224,14 +257,14 @@ export default function ApontamentosPage() {
 
       {/* Cards de Métricas Executivas */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-              Total de Notificações
+              Total de Registros
             </span>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-slate-900">{totalApontamentos}</span>
-              <span className="text-xs text-slate-500">Setembro/2026</span>
+              <span className="text-xs text-slate-500">Geral</span>
             </div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
@@ -239,93 +272,127 @@ export default function ApontamentosPage() {
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+              Petrobras (Fiscalização)
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-900">{totalPetrobras}</span>
+              <span className="text-xs text-slate-500">Notificações</span>
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
+            <Building2 className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+              Premier (Operacional)
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-900">{totalPremier}</span>
+              <span className="text-xs text-slate-500">Observações</span>
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
+            <Briefcase className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
               Pendentes de Resposta
             </span>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold text-amber-700">{pendentes}</span>
-              <span className="text-xs text-amber-600 font-medium">Exigem ação</span>
+              <span className="text-xs text-amber-600 font-medium">{pendentes > 0 ? "Requer ação" : "Em dia"}</span>
             </div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
             <AlertCircle className="w-5 h-5" />
           </div>
         </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-              Respondidos / Concluídos
-            </span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-emerald-700">{respondidos}</span>
-              <span className="text-xs text-emerald-600 font-medium">Com contraprova</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-              Taxa de Resolução
-            </span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-slate-900">{taxaResolucao}%</span>
-              <span className="text-xs text-slate-500">Conformidade R2</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
-            <FileCheck className="w-5 h-5" />
-          </div>
-        </div>
       </div>
 
       {/* Barra de Filtros, Busca e Alternador de Visão */}
-      <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-        {/* Campo de Busca de Análise */}
-        <div className="relative w-full sm:w-96">
+      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col lg:flex-row items-center justify-between gap-3">
+        {/* Campo de Busca */}
+        <div className="relative w-full lg:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Pesquisar em textos de apontamento, postos ou respostas..."
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-emerald-700 transition-all"
+            placeholder="Pesquisar em textos, postos ou manifestações..."
+            className="w-full pl-9 pr-3 py-1.5 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-slate-400 transition-all"
           />
           {busca && (
             <button
               onClick={() => setBusca("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
 
-        {/* Abas Rápidas e Alternador de Visualização */}
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+        {/* Filtros em Abas e Alternador de Modo */}
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-between lg:justify-end">
+          {/* Filtro de Origem: Todas | Petrobras | Premier */}
+          <div className="inline-flex bg-slate-100 p-0.5 rounded-lg text-xs font-medium text-slate-600">
+            <button
+              onClick={() => setFiltroOrigem("TODAS")}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                filtroOrigem === "TODAS"
+                  ? "bg-white text-slate-900 shadow-xs font-semibold"
+                  : "hover:text-slate-900"
+              }`}
+            >
+              Todas ({totalApontamentos})
+            </button>
+            <button
+              onClick={() => setFiltroOrigem("PETROBRAS")}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                filtroOrigem === "PETROBRAS"
+                  ? "bg-white text-slate-900 shadow-xs font-semibold"
+                  : "hover:text-slate-900"
+              }`}
+            >
+              Petrobras ({totalPetrobras})
+            </button>
+            <button
+              onClick={() => setFiltroOrigem("PREMIER")}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                filtroOrigem === "PREMIER"
+                  ? "bg-white text-slate-900 shadow-xs font-semibold"
+                  : "hover:text-slate-900"
+              }`}
+            >
+              Premier ({totalPremier})
+            </button>
+          </div>
+
           {/* Filtro Status em Tabs */}
           <div className="inline-flex bg-slate-100 p-0.5 rounded-lg text-xs font-medium text-slate-600">
             <button
               onClick={() => setFiltroStatus("TODOS")}
-              className={`px-3 py-1 rounded-md transition-all ${
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
                 filtroStatus === "TODOS"
-                  ? "bg-white text-slate-900 shadow-sm font-semibold"
+                  ? "bg-white text-slate-900 shadow-xs font-semibold"
                   : "hover:text-slate-900"
               }`}
             >
-              Todos ({totalApontamentos})
+              Todos
             </button>
             <button
               onClick={() => setFiltroStatus("PENDENTES")}
-              className={`px-3 py-1 rounded-md transition-all ${
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
                 filtroStatus === "PENDENTES"
-                  ? "bg-white text-amber-800 shadow-sm font-semibold"
+                  ? "bg-white text-amber-800 shadow-xs font-semibold"
                   : "hover:text-slate-900"
               }`}
             >
@@ -333,9 +400,9 @@ export default function ApontamentosPage() {
             </button>
             <button
               onClick={() => setFiltroStatus("RESPONDIDOS")}
-              className={`px-3 py-1 rounded-md transition-all ${
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
                 filtroStatus === "RESPONDIDOS"
-                  ? "bg-white text-emerald-800 shadow-sm font-semibold"
+                  ? "bg-white text-emerald-800 shadow-xs font-semibold"
                   : "hover:text-slate-900"
               }`}
             >
@@ -347,23 +414,23 @@ export default function ApontamentosPage() {
           <div className="inline-flex bg-slate-100 p-0.5 rounded-lg text-slate-600">
             <button
               onClick={() => setModoVisualizacao("CARDS")}
-              className={`p-1 rounded-md transition-all ${
+              className={`p-1 rounded-md transition-all cursor-pointer ${
                 modoVisualizacao === "CARDS"
-                  ? "bg-white text-slate-900 shadow-sm"
+                  ? "bg-white text-slate-900 shadow-xs"
                   : "hover:text-slate-900"
               }`}
-              title="Modo Análise em Cards (Recomendado para leitura)"
+              title="Modo Cards"
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
             <button
               onClick={() => setModoVisualizacao("TABELA")}
-              className={`p-1 rounded-md transition-all ${
+              className={`p-1 rounded-md transition-all cursor-pointer ${
                 modoVisualizacao === "TABELA"
-                  ? "bg-white text-slate-900 shadow-sm"
+                  ? "bg-white text-slate-900 shadow-xs"
                   : "hover:text-slate-900"
               }`}
-              title="Modo Tabela Compacta"
+              title="Modo Tabela"
             >
               <List className="w-4 h-4" />
             </button>
@@ -373,30 +440,52 @@ export default function ApontamentosPage() {
 
       {/* FEED DE APONTAMENTOS / ANÁLISE DE TEXTO */}
       {apontamentosFiltrados.length === 0 ? (
-        <div className="bg-white p-12 text-center rounded-xl border border-slate-200/80 shadow-sm text-slate-400">
+        <div className="bg-white p-12 text-center rounded-xl border border-slate-200 shadow-xs text-slate-400">
           <MessageSquare className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-          <p className="font-medium text-slate-600">Nenhum apontamento encontrado.</p>
-          <p className="text-xs text-slate-400 mt-1">Tente ajustar o termo de busca ou o filtro de status.</p>
+          <p className="font-medium text-slate-600">Nenhum apontamento ou observação encontrado.</p>
+          <p className="text-xs text-slate-400 mt-1">Tente ajustar os filtros de busca ou origem.</p>
         </div>
       ) : modoVisualizacao === "CARDS" ? (
-        /* MODO CARDS DE ANÁLISE (Foco total em ler, analisar e entender o contraponto) */
+        /* MODO CARDS */
         <div className="space-y-4">
           {apontamentosFiltrados.map((apt) => {
             const tags = extrairTagsAnalise(apt.texto, apt.respostaPremier);
             const isRespondido = apt.status === "RESPONDIDO" || apt.status === "ENCERRADO";
+            const ehPetrobras = (apt.origem || "PETROBRAS") === "PETROBRAS";
 
             return (
               <div
                 key={apt.id}
-                className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden hover:border-slate-300 transition-all"
+                className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden hover:border-slate-300 transition-all"
               >
                 {/* Cabeçalho do Card */}
-                <div className="px-5 py-3 bg-slate-50/70 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="px-5 py-3 bg-slate-50/80 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                   <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="font-mono font-bold text-xs text-premier-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                    {/* Badge de Origem */}
+                    <span
+                      className={`text-[11px] font-semibold px-2 py-0.5 rounded border inline-flex items-center gap-1.5 ${
+                        ehPetrobras
+                          ? "bg-slate-100 text-slate-800 border-slate-300"
+                          : "bg-blue-50 text-blue-900 border-blue-200"
+                      }`}
+                    >
+                      {ehPetrobras ? (
+                        <>
+                          <Building2 className="w-3 h-3 text-slate-600" />
+                          <span>Petrobras</span>
+                        </>
+                      ) : (
+                        <>
+                          <Briefcase className="w-3 h-3 text-blue-600" />
+                          <span>Premier</span>
+                        </>
+                      )}
+                    </span>
+
+                    <span className="font-mono font-bold text-xs text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
                       {apt.postoCodigo}
                     </span>
-                    <span className="text-xs font-semibold text-slate-800">
+                    <span className="text-xs font-medium text-slate-700">
                       {apt.funcaoPosto}
                     </span>
                     <span className="text-slate-300">•</span>
@@ -404,12 +493,12 @@ export default function ApontamentosPage() {
                       Ref: {apt.dataReferencia}
                     </span>
 
-                    {/* Tags de análise técnica */}
+                    {/* Tags */}
                     <div className="flex items-center gap-1.5 ml-2">
                       {tags.map((t) => (
                         <span
                           key={t}
-                          className="text-[10px] font-medium bg-slate-200/70 text-slate-700 px-2 py-0.5 rounded-full"
+                          className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200"
                         >
                           {t}
                         </span>
@@ -424,61 +513,69 @@ export default function ApontamentosPage() {
                           isRespondido ? "bg-emerald-500" : "bg-amber-500"
                         }`}
                       />
-                      <span className={isRespondido ? "text-emerald-800" : "text-amber-800"}>
+                      <span className={isRespondido ? "text-slate-700" : "text-amber-800"}>
                         {isRespondido ? "Respondido" : "Aguardando Resposta"}
                       </span>
                     </div>
 
                     <button
                       onClick={() => handleCopiarTexto(apt.texto)}
-                      className="p-1 text-slate-400 hover:text-slate-600 rounded transition-colors ml-2"
-                      title="Copiar texto do apontamento"
+                      className="p-1 text-slate-400 hover:text-slate-600 rounded transition-colors ml-2 cursor-pointer"
+                      title="Copiar texto"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
 
-                {/* Corpo de Análise Comparativa (Petrobras x Premier) */}
+                {/* Corpo Comparativo */}
                 <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  {/* Bloco Petrobras (Apontamento para análise) */}
-                  <div className="bg-slate-50/60 rounded-xl p-4 border border-slate-200/70 flex flex-col justify-between">
+                  {/* Bloco de Origem (Quem abriu o registro) */}
+                  <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200 flex flex-col justify-between">
                     <div>
-                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200/60">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-emerald-600" />
-                          Apontamento Formal da Fiscalização
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                          {ehPetrobras ? (
+                            <>
+                              <Building2 className="w-3.5 h-3.5 text-slate-600" />
+                              Apontamento da Fiscalização Petrobras
+                            </>
+                          ) : (
+                            <>
+                              <Briefcase className="w-3.5 h-3.5 text-slate-600" />
+                              Observação Operacional da Premier
+                            </>
+                          )}
                         </span>
                         <span className="text-[10px] text-slate-400 font-mono">
                           {apt.dataCriacao}
                         </span>
                       </div>
 
-                      {/* Texto Completo e Confortável para Leitura */}
                       <p className="text-xs md:text-sm text-slate-800 leading-relaxed font-normal whitespace-pre-line">
                         &quot;{apt.texto}&quot;
                       </p>
                     </div>
 
-                    <div className="mt-3 pt-2 text-[11px] text-slate-500 flex items-center justify-between border-t border-slate-200/40">
-                      <span>Registrado por: <strong>{apt.criadoPor}</strong></span>
+                    <div className="mt-3 pt-2 text-[11px] text-slate-500 flex items-center justify-between border-t border-slate-200">
+                      <span>Registrado por: <strong className="text-slate-700">{apt.criadoPor}</strong></span>
                       <span className="text-[10px] font-mono text-slate-400">ID: {apt.id}</span>
                     </div>
                   </div>
 
-                  {/* Bloco Premier (Manifestação / Resposta da Contratada) */}
+                  {/* Bloco de Resposta / Contra-Evidência */}
                   <div
                     className={`rounded-xl p-4 border flex flex-col justify-between ${
                       apt.respostaPremier
-                        ? "bg-emerald-50/40 border-emerald-200/70"
-                        : "bg-amber-50/30 border-amber-200/60 border-dashed"
+                        ? "bg-white border-slate-200"
+                        : "bg-amber-50/40 border-amber-200 border-dashed"
                     }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200/50">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          Manifestação / Contra-Evidência Premier
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-slate-600" />
+                          {ehPetrobras ? "Manifestação / Resposta Premier" : "Parecer da Fiscalização / Tratativa"}
                         </span>
                         {apt.respondidoEm && (
                           <span className="text-[10px] text-slate-400 font-mono">
@@ -495,20 +592,22 @@ export default function ApontamentosPage() {
                         <div className="py-4 text-center">
                           <Clock className="w-6 h-6 text-amber-500 mx-auto mb-1.5" />
                           <p className="text-xs font-semibold text-amber-900">
-                            Pendente de Resposta da Contratada
+                            Aguardando Manifestação
                           </p>
                           <p className="text-[11px] text-slate-500 mt-0.5">
-                            Analise a notificação ao lado e informe a justificativa ou aceite da glosa.
+                            {ehPetrobras
+                              ? "A Premier deve analisar a notificação e registrar a contra-evidência."
+                              : "Observação registrada para acompanhamento conjunto de fiscalização."}
                           </p>
                         </div>
                       )}
                     </div>
 
-                    <div className="mt-3 pt-2 flex items-center justify-between border-t border-slate-200/40">
+                    <div className="mt-3 pt-2 flex items-center justify-between border-t border-slate-200">
                       {apt.respostaPremier ? (
                         <>
                           <span className="text-[11px] text-slate-500">
-                            Respondido por: <strong>{apt.respondidoPor}</strong>
+                            Manifestado por: <strong className="text-slate-700">{apt.respondidoPor}</strong>
                           </span>
                           <button
                             onClick={() => {
@@ -516,9 +615,9 @@ export default function ApontamentosPage() {
                               setFormResposta(apt.respostaPremier || "");
                               setModalRespostaAberto(true);
                             }}
-                            className="text-xs text-slate-600 hover:text-slate-900 font-semibold underline"
+                            className="text-xs text-slate-700 hover:text-slate-900 font-medium underline cursor-pointer"
                           >
-                            Editar Resposta
+                            Editar Manifestação
                           </button>
                         </>
                       ) : (
@@ -529,10 +628,10 @@ export default function ApontamentosPage() {
                               setFormResposta("");
                               setModalRespostaAberto(true);
                             }}
-                            className="inline-flex items-center gap-1.5 bg-premier-900 hover:bg-premier-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-all"
+                            className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-xs transition-all cursor-pointer"
                           >
-                            <Send className="w-3 h-3 text-emerald-400" />
-                            <span>Registrar Resposta Premier</span>
+                            <Send className="w-3 h-3 text-slate-300" />
+                            <span>Registrar Manifestação</span>
                           </button>
                         </div>
                       )}
@@ -544,113 +643,136 @@ export default function ApontamentosPage() {
           })}
         </div>
       ) : (
-        /* MODO TABELA COMPACTA (Visão tabular clássica moderna) */
-        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+        /* MODO TABELA */
+        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-4">Posto Notificado</th>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-medium uppercase tracking-wider text-[11px]">
+                  <th className="py-3 px-4">Posto</th>
+                  <th className="py-3 px-4">Origem</th>
                   <th className="py-3 px-4">Data Ref.</th>
-                  <th className="py-3 px-4">Apontamento Petrobras (Texto)</th>
-                  <th className="py-3 px-4">Manifestação Premier</th>
+                  <th className="py-3 px-4">Texto do Registro</th>
+                  <th className="py-3 px-4">Manifestação / Resposta</th>
                   <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-center">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {apontamentosFiltrados.map((apt) => (
-                  <tr key={apt.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4 font-mono font-semibold text-slate-900">
-                      <div>{apt.postoCodigo}</div>
-                      <div className="text-[10px] font-sans text-slate-500 font-normal">
-                        {apt.funcaoPosto}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-600">
-                      {apt.dataReferencia}
-                    </td>
-                    <td className="py-3 px-4 max-w-md text-slate-800">
-                      <div className="leading-relaxed font-normal">
-                        {apt.texto}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 max-w-md text-slate-700">
-                      {apt.respostaPremier ? (
-                        <div className="leading-relaxed text-emerald-900 font-normal">
-                          {apt.respostaPremier}
+                {apontamentosFiltrados.map((apt) => {
+                  const ehPetrobras = (apt.origem || "PETROBRAS") === "PETROBRAS";
+                  return (
+                    <tr key={apt.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-3 px-4 font-mono font-semibold text-slate-900">
+                        <div>{apt.postoCodigo}</div>
+                        <div className="text-[10px] font-sans text-slate-500 font-normal">
+                          {apt.funcaoPosto}
                         </div>
-                      ) : (
-                        <span className="text-amber-700 font-medium italic">
-                          Aguardando resposta
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1.5 text-xs font-medium ${
-                          apt.status === "RESPONDIDO" ? "text-emerald-700" : "text-amber-700"
-                        }`}
-                      >
+                      </td>
+                      <td className="py-3 px-4">
                         <span
-                          className={`w-2 h-2 rounded-full ${
-                            apt.status === "RESPONDIDO" ? "bg-emerald-500" : "bg-amber-500"
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded border inline-flex items-center gap-1 ${
+                            ehPetrobras
+                              ? "bg-slate-100 text-slate-800 border-slate-300"
+                              : "bg-blue-50 text-blue-900 border-blue-200"
                           }`}
-                        />
-                        {apt.status === "RESPONDIDO" ? "Respondido" : "Pendente"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => {
-                          setApontamentoSelecionado(apt);
-                          setFormResposta(apt.respostaPremier || "");
-                          setModalRespostaAberto(true);
-                        }}
-                        className="text-xs text-premier-900 hover:text-premier-700 font-semibold underline"
-                      >
-                        {apt.respostaPremier ? "Editar" : "Responder"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                        >
+                          {ehPetrobras ? "Petrobras" : "Premier"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600">
+                        {apt.dataReferencia}
+                      </td>
+                      <td className="py-3 px-4 max-w-sm text-slate-800">
+                        <div className="leading-relaxed font-normal">
+                          {apt.texto}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          Por: {apt.criadoPor}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 max-w-sm text-slate-700">
+                        {apt.respostaPremier ? (
+                          <div className="leading-relaxed font-normal text-slate-800">
+                            {apt.respostaPremier}
+                          </div>
+                        ) : (
+                          <span className="text-amber-700 font-medium italic">
+                            Aguardando manifestação
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                            apt.status === "RESPONDIDO" ? "text-slate-800" : "text-amber-800"
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              apt.status === "RESPONDIDO" ? "bg-emerald-500" : "bg-amber-500"
+                            }`}
+                          />
+                          {apt.status === "RESPONDIDO" ? "Respondido" : "Pendente"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          onClick={() => {
+                            setApontamentoSelecionado(apt);
+                            setFormResposta(apt.respostaPremier || "");
+                            setModalRespostaAberto(true);
+                          }}
+                          className="px-2.5 py-1 text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 rounded font-medium transition-colors cursor-pointer"
+                        >
+                          {apt.respostaPremier ? "Editar" : "Responder"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Modal Resposta / Manifestação Premier */}
+      {/* Modal Resposta / Manifestação */}
       {modalRespostaAberto && apontamentoSelecionado && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-xl w-full border border-slate-200 overflow-hidden animate-scaleIn">
-            <div className="p-4 bg-premier-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-xl w-full border border-slate-200 overflow-hidden">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-semibold text-sm">Manifestação Formal da Premier Logistics</h3>
+                <MessageSquare className="w-5 h-5 text-slate-300" />
+                <h3 className="font-semibold text-sm">
+                  {apontamentoSelecionado.origem === "PREMIER"
+                    ? "Parecer / Tratativa do Registro"
+                    : "Manifestação Formal da Premier Logistics"}
+                </h3>
               </div>
               <button
                 onClick={() => setModalRespostaAberto(false)}
-                className="text-slate-300 hover:text-white transition-colors"
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSubmitResposta} className="p-5 space-y-4 text-xs">
-              {/* Leitura da Alegação Petrobras para Apoio da Análise */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between text-slate-700 font-medium">
-                  <span className="font-mono text-premier-900 font-bold">
+                  <span className="font-mono text-slate-900 font-bold">
                     {apontamentoSelecionado.postoCodigo} — {apontamentoSelecionado.funcaoPosto}
                   </span>
                   <span className="text-[11px] font-mono text-slate-400">
-                    Ocorrência em: {apontamentoSelecionado.dataReferencia}
+                    Data: {apontamentoSelecionado.dataReferencia}
                   </span>
                 </div>
                 <div className="text-slate-800 leading-relaxed bg-white p-3 rounded-lg border border-slate-200 text-xs md:text-sm">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                    Apontamento Formal da Fiscalização:
+                    {apontamentoSelecionado.origem === "PREMIER"
+                      ? "Observação Registrada pela Premier:"
+                      : "Apontamento Registrado pela Fiscalização Petrobras:"}
                   </span>
                   &quot;{apontamentoSelecionado.texto}&quot;
                 </div>
@@ -658,15 +780,15 @@ export default function ApontamentosPage() {
 
               <div>
                 <label className="font-semibold text-slate-800 block mb-1">
-                  Resposta / Contra-Evidência da Premier <span className="text-rose-500">*</span>
+                  Manifestação / Resposta <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   required
                   rows={4}
                   value={formResposta}
                   onChange={(e) => setFormResposta(e.target.value)}
-                  placeholder="Apresente as justificativas operacionais, substituição na escala ou reconhecimento de glosa para a Memória de Cálculo..."
-                  className="w-full border border-slate-200 rounded-lg p-3 text-slate-800 outline-none focus:border-premier-700 resize-none leading-relaxed transition-colors"
+                  placeholder="Apresente as justificativas operacionais, substituição na escala, contraprova ou esclarecimentos..."
+                  className="w-full border border-slate-200 rounded-lg p-3 text-slate-800 outline-none focus:border-slate-400 resize-none leading-relaxed transition-colors"
                 />
               </div>
 
@@ -674,15 +796,15 @@ export default function ApontamentosPage() {
                 <button
                   type="button"
                   onClick={() => setModalRespostaAberto(false)}
-                  className="px-3.5 py-2 text-slate-600 hover:text-slate-900 font-medium rounded-lg transition-colors"
+                  className="px-3.5 py-2 text-slate-600 hover:text-slate-900 font-medium rounded-lg transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-premier-900 hover:bg-premier-800 text-white font-semibold rounded-lg shadow transition-colors flex items-center gap-1.5"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Send className="w-3.5 h-3.5 text-emerald-400" />
+                  <Send className="w-3.5 h-3.5" />
                   <span>Gravar Manifestação</span>
                 </button>
               </div>
@@ -691,34 +813,67 @@ export default function ApontamentosPage() {
         </div>
       )}
 
-      {/* Modal Novo Apontamento Petrobras */}
+      {/* Modal Novo Registro (Petrobras ou Premier) */}
       {modalNovoAberto && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden animate-scaleIn">
-            <div className="p-4 bg-emerald-800 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Plus className="w-5 h-5" />
-                <h3 className="font-semibold text-sm">Novo Apontamento Formal da Fiscalização</h3>
+                <h3 className="font-semibold text-sm">Novo Apontamento / Observação</h3>
               </div>
               <button
                 onClick={() => setModalNovoAberto(false)}
-                className="text-emerald-200 hover:text-white transition-colors"
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSubmitNovoApontamento} className="p-5 space-y-4 text-xs">
+              {/* Seletor de Origem: Petrobras x Premier */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1.5">
+                  Origem do Registro <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormOrigem("PETROBRAS")}
+                    className={`px-3 py-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      formOrigem === "PETROBRAS"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <Building2 className="w-4 h-4" />
+                    <span>Petrobras (Fiscalização)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormOrigem("PREMIER")}
+                    className={`px-3 py-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      formOrigem === "PREMIER"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <Briefcase className="w-4 h-4" />
+                    <span>Premier (Operação / RH)</span>
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">
-                    Posto Notificado <span className="text-rose-500">*</span>
+                    Posto Notificado / Observado <span className="text-rose-500">*</span>
                   </label>
                   <select
                     required
                     value={formPostoCodigo}
                     onChange={(e) => setFormPostoCodigo(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-800 outline-none focus:border-emerald-700 transition-colors"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-800 outline-none focus:border-slate-400 transition-colors cursor-pointer"
                   >
                     <option value="">Selecione o posto...</option>
                     {postos.map((p) => (
@@ -738,22 +893,29 @@ export default function ApontamentosPage() {
                     required
                     value={formDataReferencia}
                     onChange={(e) => setFormDataReferencia(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-slate-800 outline-none focus:border-emerald-700 transition-colors"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-slate-800 outline-none focus:border-slate-400 transition-colors"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
-                  Texto Formal do Apontamento <span className="text-rose-500">*</span>
+                  {formOrigem === "PETROBRAS"
+                    ? "Texto Formal do Apontamento da Fiscalização"
+                    : "Observação Operacional da Premier"}{" "}
+                  <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   required
                   rows={4}
                   value={formTexto}
                   onChange={(e) => setFormTexto(e.target.value)}
-                  placeholder="Descreva com precisão a inconformidade de ocupação ou ausência verificada em campo na UFN III..."
-                  className="w-full border border-slate-200 rounded-lg p-3 text-slate-800 outline-none focus:border-emerald-700 resize-none leading-relaxed transition-colors"
+                  placeholder={
+                    formOrigem === "PETROBRAS"
+                      ? "Descreva com precisão a inconformidade de ocupação ou ausência verificada no posto..."
+                      : "Descreva a observação operacional, contingência, justificativa de escala ou aviso da Premier..."
+                  }
+                  className="w-full border border-slate-200 rounded-lg p-3 text-slate-800 outline-none focus:border-slate-400 resize-none leading-relaxed transition-colors"
                 />
               </div>
 
@@ -761,15 +923,15 @@ export default function ApontamentosPage() {
                 <button
                   type="button"
                   onClick={() => setModalNovoAberto(false)}
-                  className="px-3.5 py-2 text-slate-600 hover:text-slate-900 font-medium rounded-lg transition-colors"
+                  className="px-3.5 py-2 text-slate-600 hover:text-slate-900 font-medium rounded-lg transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-lg shadow transition-colors"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
                 >
-                  Registrar Notificação
+                  {formOrigem === "PETROBRAS" ? "Registrar Apontamento" : "Registrar Observação"}
                 </button>
               </div>
             </form>

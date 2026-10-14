@@ -54,7 +54,7 @@ const MAPA_PAGINAS: Record<
   "/feristas": { titulo: "Gestão de Feristas", subtitulo: "Quadro e cobertura de férias", icone: Users },
   "/relatorios/coberturas": { titulo: "Relatório de Coberturas", subtitulo: "Consolidação por PPU e imóvel", icone: FileSpreadsheet },
   "/relatorios": { titulo: "Relatórios Oficiais", subtitulo: "Ocupação por posto e medição", icone: FileSpreadsheet },
-  "/apontamentos": { titulo: "Apontamentos Petrobras", subtitulo: "Gestão de apontamentos fiscais", icone: MessageSquare },
+  "/apontamentos": { titulo: "Apontamentos", subtitulo: "Apontamentos e observações Petrobras e Premier", icone: MessageSquare },
   "/conformidade": { titulo: "Conformidade Contratual", subtitulo: "Fechamento e auditoria", icone: ShieldCheck },
   "/importacoes": { titulo: "Importações", subtitulo: "Cargas de planilhas RM e medição", icone: UploadCloud },
   "/conciliacao-sifac": { titulo: "Conciliação SIFAC", subtitulo: "Cruzamento de alocações", icone: FileCheck },

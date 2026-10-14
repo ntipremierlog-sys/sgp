@@ -295,6 +295,7 @@ export interface ApontamentoOperacional {
   funcaoPosto: string;
   dataReferencia: string; // YYYY-MM-DD
   competencia: string;
+  origem?: "PETROBRAS" | "PREMIER";
   texto: string; // Apontamento formal da Petrobras
   criadoPor: string;
   dataCriacao: string;
@@ -935,7 +936,38 @@ export const POSTOS_INICIAIS: PostoOperacional[] = [
 export const PROFISSIONAIS_INICIAIS: ProfissionalOperacional[] = (funcionariosReais as unknown as ProfissionalOperacional[]) || [];
 export const OCORRENCIAS_INICIAIS: OcorrenciaOperacional[] = (ocorrenciasReais as unknown as OcorrenciaOperacional[]) || [];
 export const COBERTURAS_INICIAIS: CoberturaOperacional[] = [];
-export const APONTAMENTOS_INICIAIS: ApontamentoOperacional[] = [];
+export const APONTAMENTOS_INICIAIS: ApontamentoOperacional[] = [
+  {
+    id: "apt-001",
+    postoCodigo: "PST-0001",
+    funcaoPosto: "Técnico de Suporte Operacional",
+    dataReferencia: "2026-09-08",
+    competencia: "Setembro / 2026",
+    origem: "PETROBRAS",
+    texto: "Ausência verificada no início do turno matutino sem cobertura identificada na escala.",
+    criadoPor: "Carlos Eduardo Mendes (Fiscal Técnico Petrobras)",
+    dataCriacao: "2026-09-08 08:30",
+    status: "RESPONDIDO",
+    respostaPremier: "Colaborador titular apresentou atestado médico; profissional ferista alocado a partir das 09:15 conforme escala de contingência.",
+    respondidoPor: "Marcos Valério (Gestor Premier)",
+    respondidoEm: "2026-09-08 09:45",
+  },
+  {
+    id: "apt-002",
+    postoCodigo: "PST-0004",
+    funcaoPosto: "Almoxarife",
+    dataReferencia: "2026-09-09",
+    competencia: "Setembro / 2026",
+    origem: "PREMIER",
+    texto: "Observação operacional: ajuste preventivo de horário para acompanhar descarga de materiais críticos na UFN III, com ciência prévia do fiscal local.",
+    criadoPor: "Marcos Valério (Preposto / Gestor Premier)",
+    dataCriacao: "2026-09-09 10:15",
+    status: "RESPONDIDO",
+    respostaPremier: "Operação executada conforme previsto; posto mantido com 100% de presença sem ocorrência de glosa.",
+    respondidoPor: "Supervisão Premier",
+    respondidoEm: "2026-09-09 11:20",
+  },
+];
 
 export const FECHAMENTOS_INICIAIS: FechamentoCompetencia[] = [
   {
@@ -3633,11 +3665,13 @@ export function adicionarApontamento(apt: Omit<ApontamentoOperacional, "id" | "d
   const estado = carregarEstado();
   const novo: ApontamentoOperacional = {
     ...apt,
+    origem: apt.origem || "PETROBRAS",
     id: `apt-${Date.now()}`,
     dataCriacao: new Date().toISOString().replace("T", " ").substring(0, 16),
   };
   salvarEstado({ apontamentos: [novo, ...estado.apontamentos] });
-  registrarLog("REGISTRAR_APONTAMENTO", `Apontamento (${novo.postoCodigo})`, `Apontamento da Fiscalização: "${novo.texto.substring(0, 40)}..."`);
+  const rotuloOrigem = novo.origem === "PREMIER" ? "Premier Logistics" : "Fiscalização Petrobras";
+  registrarLog("REGISTRAR_APONTAMENTO", `Apontamento (${novo.postoCodigo})`, `[${rotuloOrigem}] ${novo.texto.substring(0, 40)}...`);
   return novo;
 }
 

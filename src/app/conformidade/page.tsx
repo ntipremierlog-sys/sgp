@@ -32,7 +32,7 @@ export default function ConformidadePage() {
       comoAtende:
         "Módulo de Apontamentos Petrobras com formulário padronizado, contador de prazo regressivo, anexação de comprovantes e encerramento rastreado.",
       linkHref: "/apontamentos",
-      linkTexto: "Apontamentos Petrobras",
+      linkTexto: "Apontamentos",
       status: "CONFORME",
     },
     {
