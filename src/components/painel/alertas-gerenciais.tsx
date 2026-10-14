@@ -19,7 +19,9 @@ import {
   ClipboardCheck,
   UsersRound,
   ChevronRight,
+  ChevronDown,
   CheckCircle2,
+  Bell,
 } from "lucide-react";
 import {
   AlertaContratual,
@@ -111,44 +113,105 @@ export function rotuloSemNumero(a: AlertaContratual): string {
 // =============================================================================
 
 export function AlertasGerenciais() {
+  const [aberto, setAberto] = useState(false);
   const { alertas } = useAlertasContratuais();
   const visiveis = filtrarAlertasVisiveis(alertas);
-
-  if (visiveis.length === 0) {
-    return (
-      <section
-        aria-label="Alertas contratuais"
-        className="flex items-center gap-2 text-xs text-slate-500"
-      >
-        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-        <span>Nenhum alerta contratual pendente.</span>
-      </section>
-    );
-  }
+  const totalAlertas = visiveis.reduce((acc, a) => acc + a.quantidade, 0);
 
   return (
-    <section aria-label="Alertas contratuais" className="flex items-center gap-3 flex-wrap">
-      <h2 className="text-xs font-medium text-slate-500 shrink-0">Alertas</h2>
-      <ul className="flex flex-wrap gap-2" role="list">
-        {visiveis.map((a) => {
-          const estilo = ESTILO_COR[a.cor];
-          return (
-            <li key={a.tipo}>
+    <div className="relative">
+      <button
+        type="button"
+        id="btn-alertas-suspensas"
+        onClick={() => setAberto((prev) => !prev)}
+        className="h-9 px-3 text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-700 shadow-xs hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-slate-300"
+        aria-expanded={aberto}
+        title={visiveis.length > 0 ? `${totalAlertas} alertas pendentes` : "Nenhum alerta pendente"}
+      >
+        <Bell className="w-3.5 h-3.5 text-slate-500" />
+        <span>Alertas</span>
+        {totalAlertas > 0 ? (
+          <span className="inline-flex items-center justify-center px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+            {totalAlertas}
+          </span>
+        ) : (
+          <span className="inline-flex items-center justify-center px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-slate-100 text-slate-500">
+            0
+          </span>
+        )}
+        <ChevronDown
+          className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+            aberto ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {aberto && (
+        <>
+          {/* Backdrop para fechar ao clicar fora */}
+          <div
+            className="fixed inset-0 z-30"
+            onClick={() => setAberto(false)}
+          />
+
+          {/* Menu suspenso de alertas */}
+          <div className="absolute right-0 mt-1.5 w-80 sm:w-96 bg-white rounded-xl shadow-lg border border-slate-200 py-2 z-40 text-xs">
+            <div className="px-3.5 py-2 border-b border-slate-100 flex items-center justify-between">
+              <span className="font-semibold text-slate-800">Alertas Contratuais</span>
+              <span className="text-[11px] text-slate-400">
+                {visiveis.length} {visiveis.length === 1 ? "categoria" : "categorias"}
+              </span>
+            </div>
+
+            {visiveis.length === 0 ? (
+              <div className="px-4 py-6 text-center text-slate-500 flex flex-col items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                <span>Nenhum alerta contratual pendente.</span>
+              </div>
+            ) : (
+              <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                {visiveis.map((a) => {
+                  const estilo = ESTILO_COR[a.cor];
+                  return (
+                    <Link
+                      key={a.tipo}
+                      id={`alerta-${a.tipo}`}
+                      href={a.href}
+                      onClick={() => setAberto(false)}
+                      className="flex items-start gap-2.5 px-3.5 py-2.5 hover:bg-slate-50 transition-colors group"
+                      title={`${estilo.rotulo} · ${a.descricao} (${a.referencia})`}
+                    >
+                      <span className={`w-2 h-2 rounded-full mt-1 shrink-0 ${estilo.ponto}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-semibold text-slate-900">
+                            {a.quantidade} {rotuloSemNumero(a)}
+                          </span>
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 group-hover:text-slate-600 transition-all shrink-0" />
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+                          {a.descricao}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="px-3.5 pt-2 pb-1 border-t border-slate-100 flex justify-end">
               <Link
-                id={`alerta-${a.tipo}`}
-                href={a.href}
-                title={`${estilo.rotulo} · ${a.descricao} (${a.referencia})`}
-                className="group inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-xs transition-colors hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                href="/alertas"
+                onClick={() => setAberto(false)}
+                className="text-[11px] text-slate-600 hover:text-slate-900 font-medium hover:underline inline-flex items-center gap-1"
               >
-                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${estilo.ponto}`} />
-                <span className="font-semibold tabular-nums text-slate-900">{a.quantidade}</span>
-                <span>{rotuloSemNumero(a)}</span>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500" />
+                <span>Ver central completa de alertas</span>
+                <ChevronRight className="w-3 h-3 text-slate-400" />
               </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

@@ -477,6 +477,7 @@ function PainelExecutivoContent() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <AlertasGerenciais />
           <label htmlFor="select-competencia" className="sr-only">
             Selecionar competência
           </label>
@@ -563,10 +564,7 @@ function PainelExecutivoContent() {
         </div>
       </section>
 
-      {/* ——— 3. ALERTAS CONTRATUAIS (chips neutros clicáveis) ——— */}
-      <AlertasGerenciais />
-
-      {/* ——— 4. TABELA COM TOOLBAR INTEGRADA ——— */}
+{/* ——— 4. TABELA COM TOOLBAR INTEGRADA ——— */}
       <section className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         {/* Toolbar */}
         <div className="flex flex-col gap-3 px-4 py-3 border-b border-slate-100 lg:flex-row lg:items-center lg:justify-between">
