@@ -614,77 +614,6 @@ export default function AdminPage() {
         {/* ===================================================================== */}
         {abaAtiva === "USUARIOS" && (
           <div className="space-y-4">
-            {/* Cartão de Destaque: Perfil & Foto do Usuário Logado */}
-            <div className="bg-gradient-to-r from-[#0F1E36] to-[#1A3258] text-white p-4 sm:p-5 rounded-2xl shadow-md border border-slate-700/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="relative group shrink-0">
-                  {usuarioLogadoCadastro?.avatarUrl && usuarioLogadoCadastro.avatarUrl !== "/marca/premier-simbolo.png" ? (
-                    <img
-                      src={usuarioLogadoCadastro.avatarUrl}
-                      alt={usuarioLogadoCadastro.nome}
-                      className="w-14 h-14 rounded-full object-cover border-2 border-emerald-400 shadow-md bg-white cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => handleAbrirModalFotoUsuario(usuarioLogadoCadastro)}
-                      title="Clique para alterar sua foto de perfil"
-                    />
-                  ) : (
-                    <div
-                      onClick={() => handleAbrirModalFotoUsuario(usuarioLogadoCadastro)}
-                      className="w-14 h-14 rounded-full bg-purple-600/90 text-white font-bold text-lg flex items-center justify-center border-2 border-purple-400 shadow-md cursor-pointer hover:bg-purple-700 transition-colors"
-                      title="Clique para adicionar foto de perfil"
-                    >
-                      {obterIniciais(usuarioLogadoCadastro?.nome || "Administrador Premier")}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleAbrirModalFotoUsuario(usuarioLogadoCadastro)}
-                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-xs transition-colors cursor-pointer"
-                    title="Adicionar ou alterar sua foto de perfil"
-                  >
-                    <Camera className="w-3 h-3" />
-                  </button>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                      {usuarioLogadoCadastro?.nome || "Administrador Premier"}
-                    </h2>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-200 border border-purple-400/30">
-                      Você
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-300 font-mono mt-0.5">
-                    {usuarioLogadoCadastro?.email || "admin.sgp@premierlogistics.com.br"}
-                  </p>
-                  <div className="flex items-center gap-3 text-xs text-slate-300 mt-1">
-                    <span className="flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>{NOMES_PERFIS[usuarioLogadoCadastro?.perfil as PerfilUsuario] || usuarioLogadoCadastro?.perfil}</span>
-                    </span>
-                    <span>•</span>
-                    <span className="text-slate-400">
-                      {usuarioLogadoCadastro?.cargo || "Administrador de Sistemas"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 self-start sm:self-center">
-                <button
-                  type="button"
-                  onClick={() => handleAbrirModalFotoUsuario(usuarioLogadoCadastro)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-[#0F1E36] text-xs font-bold shadow-xs transition-all cursor-pointer"
-                >
-                  <Camera className="w-3.5 h-3.5 text-[#1F4FD1]" />
-                  <span>
-                    {usuarioLogadoCadastro?.avatarUrl && usuarioLogadoCadastro.avatarUrl !== "/marca/premier-simbolo.png"
-                      ? "Alterar Minha Foto"
-                      : "Adicionar Minha Foto"}
-                  </span>
-                </button>
-              </div>
-            </div>
 
           {/* Barra de Ações: Busca e Botão Novo Usuário */}
           <div className="bg-white p-3.5 rounded-xl border border-[#E3E6EB] shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -747,19 +676,37 @@ export default function AdminPage() {
                         <tr key={u.id} className="hover:bg-[#F9FAFB] transition-colors">
                           {/* Nome e Cargo */}
                           <td className="py-3 px-4 font-semibold text-[#1A2230]">
-                            <div className="flex items-center gap-1.5">
-                              <span>{u.nome}</span>
-                              {isSelf && (
-                                <span className="text-[11px] text-[#5B6474] font-normal">
-                                  (Você)
-                                </span>
-                              )}
+                            <div className="flex items-center gap-2.5">
+                              {/* Avatar discreto */}
+                              <div className="relative shrink-0">
+                                {u.avatarUrl && u.avatarUrl !== "/marca/premier-simbolo.png" ? (
+                                  <img
+                                    src={u.avatarUrl}
+                                    alt={u.nome}
+                                    className="w-8 h-8 rounded-full object-cover border border-slate-200 bg-white"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center border border-blue-400">
+                                    {obterIniciais(u.nome)}
+                                  </div>
+                                )}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span>{u.nome}</span>
+                                  {isSelf && (
+                                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                      Você
+                                    </span>
+                                  )}
+                                </div>
+                                {u.cargo && (
+                                  <span className="text-[11px] text-[#5B6474] block font-normal">
+                                    {u.cargo}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            {u.cargo && (
-                              <span className="text-[11px] text-[#5B6474] block font-normal">
-                                {u.cargo}
-                              </span>
-                            )}
                           </td>
 
                           {/* E-mail */}
@@ -796,6 +743,18 @@ export default function AdminPage() {
                           {/* Ações */}
                           <td className="py-3 px-4 text-right">
                             <div className="inline-flex items-center gap-1">
+                              {/* Foto (se for o próprio usuário) */}
+                              {isSelf && (
+                                <button
+                                  onClick={() => handleAbrirModalFotoUsuario(u)}
+                                  className="h-7 px-2 rounded-md hover:bg-blue-50 text-xs font-medium text-blue-700 inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                  title="Alterar foto de perfil"
+                                >
+                                  <Camera className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Foto</span>
+                                </button>
+                              )}
+
                               {/* Editar Perfil */}
                               <button
                                 onClick={() => {
