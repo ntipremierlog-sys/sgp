@@ -61,16 +61,15 @@ describe("Liberação de módulos por perfil (Administração → Permissões)",
     expect(can(usuario("PREMIER_GESTOR_CONTRATO"), "LER", "POSTOS")).toBe(false);
   });
 
-  it("Administrador e módulos exclusivos não podem ser alterados", () => {
+  it("Administrador pode customizar permissões de todos os perfis e módulos", () => {
     definirPersonalizacoesPermissao({
       PAINEL: { PREMIER_ADMIN: { ler: false, exportar: false } },
       ADMINISTRACAO: { PREMIER_GESTOR: { ler: true, exportar: false } },
     });
-    expect(can(usuario("PREMIER_ADMIN"), "LER", "PAINEL")).toBe(true);
-    expect(can(usuario("PREMIER_GESTOR"), "LER", "ADMINISTRACAO")).toBe(false);
-    expect(celulaEditavel("ADMINISTRACAO", "PREMIER_GESTOR")).toBe(false);
-    expect(celulaEditavel("PAINEL", "PREMIER_ADMIN")).toBe(false);
+    expect(celulaEditavel("ADMINISTRACAO", "PREMIER_GESTOR")).toBe(true);
+    expect(celulaEditavel("PAINEL", "PREMIER_ADMIN")).toBe(true);
     expect(celulaEditavel("PAINEL", "PETROBRAS_FISCAL")).toBe(true);
+    expect(celulaEditavel("PAINEL", "PENDENTE_PERFIL")).toBe(false);
   });
 
   it("usuário inativo ou sem perfil nunca tem acesso", () => {
@@ -78,17 +77,16 @@ describe("Liberação de módulos por perfil (Administração → Permissões)",
     expect(perfilPode(null, "LER", "PAINEL")).toBe(false);
   });
 
-  it("sanitização descarta células bloqueadas, valores inválidos e exportar sem visualizar", () => {
+  it("sanitização descarta células de perfil pendente, valores inválidos e exportar sem visualizar", () => {
     const s = sanitizarPersonalizacoes({
       ADMINISTRACAO: { PREMIER_GESTOR: { ler: true, exportar: true } },
-      PAINEL: { PREMIER_ADMIN: { ler: false }, PETROBRAS_FISCAL: { ler: false, exportar: true } },
-      APONTAMENTOS: { PREMIER_SUPERVISOR: { ler: true, exportar: true } }, // módulo sem exportação
+      PAINEL: { PREMIER_ADMIN: { ler: false, exportar: true }, PETROBRAS_FISCAL: { ler: false, exportar: true } },
+      PENDENTE: { PENDENTE_PERFIL: { ler: true } },
       INEXISTENTE: { PREMIER_GESTOR: { ler: true } },
     });
-    expect(s.ADMINISTRACAO).toBeUndefined();
-    expect(s.PAINEL?.PREMIER_ADMIN).toBeUndefined();
+    expect(s.ADMINISTRACAO?.PREMIER_GESTOR).toEqual({ ler: true, exportar: true });
+    expect(s.PAINEL?.PREMIER_ADMIN).toEqual({ ler: false, exportar: false });
     expect(s.PAINEL?.PETROBRAS_FISCAL).toEqual({ ler: false, exportar: false });
-    expect(s.APONTAMENTOS?.PREMIER_SUPERVISOR).toEqual({ ler: true, exportar: false });
     expect((s as Record<string, unknown>).INEXISTENTE).toBeUndefined();
   });
 

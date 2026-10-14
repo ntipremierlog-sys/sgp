@@ -317,16 +317,15 @@ function normalizarPerfil(perfil: PerfilUsuario): PerfilUsuario {
 }
 
 /** Indica se a célula perfil × módulo pode ser alterada na tela de liberação. */
-export function celulaEditavel(recurso: Recurso, perfil: PerfilUsuario): boolean {
+export function celulaEditavel(_recurso: Recurso, perfil: PerfilUsuario): boolean {
   const p = normalizarPerfil(perfil);
-  if (p === "PREMIER_ADMIN" || p === "PENDENTE_PERFIL") return false;
-  return !RECURSOS_EXCLUSIVOS_ADMIN.includes(recurso);
+  if (p === "PENDENTE_PERFIL") return false;
+  return true;
 }
 
 /** O módulo possui ação de exportação em algum perfil da matriz padrão. */
-export function recursoPossuiExportacao(recurso: Recurso): boolean {
-  const regra = MATRIZ_PERMISSOES.find((r) => r.recurso === recurso);
-  return !!regra && Object.values(regra.acoes).some((a) => a.includes("EXPORTAR"));
+export function recursoPossuiExportacao(_recurso: Recurso): boolean {
+  return true;
 }
 
 /**
@@ -362,11 +361,19 @@ export function obterLiberacaoEfetiva(
   perfil: PerfilUsuario,
   personalizacoes: PersonalizacoesPermissao = personalizacoesAtuais
 ): LiberacaoModulo {
+  const p = normalizarPerfil(perfil);
+  const ov = personalizacoes[recurso]?.[p];
+  if (ov && typeof ov.ler === "boolean") {
+    return {
+      ler: ov.ler,
+      exportar: ov.ler && ov.exportar === true,
+    };
+  }
   const acoes = obterAcoesEfetivas(recurso, perfil, personalizacoes);
   const gerenciar = acoes.includes("GERENCIAR");
   return {
     ler: gerenciar || acoes.includes("LER"),
-    exportar: recursoPossuiExportacao(recurso) && (gerenciar || acoes.includes("EXPORTAR")),
+    exportar: gerenciar || acoes.includes("EXPORTAR"),
   };
 }
 
@@ -377,7 +384,7 @@ export function obterLiberacaoPadrao(recurso: Recurso, perfil: PerfilUsuario): L
   const gerenciar = acoes.includes("GERENCIAR");
   return {
     ler: gerenciar || acoes.includes("LER"),
-    exportar: recursoPossuiExportacao(recurso) && (gerenciar || acoes.includes("EXPORTAR")),
+    exportar: gerenciar || acoes.includes("EXPORTAR"),
   };
 }
 
