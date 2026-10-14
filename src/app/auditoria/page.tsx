@@ -1,24 +1,115 @@
-"use client";
+﻿"use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   History,
   Search,
-  ShieldCheck,
-  Database,
-  UserCheck,
-  ArrowRight,
-  X,
-  Server,
-  Lock,
-  FileSpreadsheet,
-  AlertOctagon,
+  RotateCcw,
   Eye,
   FileDiff,
-  CheckCircle2,
+  X,
+  AlertOctagon,
 } from "lucide-react";
 import { carregarEstado, LogAuditoriaOperacional } from "@/lib/dados/estado-operacional";
+
+function formatarDataHora(ts: string): string {
+  if (!ts) return "—";
+  const match = ts.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (match) {
+    const [, ano, mes, dia, hora, min] = match;
+    return `${dia}/${mes}/${ano} ${hora}:${min}`;
+  }
+  return ts;
+}
+
+function rotuloAcao(acao: string): string {
+  switch (acao) {
+    case "ALTERAR_ESCALA":
+      return "Alteração de Escala";
+    case "ALTERAR_TITULAR":
+      return "Alteração de Titular";
+    case "CRIAR_COBERTURA":
+      return "Nova Cobertura";
+    case "EXCLUIR_COBERTURA":
+      return "Exclusão de Cobertura";
+    case "CRIAR_AUSENCIA":
+      return "Lançamento de Ausência";
+    case "EXCLUIR_AUSENCIA":
+      return "Exclusão de Ausência";
+    case "CONGELAR_COMPETENCIA":
+      return "Fechamento de Competência";
+    case "HOMOLOGAR_MEDICAO_PETROBRAS":
+      return "Homologação Petrobras";
+    case "REABRIR_COMPETENCIA":
+      return "Reabertura de Competência";
+    case "DESFAZER_LOTE_IMPORTACAO":
+      return "Cancelamento de Lote";
+    case "LIMPEZA_DADOS_DEMONSTRACAO":
+      return "Limpeza de Demonstração";
+    case "IMPORTACAO_FUNCIONARIOS_RM":
+      return "Importação Funcionários RM";
+    case "IMPORTACAO_CUBO_ABONO":
+      return "Importação Abonos RM";
+    case "IMPORTACAO_ALOCADOS_SIFAC":
+      return "Importação Alocados";
+    default:
+      return acao.replace(/_/g, " ");
+  }
+}
+
+function badgeAcao(acao: string): string {
+  if (acao.includes("HOMOLOGAR") || acao.startsWith("CRIAR")) {
+    return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  }
+  if (acao.startsWith("ALTERAR") || acao.includes("ATUALIZAR")) {
+    return "bg-blue-50 text-blue-700 border-blue-200";
+  }
+  if (acao.startsWith("EXCLUIR") || acao.startsWith("CANCELAR") || acao.includes("DESFAZER")) {
+    return "bg-rose-50 text-rose-700 border-rose-200";
+  }
+  if (acao.includes("CONGELAR") || acao.includes("REABRIR") || acao.includes("APONTAMENTO")) {
+    return "bg-amber-50 text-amber-700 border-amber-200";
+  }
+  return "bg-slate-100 text-slate-700 border-slate-200";
+}
+
+function rotuloPerfil(perfil: string): string {
+  switch (perfil) {
+    case "PREMIER_ADMIN":
+      return "Administrador";
+    case "PREMIER_RH":
+      return "RH";
+    case "PREMIER_SUPERVISOR":
+      return "Preposto";
+    case "PREMIER_GESTOR":
+    case "PREMIER_GESTOR_CONTRATO":
+      return "Gerente";
+    case "PETROBRAS_FISCAL":
+      return "Fiscal";
+    case "PETROBRAS_GESTOR":
+      return "Gestor";
+    default:
+      return perfil.replace("PREMIER_", "").replace("PETROBRAS_", "");
+  }
+}
+
+function badgePerfil(perfil: string): string {
+  if (perfil.startsWith("PETROBRAS")) {
+    return "bg-emerald-50 text-emerald-800 border-emerald-200";
+  }
+  return "bg-blue-50 text-blue-800 border-blue-200";
+}
+
+function formatarJson(str?: string | null): string {
+  if (!str) return "—";
+  try {
+    const obj = JSON.parse(str);
+    return JSON.stringify(obj, null, 2);
+  } catch {
+    return str;
+  }
+}
 
 export default function AuditoriaPage() {
   const [logs, setLogs] = useState<LogAuditoriaOperacional[]>([]);
@@ -67,33 +158,58 @@ export default function AuditoriaPage() {
     return () => window.removeEventListener("sgp-dados-atualizados", handleAtualizacao);
   }, []);
 
+  const acoesDisponiveis = useMemo(() => {
+    const setAcoes = new Set<string>();
+    logs.forEach((l) => setAcoes.add(l.acao));
+    return Array.from(setAcoes).sort();
+  }, [logs]);
+
+  const perfisDisponiveis = useMemo(() => {
+    const setP = new Set<string>();
+    logs.forEach((l) => setP.add(l.perfil));
+    return Array.from(setP).sort();
+  }, [logs]);
+
+  const logsFiltrados = useMemo(() => {
+    return logs.filter((log) => {
+      const termo = busca.toLowerCase().trim();
+      const matchTexto =
+        !termo ||
+        log.usuario.toLowerCase().includes(termo) ||
+        log.acao.toLowerCase().includes(termo) ||
+        rotuloAcao(log.acao).toLowerCase().includes(termo) ||
+        log.entidade.toLowerCase().includes(termo) ||
+        log.detalhes.toLowerCase().includes(termo) ||
+        (log.registroId && log.registroId.toLowerCase().includes(termo));
+
+      const matchAcao = filtroAcao === "TODAS" || log.acao === filtroAcao;
+      const matchPerfil = filtroPerfil === "TODOS" || log.perfil === filtroPerfil;
+
+      return matchTexto && matchAcao && matchPerfil;
+    });
+  }, [logs, busca, filtroAcao, filtroPerfil]);
+
+  const temFiltroAtivo = busca !== "" || filtroAcao !== "TODAS" || filtroPerfil !== "TODOS";
+
   if (!carregandoAuth && acessoBloqueado) {
     return (
-      <div className="max-w-3xl mx-auto py-12 px-4">
-        <div className="bg-white border border-rose-300 rounded-xl shadow-lg p-8 text-center space-y-4">
-          <div className="w-16 h-16 bg-rose-100 text-rose-700 rounded-full flex items-center justify-center mx-auto">
-            <AlertOctagon className="w-8 h-8" />
+      <div className="max-w-xl mx-auto py-16 px-4">
+        <div className="bg-white border border-rose-200 rounded-2xl shadow-sm p-8 text-center space-y-4">
+          <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto border border-rose-100">
+            <AlertOctagon className="w-6 h-6" />
           </div>
-          <h1 className="text-xl font-bold text-slate-900">
-            Acesso Restrito — Trilha de Auditoria
+          <h1 className="text-lg font-bold text-slate-900">
+            Acesso Restrito à Auditoria
           </h1>
-          <p className="text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
-            A visualização detalhada da trilha de auditoria completa com valores anteriores e novos
-            é de acesso exclusivo ao perfil <strong>Administrador Premier</strong>. Usuários com
-            perfil Fiscal Petrobras acessam apenas relatórios de conformidade e cumprimento contratual.
+          <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+            A trilha de auditoria é de acesso restrito ao perfil <strong>Administrador Premier</strong>.
           </p>
-          <div className="pt-4 flex items-center justify-center gap-3">
+          <div className="pt-2">
             <Link
               href="/painel"
-              className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors inline-block"
             >
               Voltar ao Painel Geral
-            </Link>
-            <Link
-              href="/relatorios"
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition-colors"
-            >
-              Ir para Relatórios
             </Link>
           </div>
         </div>
@@ -101,231 +217,113 @@ export default function AuditoriaPage() {
     );
   }
 
-  const logsFiltrados = logs.filter((log) => {
-    const matchTexto =
-      log.usuario.toLowerCase().includes(busca.toLowerCase()) ||
-      log.acao.toLowerCase().includes(busca.toLowerCase()) ||
-      log.entidade.toLowerCase().includes(busca.toLowerCase()) ||
-      log.detalhes.toLowerCase().includes(busca.toLowerCase()) ||
-      log.ip.includes(busca) ||
-      (log.registroId && log.registroId.toLowerCase().includes(busca.toLowerCase()));
-
-    const matchAcao = filtroAcao === "TODAS" || log.acao === filtroAcao;
-    const matchPerfil = filtroPerfil === "TODOS" || log.perfil === filtroPerfil;
-
-    return matchTexto && matchAcao && matchPerfil;
-  });
-
-  const getAcaoBadge = (acao: string) => {
-    if (acao === "CONGELAR_COMPETENCIA") {
-      return "bg-indigo-50 text-indigo-900 border-indigo-300 font-bold";
-    }
-    if (acao === "HOMOLOGAR_MEDICAO_PETROBRAS") {
-      return "bg-emerald-100 text-emerald-900 border-emerald-400 font-bold";
-    }
-    if (acao === "REABRIR_COMPETENCIA") {
-      return "bg-rose-50 text-rose-900 border-rose-300 font-bold";
-    }
-    if (acao.startsWith("CRIAR")) {
-      return "bg-emerald-50 text-emerald-800 border-emerald-200";
-    }
-    if (acao.startsWith("ALTERAR") || acao.includes("ATUALIZAR")) {
-      return "bg-blue-50 text-blue-800 border-blue-200 font-semibold";
-    }
-    if (acao.startsWith("EXCLUIR") || acao.startsWith("CANCELAR")) {
-      return "bg-rose-50 text-rose-800 border-rose-200 font-semibold";
-    }
-    if (acao.includes("APONTAMENTO")) {
-      return "bg-amber-50 text-amber-800 border-amber-200";
-    }
-    return "bg-slate-100 text-slate-700 border-slate-200";
-  };
-
-  const formatarJson = (str?: string | null) => {
-    if (!str) return "—";
-    try {
-      const obj = JSON.parse(str);
-      return JSON.stringify(obj, null, 2);
-    } catch {
-      return str;
-    }
-  };
-
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Cabeçalho */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
+    <div className="space-y-4 max-w-7xl mx-auto">
+      {/* Cabeçalho Limpo */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/80">
         <div>
-          <div className="flex items-center gap-2 text-premier-900 font-bold text-xl md:text-2xl">
-            <History className="w-6 h-6 text-blue-700" />
-            <h1>Trilha de Auditoria Geral</h1>
-            <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded border border-blue-200">
-              Exclusivo Administrador Premier
+          <div className="flex items-center gap-2">
+            <History className="w-5 h-5 text-blue-600" />
+            <h1 className="text-lg font-bold text-slate-800">Trilha de Auditoria</h1>
+            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full font-medium">
+              {logsFiltrados.length} {logsFiltrados.length === 1 ? "registro" : "registros"}
             </span>
           </div>
-          <p className="text-xs md:text-sm text-slate-600 mt-1">
-            Registro cronológico imutável de quem criou, alterou ou excluiu posição, titular, escala,
-            cobertura e ausência, com data/hora e valores anteriores e novos.
+          <p className="text-xs text-slate-500 mt-0.5">
+            Histórico cronológico de ações, alterações de escala e registros realizados no sistema.
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href="/relatorios"
-            className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold px-3 py-2 rounded border border-slate-300 transition-colors"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-slate-600" />
-            <span>Relatórios Oficiais</span>
-          </Link>
-          <Link
-            href="/mapa-ocupacao"
-            className="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold px-3 py-2 rounded border border-slate-300 transition-colors"
-          >
-            <span>Mapa de Cobertura</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
       </div>
 
-      {/* Banner de Garantia Técnica */}
-      <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2.5 text-slate-700">
-          <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-          <div>
-            <span className="font-bold text-slate-900">Princípio da Rastreabilidade e Responsabilidade (LGPD, Art. 6º, X):</span>{" "}
-            Cada registro contém o carimbo de data/hora UTC-3, identificação do usuário autenticado, endereço IP de origem, ação executada e diff estruturado do valor anterior e novo.
-          </div>
-        </div>
-        <div className="shrink-0 flex items-center gap-1 text-[11px] font-mono text-slate-500 bg-white px-2 py-1 rounded border border-slate-200">
-          <Database className="w-3 h-3 text-blue-600" />
-          <span>Tabela log_auditoria</span>
-        </div>
-      </div>
-
-      {/* Métricas */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>TOTAL DE EVENTOS</span>
-            <History className="w-4 h-4 text-slate-600" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-slate-900 tabular-nums">{logs.length}</div>
-          <div className="mt-1 text-[11px] text-slate-500">Eventos auditados</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>ALTERAÇÕES DE ESCALA</span>
-            <FileDiff className="w-4 h-4 text-blue-600" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-blue-700 tabular-nums">
-            {logs.filter((l) => l.acao.includes("ESCALA")).length}
-          </div>
-          <div className="mt-1 text-[11px] text-slate-500">Ciclos e horários atualizados</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>COBERTURAS E AUSÊNCIAS</span>
-            <UserCheck className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-emerald-700 tabular-nums">
-            {logs.filter((l) => l.acao.includes("COBERTURA") || l.acao.includes("AUSENCIA")).length}
-          </div>
-          <div className="mt-1 text-[11px] text-slate-500">Operações rastreadas</div>
-        </div>
-
-        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>INTEGRIDADE EM REPOUSO</span>
-            <Server className="w-4 h-4 text-purple-600" />
-          </div>
-          <div className="mt-2 text-sm font-bold text-slate-800">Neon sa-east-1</div>
-          <div className="mt-1 text-[11px] text-slate-500">São Paulo, Brasil</div>
-        </div>
-      </div>
-
-      {/* Barra de Filtros */}
-      <div className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2 flex-1 min-w-[240px] border border-slate-300 rounded px-2.5 py-1.5 bg-slate-50">
-          <Search className="w-4 h-4 text-slate-400" />
+      {/* Barra de Filtros Compacta */}
+      <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+        {/* Campo de Busca */}
+        <div className="relative flex-1 min-w-[240px]">
+          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
           <input
             type="text"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Filtrar por usuário, ação, entidade, registro ou IP..."
-            className="bg-transparent border-none outline-none w-full text-slate-800 placeholder:text-slate-400"
+            placeholder="Buscar por usuário, ação, detalhe ou código..."
+            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
           />
           {busca && (
-            <button onClick={() => setBusca("")} className="text-slate-400 hover:text-slate-600">
-              <X className="w-3.5 h-3.5" />
+            <button
+              onClick={() => setBusca("")}
+              className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              title="Limpar busca"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-600">Ação:</span>
-            <select
-              value={filtroAcao}
-              onChange={(e) => setFiltroAcao(e.target.value)}
-              className="border border-slate-300 rounded px-2 py-1.5 bg-white text-slate-800 text-xs font-medium outline-none"
-            >
-              <option value="TODAS">Todas as Ações</option>
-              <option value="ALTERAR_ESCALA">ALTERAR_ESCALA</option>
-              <option value="ALTERAR_TITULAR">ALTERAR_TITULAR</option>
-              <option value="CRIAR_POSICAO">CRIAR_POSICAO</option>
-              <option value="ALTERAR_POSICAO">ALTERAR_POSICAO</option>
-              <option value="EXCLUIR_POSICAO">EXCLUIR_POSICAO</option>
-              <option value="CRIAR_COBERTURA">CRIAR_COBERTURA</option>
-              <option value="ALTERAR_COBERTURA">ALTERAR_COBERTURA</option>
-              <option value="EXCLUIR_COBERTURA">EXCLUIR_COBERTURA</option>
-              <option value="CRIAR_AUSENCIA">CRIAR_AUSENCIA</option>
-              <option value="ALTERAR_AUSENCIA">ALTERAR_AUSENCIA</option>
-              <option value="EXCLUIR_AUSENCIA">EXCLUIR_AUSENCIA</option>
-              <option value="CONGELAR_COMPETENCIA">CONGELAR_COMPETENCIA</option>
-              <option value="HOMOLOGAR_MEDICAO_PETROBRAS">HOMOLOGAR_MEDICAO_PETROBRAS</option>
-            </select>
-          </div>
+        {/* Filtros em linha */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Filtro por Ação */}
+          <select
+            value={filtroAcao}
+            onChange={(e) => setFiltroAcao(e.target.value)}
+            className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-600"
+          >
+            <option value="TODAS">Todas as Ações</option>
+            {acoesDisponiveis.map((a) => (
+              <option key={a} value={a}>
+                {rotuloAcao(a)}
+              </option>
+            ))}
+          </select>
 
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-slate-600">Perfil:</span>
-            <select
-              value={filtroPerfil}
-              onChange={(e) => setFiltroPerfil(e.target.value)}
-              className="border border-slate-300 rounded px-2 py-1.5 bg-white text-slate-800 text-xs font-medium outline-none"
+          {/* Filtro por Perfil */}
+          <select
+            value={filtroPerfil}
+            onChange={(e) => setFiltroPerfil(e.target.value)}
+            className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-700 font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-600"
+          >
+            <option value="TODOS">Todos os Perfis</option>
+            {perfisDisponiveis.map((p) => (
+              <option key={p} value={p}>
+                {rotuloPerfil(p)}
+              </option>
+            ))}
+          </select>
+
+          {/* Limpar filtros */}
+          {temFiltroAtivo && (
+            <button
+              onClick={() => {
+                setBusca("");
+                setFiltroAcao("TODAS");
+                setFiltroPerfil("TODOS");
+              }}
+              className="h-8 px-2.5 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+              title="Limpar todos os filtros"
             >
-              <option value="TODOS">Todos os Perfis</option>
-              <option value="PREMIER_ADMIN">PREMIER_ADMIN</option>
-              <option value="PREMIER_GESTOR">PREMIER_GESTOR</option>
-              <option value="PREMIER_SUPERVISOR">PREMIER_SUPERVISOR</option>
-              <option value="PETROBRAS_FISCAL">PETROBRAS_FISCAL</option>
-            </select>
-          </div>
+              <RotateCcw className="w-3 h-3" />
+              <span>Limpar</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Tabela de Logs */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+      {/* Tabela de Logs Essencial */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-700">
-                <th className="py-2.5 px-3 font-bold">Data e Hora (UTC-3)</th>
-                <th className="py-2.5 px-3 font-bold">Usuário / Ator</th>
-                <th className="py-2.5 px-3 font-bold">Perfil</th>
-                <th className="py-2.5 px-3 font-bold">Ação Executada</th>
-                <th className="py-2.5 px-3 font-bold">Entidade / Registro</th>
-                <th className="py-2.5 px-3 font-bold">Detalhes da Transação</th>
-                <th className="py-2.5 px-3 font-bold text-center">Valor Ant. / Novo</th>
-                <th className="py-2.5 px-3 font-bold text-center">IP</th>
+                <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Data / Hora</th>
+                <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Usuário</th>
+                <th className="py-2.5 px-4 font-semibold whitespace-nowrap">Ação Realizada</th>
+                <th className="py-2.5 px-4 font-semibold">Detalhes</th>
+                <th className="py-2.5 px-4 font-semibold text-center whitespace-nowrap">Alterações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+            <tbody className="divide-y divide-slate-100">
               {logsFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-500 font-sans text-xs">
-                    Nenhum registro de auditoria corresponde aos filtros informados.
+                  <td colSpan={5} className="py-12 text-center text-slate-400 text-xs">
+                    Nenhum registro encontrado para os filtros informados.
                   </td>
                 </tr>
               ) : (
@@ -333,57 +331,61 @@ export default function AuditoriaPage() {
                   const temDiff = Boolean(log.valorAnterior || log.valorNovo);
 
                   return (
-                    <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-3 text-slate-600 whitespace-nowrap">
-                        {log.timestamp}
+                    <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
+                      {/* Data / Hora */}
+                      <td className="py-3 px-4 text-slate-600 whitespace-nowrap font-mono text-[11px]">
+                        {formatarDataHora(log.timestamp)}
                       </td>
-                      <td className="py-3 px-3 font-sans font-semibold text-slate-900 whitespace-nowrap">
-                        {log.usuario}
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap">
+
+                      {/* Usuário e Perfil */}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <div className="font-semibold text-slate-800">{log.usuario}</div>
                         <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                            log.perfil.startsWith("PETROBRAS")
-                              ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                              : "bg-blue-50 text-blue-800 border-blue-300"
-                          }`}
+                          className={`inline-block mt-0.5 text-[10px] font-semibold px-1.5 py-0.2 rounded border ${badgePerfil(
+                            log.perfil
+                          )}`}
                         >
-                          {log.perfil}
+                          {rotuloPerfil(log.perfil)}
                         </span>
                       </td>
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${getAcaoBadge(log.acao)}`}>
-                          {log.acao}
+
+                      {/* Ação */}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span
+                          className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-md border ${badgeAcao(
+                            log.acao
+                          )}`}
+                        >
+                          {rotuloAcao(log.acao)}
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-slate-800 font-semibold whitespace-nowrap font-sans">
-                        <div>{log.entidade}</div>
-                        {log.registroId && (
-                          <span className="text-[10px] text-slate-400 font-mono block">
-                            ID: {log.registroId}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 font-sans text-slate-700 max-w-sm">
+
+                      {/* Detalhes */}
+                      <td className="py-3 px-4 text-slate-700 max-w-md">
                         <div className="line-clamp-2 leading-relaxed" title={log.detalhes}>
                           {log.detalhes}
                         </div>
+                        {log.entidade && (
+                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                            {log.entidade} {log.registroId ? `• ${log.registroId}` : ""}
+                          </span>
+                        )}
                       </td>
-                      <td className="py-3 px-3 text-center whitespace-nowrap">
+
+                      {/* Botão de Ver Alterações */}
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
                         {temDiff ? (
                           <button
                             onClick={() => setLogModal(log)}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-sans font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 rounded border border-blue-200 transition-colors"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200/70 transition-colors cursor-pointer"
+                            title="Visualizar valores anteriores e novos"
                           >
-                            <Eye className="w-3 h-3" />
-                            Ver Diff
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Ver Alterações</span>
                           </button>
                         ) : (
-                          <span className="text-slate-400 font-sans text-[11px]">—</span>
+                          <span className="text-slate-300 text-xs font-mono">—</span>
                         )}
-                      </td>
-                      <td className="py-3 px-3 text-center text-slate-500 whitespace-nowrap">
-                        {log.ip}
                       </td>
                     </tr>
                   );
@@ -394,82 +396,95 @@ export default function AuditoriaPage() {
         </div>
       </div>
 
-      {/* Modal de Detalhamento / Diff */}
+      {/* Modal de Detalhes / Alterações */}
       {logModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-300 overflow-hidden">
-            <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full border border-slate-200 overflow-hidden space-y-0">
+            {/* Cabeçalho do Modal */}
+            <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FileDiff className="w-5 h-5 text-blue-400" />
-                <h3 className="text-sm font-bold">
-                  Trilha de Auditoria — Rastreabilidade de Alteração
+                <FileDiff className="w-4 h-4 text-blue-600" />
+                <h3 className="text-sm font-bold text-slate-800">
+                  {rotuloAcao(logModal.acao)}
                 </h3>
               </div>
               <button
                 onClick={() => setLogModal(null)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
-              <div className="grid grid-cols-2 gap-4 pb-3 border-b border-slate-200">
+            {/* Conteúdo do Modal */}
+            <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
+              {/* Metadados rápidos */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-slate-50/80 rounded-xl border border-slate-200 text-slate-600">
                 <div>
-                  <span className="text-slate-500 font-medium block">Ação:</span>
-                  <span className="font-bold text-slate-900">{logModal.acao}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 font-medium block">Data e Hora:</span>
-                  <span className="font-mono text-slate-800">{logModal.timestamp}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 font-medium block">Usuário Responsável:</span>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Usuário</span>
                   <span className="font-semibold text-slate-800">{logModal.usuario}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 font-medium block">Entidade / Registro:</span>
-                  <span className="font-mono text-slate-800">{logModal.entidade}</span>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Perfil</span>
+                  <span className="font-medium text-slate-700">{rotuloPerfil(logModal.perfil)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Data / Hora</span>
+                  <span className="font-mono text-slate-700">{formatarDataHora(logModal.timestamp)}</span>
                 </div>
               </div>
 
+              {/* Descrição */}
               <div>
-                <span className="text-slate-500 font-medium block mb-1">Descrição da Operação:</span>
-                <p className="text-slate-800 bg-slate-50 p-2.5 rounded border border-slate-200 leading-relaxed font-sans">
+                <span className="text-[11px] font-semibold text-slate-700 block mb-1">
+                  Descrição da Ação:
+                </span>
+                <p className="text-slate-700 bg-white p-3 rounded-xl border border-slate-200 leading-relaxed">
                   {logModal.detalhes}
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+              {/* Comparativo de Valores Anterior e Novo */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                 <div>
-                  <div className="font-bold text-rose-800 mb-1 flex items-center gap-1.5">
+                  <div className="font-semibold text-rose-800 mb-1 flex items-center gap-1.5 text-xs">
                     <span className="w-2 h-2 rounded-full bg-rose-500" />
                     Valor Anterior:
                   </div>
-                  <pre className="bg-rose-50/50 text-rose-950 p-3 rounded border border-rose-200 font-mono text-[11px] overflow-x-auto whitespace-pre-wrap max-h-60">
+                  <pre className="bg-rose-50/40 text-rose-950 p-3 rounded-xl border border-rose-200 font-mono text-[11px] overflow-x-auto whitespace-pre-wrap max-h-56 leading-relaxed">
                     {formatarJson(logModal.valorAnterior)}
                   </pre>
                 </div>
 
                 <div>
-                  <div className="font-bold text-emerald-800 mb-1 flex items-center gap-1.5">
+                  <div className="font-semibold text-emerald-800 mb-1 flex items-center gap-1.5 text-xs">
                     <span className="w-2 h-2 rounded-full bg-emerald-500" />
                     Valor Novo / Atual:
                   </div>
-                  <pre className="bg-emerald-50/50 text-emerald-950 p-3 rounded border border-emerald-200 font-mono text-[11px] overflow-x-auto whitespace-pre-wrap max-h-60">
+                  <pre className="bg-emerald-50/40 text-emerald-950 p-3 rounded-xl border border-emerald-200 font-mono text-[11px] overflow-x-auto whitespace-pre-wrap max-h-56 leading-relaxed">
                     {formatarJson(logModal.valorNovo)}
                   </pre>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-200 flex justify-end">
-                <button
-                  onClick={() => setLogModal(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded font-medium text-xs transition-colors"
-                >
-                  Fechar Visualização
-                </button>
-              </div>
+              {/* Informações técnicas discretas de rodapé */}
+              {(logModal.ip || logModal.registroId) && (
+                <div className="pt-2 text-[11px] text-slate-400 font-mono flex items-center justify-between border-t border-slate-100">
+                  {logModal.registroId && <span>Registro ID: {logModal.registroId}</span>}
+                  {logModal.ip && <span>IP de Origem: {logModal.ip}</span>}
+                </div>
+              )}
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div className="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setLogModal(null)}
+                className="h-8 px-4 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
