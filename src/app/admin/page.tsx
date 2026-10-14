@@ -87,6 +87,44 @@ const SESSAO_PADRAO_DEV: UsuarioSessao = {
   cargo: "Administrador de Sistemas",
 };
 
+
+function redimensionarImagem(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const src = e.target?.result as string;
+      if (!src) {
+        resolve("");
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_DIM = 256;
+        const width = img.width;
+        const height = img.height;
+        const minDim = Math.min(width, height);
+        const startX = (width - minDim) / 2;
+        const startY = (height - minDim) / 2;
+
+        canvas.width = MAX_DIM;
+        canvas.height = MAX_DIM;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(src);
+          return;
+        }
+        ctx.drawImage(img, startX, startY, minDim, minDim, 0, 0, MAX_DIM, MAX_DIM);
+        resolve(canvas.toDataURL("image/jpeg", 0.88));
+      };
+      img.onerror = () => reject(new Error("Erro ao carregar imagem"));
+      img.src = src;
+    };
+    reader.onerror = () => reject(new Error("Erro ao ler arquivo"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function AdminPage() {
   const [abaAtiva, setAbaAtiva] = useState<AbaAdmin>("USUARIOS");
   const [sessao, setSessao] = useState<UsuarioSessao | null>(null);
@@ -147,11 +185,24 @@ export default function AdminPage() {
     const executorSessao = sessao || SESSAO_PADRAO_DEV;
 
     try {
-      atualizarAvatarUsuario(modalFotoUsuario.id, fotoUsuarioPreview || undefined, executorSessao);
+      const novaFoto = fotoUsuarioPreview ? fotoUsuarioPreview.trim() : "";
+      atualizarAvatarUsuario(modalFotoUsuario.id, novaFoto || undefined, executorSessao);
       setUsuarios(carregarUsuarios());
-      if (sessao?.id === modalFotoUsuario.id) {
-        setSessao({ ...sessao, avatarUrl: fotoUsuarioPreview || "/marca/premier-simbolo.png" });
+
+      if (typeof window !== "undefined") {
+        if (sessao?.id === modalFotoUsuario.id || modalFotoUsuario.perfil === "PREMIER_ADMIN") {
+          if (novaFoto) {
+            localStorage.setItem("sgp_user_avatar", novaFoto);
+          } else {
+            localStorage.removeItem("sgp_user_avatar");
+          }
+        }
+      }
+
+      if (sessao?.id === modalFotoUsuario.id || modalFotoUsuario.perfil === "PREMIER_ADMIN") {
+        setSessao({ ...(sessao || SESSAO_PADRAO_DEV), avatarUrl: novaFoto || "/marca/premier-simbolo.png" });
         window.dispatchEvent(new CustomEvent("sgp-sessao-alterada"));
+        window.dispatchEvent(new CustomEvent("sgp-dados-atualizados"));
       }
       setModalFotoUsuario(null);
       exibirAlerta(`Foto de perfil de ${modalFotoUsuario.nome} atualizada com sucesso!`);
@@ -1416,20 +1467,15 @@ export default function AdminPage() {
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/webp,image/jpg"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      if (file.size > 2 * 1024 * 1024) {
-                        exibirAlerta("A imagem deve ter no máximo 2MB.", true);
-                        return;
+                      try {
+                        const otimizada = await redimensionarImagem(file);
+                        setFotoUsuarioPreview(otimizada);
+                      } catch {
+                        exibirAlerta("Erro ao carregar imagem.", true);
                       }
-                      const reader = new FileReader();
-                      reader.onloadend = () => {
-                        if (typeof reader.result === "string") {
-                          setFotoUsuarioPreview(reader.result);
-                        }
-                      };
-                      reader.readAsDataURL(file);
                     }}
                     className="hidden"
                   />

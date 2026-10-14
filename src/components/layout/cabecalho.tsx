@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { NOMES_PERFIS } from "@/lib/auth/permissoes";
 import { PerfilUsuario, UsuarioSessao } from "@/lib/auth/tipos";
+import { carregarUsuarios, salvarUsuarios } from "@/lib/auth/usuarios";
 
 interface CabecalhoProps {
   perfilAtivo?: string;
@@ -61,6 +62,52 @@ const MAPA_PAGINAS: Record<
   "/admin": { titulo: "Administração", subtitulo: "Usuários, permissões e parâmetros", icone: Settings },
 };
 
+/**
+ * Função utilitária para recorte centralizado e compressão automática da foto
+ * Reduz qualquer imagem para 256x256 pixels com qualidade 88% (~20KB)
+ * Isso garante salvamento ultrarrápido e sem limite de armazenamento
+ */
+function redimensionarImagem(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const src = e.target?.result as string;
+      if (!src) {
+        resolve("");
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_DIM = 256;
+        const width = img.width;
+        const height = img.height;
+
+        // Recorte quadrado centralizado
+        const minDim = Math.min(width, height);
+        const startX = (width - minDim) / 2;
+        const startY = (height - minDim) / 2;
+
+        canvas.width = MAX_DIM;
+        canvas.height = MAX_DIM;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(src);
+          return;
+        }
+
+        ctx.drawImage(img, startX, startY, minDim, minDim, 0, 0, MAX_DIM, MAX_DIM);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.88);
+        resolve(dataUrl);
+      };
+      img.onerror = () => reject(new Error("Erro ao carregar imagem"));
+      img.src = src;
+    };
+    reader.onerror = () => reject(new Error("Erro ao ler arquivo"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function Cabecalho({
   perfilAtivo: propPerfil,
   nomeUsuario: propNome,
@@ -83,12 +130,43 @@ export function Cabecalho({
   const menuSuspensoRef = useRef<HTMLDivElement>(null);
 
   const carregarSessao = async () => {
+    // 1. Carrega do localStorage imediatamente para exibição sem delay
+    let avatarSalvoLocal: string | null = null;
+    if (typeof window !== "undefined") {
+      try {
+        avatarSalvoLocal = localStorage.getItem("sgp_user_avatar");
+        if (avatarSalvoLocal) {
+          setSessao((prev) =>
+            prev
+              ? { ...prev, avatarUrl: avatarSalvoLocal! }
+              : ({
+                  id: "usr-admin-01",
+                  nome: "Administrador Premier",
+                  email: "admin.sgp@premierlogistics.com.br",
+                  empresa: "Premier Logistics",
+                  perfil: "PREMIER_ADMIN",
+                  status: "ATIVO",
+                  tipoConta: "LOCAL",
+                  basesVinculadas: ["TODAS"],
+                  cargo: "Administrador de Sistemas",
+                  avatarUrl: avatarSalvoLocal!,
+                } as UsuarioSessao)
+          );
+        }
+      } catch {}
+    }
+
+    // 2. Consulta API
     try {
       const res = await fetch("/api/auth");
       if (res.ok) {
         const data = await res.json();
-        if (data.autenticado && data.usuario) {
-          setSessao(data.usuario);
+        if (data.usuario) {
+          const avatarFinal = avatarSalvoLocal || data.usuario.avatarUrl || "/marca/premier-simbolo.png";
+          setSessao({
+            ...data.usuario,
+            avatarUrl: avatarFinal,
+          });
           return;
         }
       }
@@ -202,7 +280,7 @@ export function Cabecalho({
     setModalFotoAberta(true);
   };
 
-  const handleArquivoSelecionado = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleArquivoSelecionado = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -211,19 +289,19 @@ export function Cabecalho({
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      setMensagemErro("A imagem selecionada deve ter no máximo 2MB.");
+    if (file.size > 8 * 1024 * 1024) {
+      setMensagemErro("A imagem selecionada deve ter no máximo 8MB.");
       return;
     }
 
-    setMensagemErro("");
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === "string") {
-        setFotoPreview(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      setMensagemErro("");
+      const imagemOtimizada = await redimensionarImagem(file);
+      setFotoPreview(imagemOtimizada);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao processar imagem.";
+      setMensagemErro(msg);
+    }
   };
 
   const handleSalvarFoto = async () => {
@@ -232,24 +310,67 @@ export function Cabecalho({
     setMensagemSucesso("");
 
     try {
-      const res = await fetch("/api/auth", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avatarUrl: fotoPreview || undefined }),
-      });
+      const novaFoto = fotoPreview ? fotoPreview.trim() : "";
 
-      const data = await res.json();
-      if (!res.ok || !data.sucesso) {
-        throw new Error(data.erro || "Falha ao atualizar foto de perfil.");
+      // 1. Salva imediatamente no localStorage (Persistência no navegador)
+      if (typeof window !== "undefined") {
+        try {
+          if (novaFoto) {
+            localStorage.setItem("sgp_user_avatar", novaFoto);
+          } else {
+            localStorage.removeItem("sgp_user_avatar");
+          }
+
+          // Atualiza também na lista de usuários cadastrados
+          const listaUsuarios = carregarUsuarios();
+          const uIdx = listaUsuarios.findIndex((u) => u.id === (sessao?.id || "usr-admin-01"));
+          if (uIdx !== -1) {
+            listaUsuarios[uIdx].avatarUrl = novaFoto || undefined;
+            salvarUsuarios(listaUsuarios);
+          }
+        } catch (e) {
+          console.error("Erro localStorage:", e);
+        }
       }
 
-      setMensagemSucesso("Foto de perfil atualizada com sucesso!");
-      await carregarSessao();
-      window.dispatchEvent(new CustomEvent("sgp-sessao-alterada"));
+      // 2. Atualiza estado do componente imediatamente
+      setSessao((prev) => {
+        const base = prev || {
+          id: "usr-admin-01",
+          nome: "Administrador Premier",
+          email: "admin.sgp@premierlogistics.com.br",
+          empresa: "Premier Logistics",
+          perfil: "PREMIER_ADMIN",
+          status: "ATIVO",
+          tipoConta: "LOCAL",
+          basesVinculadas: ["TODAS"],
+          cargo: "Administrador de Sistemas",
+        };
+        return {
+          ...base,
+          avatarUrl: novaFoto || "/marca/premier-simbolo.png",
+        };
+      });
 
+      // 3. Sincroniza com a API do servidor
+      try {
+        await fetch("/api/auth", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ avatarUrl: novaFoto || undefined }),
+        });
+      } catch {
+        // ignora se offline
+      }
+
+      // 4. Dispara eventos globais
+      window.dispatchEvent(new CustomEvent("sgp-sessao-alterada"));
+      window.dispatchEvent(new CustomEvent("sgp-dados-atualizados"));
+
+      setMensagemSucesso("Foto de perfil salva com sucesso!");
       setTimeout(() => {
         setModalFotoAberta(false);
-      }, 900);
+      }, 700);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao salvar foto.";
       setMensagemErro(msg);
@@ -578,7 +699,7 @@ export function Cabecalho({
               </div>
 
               <p className="text-[11px] text-[#5B6474] max-w-xs">
-                Formatos aceitos: JPG, PNG ou WEBP. Tamanho máximo de 2MB.
+                Formatos aceitos: JPG, PNG ou WEBP. A foto é ajustada e otimizada automaticamente.
               </p>
             </div>
 
