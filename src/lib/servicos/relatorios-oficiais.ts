@@ -1202,7 +1202,7 @@ export function exportarRelatorioParaXlsx(
 
     // Cabeçalho Corporativo Premier Logistics
     const linhas: any[] = [
-      ["PREMIER LOGISTICS LTDA. — SISTEMA DE GESTÃO DE POSTOS (SGP)"],
+      ["CONTRATO PETROBRAS", dados.cabecalho.contrato, "", "PREMIER LOGISTICS LTDA. — SISTEMA DE GESTÃO DE POSTOS (SGP)"],
       ["CONTRATO PETROBRAS:", dados.cabecalho.contrato, "", "CLIENTE:", CONTRATO_CLIENTE],
       ["CONTRATADA:", CONTRATADA_EMPRESA, "", "SEGURANÇA:", "Emissão Oficial / LGPD Ativa"],
       ["RELATÓRIO:", "OCUPAÇÃO EFETIVA POR POSTO E POSIÇÃO"],
@@ -1210,18 +1210,18 @@ export function exportarRelatorioParaXlsx(
       ["EMISSOR:", `${dados.cabecalho.usuarioEmissor} (${dados.cabecalho.perfilEmissor})`, "", "IMÓVEL / BASE:", dados.cabecalho.unidadeSelecionada || "Todos os Imóveis"],
       [],
       [
-        "IMÓVEL / BASE",
-        "POSTO",
+        "UNIDADE / BASE",
+        "CÓDIGO POSTO",
         "FUNÇÃO OPERACIONAL",
         "POSIÇÃO (SGP)",
         "TITULAR (MATRÍCULA)",
         "TITULAR (NOME)",
-        "DIAS EXIGÍVEIS",
-        "DIAS ATENDIDOS",
         "DIAS P (PRESENTE)",
         "DIAS C (COBERTO)",
         "DIAS D (DESCOBERTO)",
         "DIAS N (FOLGA)",
+        "TOTAL EXIGÍVEL",
+        "TOTAL ATENDIDO",
         "% OCUPAÇÃO",
         "HORÁRIO (RM)",
         "SEÇÃO (RM)",
@@ -1237,12 +1237,12 @@ export function exportarRelatorioParaXlsx(
         it.posicaoCodigoVisual,
         it.titularMatricula,
         it.titularNome,
-        it.diasExigiveis,
-        it.diasAtendidos,
         it.diasP,
         it.diasC,
         it.diasD,
         it.diasN,
+        it.diasExigiveis,
+        it.diasAtendidos,
         `${it.percentualOcupacao.toFixed(1)}%`,
         it.horarioFormatado || "—",
         it.secaoFormatada || "—",
@@ -1258,12 +1258,12 @@ export function exportarRelatorioParaXlsx(
       `${dados.totais.totalPosicoes} posições`,
       "",
       "",
-      dados.totais.totalExigivel,
-      dados.totais.totalAtendido,
       dados.totais.totalDiasP,
       dados.totais.totalDiasC,
       dados.totais.totalDiasD,
       dados.totais.totalDiasN,
+      dados.totais.totalExigivel,
+      dados.totais.totalAtendido,
       `${dados.totais.percentualGeral.toFixed(1)}%`,
       "",
       "",
@@ -1550,6 +1550,67 @@ export function exportarRelatorioParaXlsx(
       { wch: 18 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, "Quadro_Feristas");
+  } else if (tipoRelatorio === "homologacao") {
+    const dados = gerarComparativoHomologacaoMC(filtros.periodo || "2026-09");
+
+    const linhas: any[] = [
+      ["CONTRATO PETROBRAS", CONTRATO_NUMERO],
+      ["MODO HOMOLOGAÇÃO", "COMPARATIVO SGP × MEMÓRIA DE CÁLCULO (MC)"],
+      ["COMPETÊNCIA", dados.competencia],
+      ["TAXA DE CONFORMIDADE", `${dados.taxaConformidade}%`],
+      ["POSIÇÕES CONFORMES", `${dados.totalPosicoesConformes} de ${dados.totalPosicoesApuradas}`],
+      ["DIVERGÊNCIAS", dados.totalDivergencias],
+      ["AVISO", "Faturamento e medição permanecem fora do escopo. Módulo restrito à conferência."],
+      [],
+      [
+        "POSTO",
+        "FUNÇÃO",
+        "POSIÇÃO",
+        "TITULAR",
+        "SGP (DIAS P)",
+        "SGP (DIAS C)",
+        "SGP (DIAS D)",
+        "SGP ATENDIDO",
+        "MC (DIAS P)",
+        "MC ATENDIDO",
+        "STATUS CONFORMIDADE",
+        "DETALHE DIVERGÊNCIA",
+      ],
+    ];
+
+    dados.itens.forEach((it) => {
+      linhas.push([
+        it.postoCodigo,
+        it.postoFuncao,
+        it.posicaoId,
+        it.titular,
+        it.sgpDiasP,
+        it.sgpDiasC,
+        it.sgpDiasD,
+        it.sgpTotalAtendido,
+        it.mcDiasP,
+        it.mcTotalAtendido,
+        it.divergente ? "DIVERGENTE" : "CONFORME",
+        it.tipoDivergencia,
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(linhas);
+    ws["!cols"] = [
+      { wch: 18 },
+      { wch: 28 },
+      { wch: 18 },
+      { wch: 28 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 18 },
+      { wch: 35 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, "Homologacao_SGP_MC");
   }
 
   const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });

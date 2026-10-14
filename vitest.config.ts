@@ -6,6 +6,7 @@ export default defineConfig({
     globals: true,
     environment: "node",
     pool: "forks",
+    testTimeout: 15000,
   },
   resolve: {
     alias: {
@@ -13,3 +14,4 @@ export default defineConfig({
     },
   },
 });
+

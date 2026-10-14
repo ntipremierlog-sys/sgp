@@ -25,6 +25,7 @@ export const USUARIOS_PADRAO: UsuarioCadastro[] = [
     atualizadoEm: "2026-09-17T10:15:00.000Z",
     autorizadoPor: "Diretoria de Governança Premier",
     totpAtivo: true,
+    avatarUrl: "/marca/premier-simbolo.png",
   },
 ];
 
@@ -220,6 +221,43 @@ export function criarUsuario(
   );
 
   return novoUsuario;
+}
+
+/**
+ * Atualização de Foto / Logotipo de Usuário
+ */
+export function atualizarAvatarUsuario(
+  usuarioId: string,
+  avatarUrl: string | undefined,
+  executor: UsuarioSessao
+): UsuarioCadastro {
+  const usuarios = carregarUsuarios();
+  const index = usuarios.findIndex((u) => u.id === usuarioId);
+  if (index === -1) {
+    throw new Error("Usuário não encontrado.");
+  }
+
+  const usuarioAnterior = usuarios[index];
+  const atualizado: UsuarioCadastro = {
+    ...usuarioAnterior,
+    avatarUrl,
+    atualizadoEm: new Date().toISOString(),
+  };
+
+  usuarios[index] = atualizado;
+  salvarUsuarios([...usuarios]);
+
+  registrarLogAuditoriaAdmin(
+    executor,
+    "ATUALIZAR_AVATAR",
+    "USUARIO",
+    usuarioId,
+    `Atualização de foto de perfil do usuário ${atualizado.nome}`,
+    usuarioAnterior.avatarUrl ? "Foto personalizada" : "Logotipo Premier",
+    avatarUrl ? "Nova foto personalizada" : "Logotipo Premier"
+  );
+
+  return atualizado;
 }
 
 /**

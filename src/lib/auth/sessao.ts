@@ -17,6 +17,7 @@ export const SESSAO_PADRAO_DEV: UsuarioSessao = {
   basesVinculadas: ["TODAS"],
   cargo: "Administrador de Sistemas",
   ultimoAcesso: "2026-09-17 10:15:00",
+  avatarUrl: "/marca/premier-simbolo.png",
 };
 
 export const TIMEOUT_INATIVIDADE_MS = 30 * 60 * 1000; // 30 minutos de inatividade máxima
@@ -185,5 +186,6 @@ function mapearParaSessao(u: UsuarioCadastro): UsuarioSessao {
     basesVinculadas: u.basesVinculadas || ["TODAS"],
     cargo: u.cargo,
     ultimoAcesso: u.ultimoAcesso,
+    avatarUrl: u.avatarUrl || "/marca/premier-simbolo.png",
   };
 }

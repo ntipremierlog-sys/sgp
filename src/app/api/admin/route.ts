@@ -4,6 +4,7 @@ import { can } from "@/lib/auth/permissoes";
 import {
   carregarUsuarios,
   criarUsuario,
+  atualizarAvatarUsuario,
   atualizarPerfilUsuario,
   atualizarBasesUsuario,
   alterarStatusUsuario,
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
     const { acao } = body;
 
     if (acao === "CRIAR_USUARIO") {
-      const { nome, email, empresa, perfil, tipoConta, basesVinculadas, cargo } = body;
+      const { nome, email, empresa, perfil, tipoConta, basesVinculadas, cargo, avatarUrl } = body;
       const novo = criarUsuario(
         {
           nome,
@@ -90,10 +91,17 @@ export async function POST(request: NextRequest) {
           tipoConta: tipoConta || "LOCAL",
           basesVinculadas: basesVinculadas || ["TODAS"],
           cargo,
+          avatarUrl,
         },
         usuario
       );
       return NextResponse.json({ sucesso: true, usuario: novo });
+    }
+
+    if (acao === "ATUALIZAR_AVATAR") {
+      const { usuarioId, avatarUrl } = body;
+      const atualizado = atualizarAvatarUsuario(usuarioId, avatarUrl, usuario);
+      return NextResponse.json({ sucesso: true, usuario: atualizado });
     }
 
     if (acao === "EDITAR_PERFIL") {

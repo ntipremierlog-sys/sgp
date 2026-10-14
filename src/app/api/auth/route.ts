@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
   obterSessaoServidor,
@@ -11,12 +11,12 @@ import { autenticarComSenha, NOME_COOKIE_CRED_VAULT, obterVaultCredenciais } fro
 import { emitirTokenTrocaSenha, NOME_COOKIE_TROCA_SENHA, VALIDADE_TROCA_SENHA_S } from "@/lib/auth/token-troca-senha";
 import { registrarLog } from "@/lib/dados/estado-operacional";
 import { carregarArmazemPermissoes } from "@/lib/auth/permissoes-servidor";
+import { atualizarAvatarUsuario } from "@/lib/auth/usuarios";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET: retorna a sessão atual e RENOVA o timestamp do cookie (sessão deslizante).
- * Sem isso a sessão expirava 30 min após o login mesmo com o usuário ativo.
+ * GET: retorna a sessao atual e RENOVA o timestamp do cookie (sessao deslizante).
  */
 export async function GET() {
   try {
@@ -24,7 +24,6 @@ export async function GET() {
     const resposta = NextResponse.json({
       autenticado: !!usuario,
       usuario: usuario || null,
-      // Liberações por perfil × módulo definidas na Administração (aplicadas no cliente sobre a matriz padrão)
       permissoes: usuario ? carregarArmazemPermissoes().personalizacoes : {},
     });
     if (usuario) {
@@ -55,17 +54,17 @@ export async function POST(request: NextRequest) {
 
     if (!resultado.ok) {
       const mensagens: Record<typeof resultado.motivo, { texto: string; status: number }> = {
-        CREDENCIAIS_INVALIDAS: { texto: "E-mail ou senha inválidos.", status: 401 },
+        CREDENCIAIS_INVALIDAS: { texto: "E-mail ou senha invalidos.", status: 401 },
         BLOQUEADO: {
           texto: "Conta bloqueada temporariamente por excesso de tentativas. Tente novamente em alguns minutos ou redefina sua senha.",
           status: 423,
         },
-        CONTA_INATIVA: { texto: "Esta conta está inativa ou bloqueada pela administração.", status: 403 },
+        CONTA_INATIVA: { texto: "Esta conta esta inativa ou bloqueada pela administracao.", status: 403 },
         CONTA_SSO: { texto: "Esta conta utiliza login corporativo Microsoft Entra ID.", status: 400 },
       };
       const m = mensagens[resultado.motivo];
       try {
-        registrarLog("LOGIN_FALHA", "Sessão", `Tentativa de login recusada para ${email} (${resultado.motivo})`);
+        registrarLog("LOGIN_FALHA", "Sessao", `Tentativa de login recusada para ${email} (${resultado.motivo})`);
       } catch {
         // ignora
       }
@@ -77,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     const usuarioAlvo = resultado.usuario;
 
-    // Senha inicial/temporária: exige troca antes de abrir a sessão
+    // Senha inicial/temporaria: exige troca antes de abrir a sessao
     if (resultado.trocarSenha) {
       const resposta = NextResponse.json({ sucesso: true, trocarSenha: true, email: usuarioAlvo.email });
       resposta.cookies.set(NOME_COOKIE_TROCA_SENHA, emitirTokenTrocaSenha(usuarioAlvo.email), {
@@ -89,8 +88,8 @@ export async function POST(request: NextRequest) {
     try {
       registrarLog(
         "LOGIN",
-        "Sessão",
-        `Usuário "${usuarioAlvo.nome}" autenticado com perfil ${usuarioAlvo.perfil} via ${usuarioAlvo.tipoConta}`
+        "Sessao",
+        `Usuario "${usuarioAlvo.nome}" autenticado com perfil ${usuarioAlvo.perfil} via ${usuarioAlvo.tipoConta}`
       );
     } catch {
       // ignora
@@ -104,6 +103,7 @@ export async function POST(request: NextRequest) {
         email: usuarioAlvo.email,
         perfil: usuarioAlvo.perfil,
         basesVinculadas: usuarioAlvo.basesVinculadas,
+        avatarUrl: usuarioAlvo.avatarUrl || "/marca/premier-simbolo.png",
       },
     });
 
@@ -121,13 +121,40 @@ export async function POST(request: NextRequest) {
     }
     return resposta;
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Falha na autenticação";
+    const msg = err instanceof Error ? err.message : "Falha na autenticacao";
+    return NextResponse.json({ sucesso: false, erro: msg }, { status: 500 });
+  }
+}
+
+/** PATCH: Atualizar foto de perfil (avatar) do usuario logado */
+export async function PATCH(request: NextRequest) {
+  try {
+    const usuario = await obterSessaoServidor();
+    if (!usuario) {
+      return NextResponse.json({ sucesso: false, erro: "Nao autenticado." }, { status: 401 });
+    }
+    const body = await request.json().catch(() => ({}));
+    const avatarUrl = typeof body.avatarUrl === "string" ? body.avatarUrl : undefined;
+    const atualizado = atualizarAvatarUsuario(usuario.id, avatarUrl, usuario);
+    return NextResponse.json({
+      sucesso: true,
+      usuario: {
+        id: atualizado.id,
+        nome: atualizado.nome,
+        email: atualizado.email,
+        perfil: atualizado.perfil,
+        basesVinculadas: atualizado.basesVinculadas,
+        avatarUrl: atualizado.avatarUrl || "/marca/premier-simbolo.png",
+      },
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Erro ao atualizar foto de perfil";
     return NextResponse.json({ sucesso: false, erro: msg }, { status: 500 });
   }
 }
 
 export async function DELETE() {
-  const resposta = NextResponse.json({ sucesso: true, mensagem: "Sessão encerrada com sucesso." });
+  const resposta = NextResponse.json({ sucesso: true, mensagem: "Sessao encerrada com sucesso." });
   resposta.cookies.set(NOME_COOKIE_SESSAO, "", opcoesCookieSessao(0));
   resposta.cookies.set(NOME_COOKIE_TROCA_SENHA, "", opcoesCookieSessao(0));
   return resposta;

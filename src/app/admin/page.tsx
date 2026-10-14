@@ -25,12 +25,15 @@ import {
   Check,
   RotateCcw,
   Database,
+  Upload,
+  Camera,
 } from "lucide-react";
 import { AbaLimpezaDados } from "@/components/admin/aba-limpeza-dados";
 import { AbaPermissoes } from "@/components/admin/aba-permissoes";
 import {
   carregarUsuarios,
   criarUsuario,
+  atualizarAvatarUsuario,
   atualizarPerfilUsuario,
   atualizarBasesUsuario,
   alterarStatusUsuario,
@@ -114,6 +117,51 @@ export default function AdminPage() {
   const [formTipoConta, setFormTipoConta] = useState<TipoConta>("LOCAL");
   const [formBases, setFormBases] = useState<string[]>(["TODAS"]);
   const [formCargo, setFormCargo] = useState("");
+
+
+  // Modal Foto do Usuario (Administracao e Perfil)
+  const [modalFotoUsuario, setModalFotoUsuario] = useState<UsuarioCadastro | null>(null);
+  const [fotoUsuarioPreview, setFotoUsuarioPreview] = useState<string>("");
+  const [salvandoFotoUsuario, setSalvandoFotoUsuario] = useState(false);
+
+  const obterIniciais = (n: string) => {
+    const partes = (n || "AP").trim().split(/\s+/);
+    if (partes.length === 0 || !partes[0]) return "AP";
+    if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+    return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+  };
+
+  const usuarioLogadoCadastro = useMemo(() => {
+    return usuarios.find((u) => u.id === sessao?.id || u.email === sessao?.email) || usuarios[0];
+  }, [usuarios, sessao]);
+
+  const handleAbrirModalFotoUsuario = (u: UsuarioCadastro | null) => {
+    if (!u) return;
+    setModalFotoUsuario(u);
+    setFotoUsuarioPreview(u.avatarUrl && u.avatarUrl !== "/marca/premier-simbolo.png" ? u.avatarUrl : "");
+  };
+
+  const handleSalvarFotoUsuario = async () => {
+    if (!modalFotoUsuario) return;
+    setSalvandoFotoUsuario(true);
+    const executorSessao = sessao || SESSAO_PADRAO_DEV;
+
+    try {
+      atualizarAvatarUsuario(modalFotoUsuario.id, fotoUsuarioPreview || undefined, executorSessao);
+      setUsuarios(carregarUsuarios());
+      if (sessao?.id === modalFotoUsuario.id) {
+        setSessao({ ...sessao, avatarUrl: fotoUsuarioPreview || "/marca/premier-simbolo.png" });
+        window.dispatchEvent(new CustomEvent("sgp-sessao-alterada"));
+      }
+      setModalFotoUsuario(null);
+      exibirAlerta(`Foto de perfil de ${modalFotoUsuario.nome} atualizada com sucesso!`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao atualizar foto de perfil";
+      exibirAlerta(msg, true);
+    } finally {
+      setSalvandoFotoUsuario(false);
+    }
+  };
 
   // Form Edição de Perfil
   const [novoPerfilSelecionado, setNovoPerfilSelecionado] = useState<PerfilUsuario>("PREMIER_GESTOR");
@@ -509,10 +557,83 @@ export default function AdminPage() {
       </div>
 
       {/* ===================================================================== */}
-      {/* ABA 1: USUÁRIOS */}
-      {/* ===================================================================== */}
-      {abaAtiva === "USUARIOS" && (
-        <div className="space-y-4">
+      
+        {/* ABA 1: USUÁRIOS */}
+        {/* ===================================================================== */}
+        {abaAtiva === "USUARIOS" && (
+          <div className="space-y-4">
+            {/* Cartão de Destaque: Perfil & Foto do Usuário Logado */}
+            <div className="bg-gradient-to-r from-[#0F1E36] to-[#1A3258] text-white p-4 sm:p-5 rounded-2xl shadow-md border border-slate-700/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="relative group shrink-0">
+                  {usuarioLogadoCadastro?.avatarUrl && usuarioLogadoCadastro.avatarUrl !== "/marca/premier-simbolo.png" ? (
+                    <img
+                      src={usuarioLogadoCadastro.avatarUrl}
+                      alt={usuarioLogadoCadastro.nome}
+                      className="w-14 h-14 rounded-full object-cover border-2 border-emerald-400 shadow-md bg-white cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => handleAbrirModalFotoUsuario(usuarioLogadoCadastro)}
+                      title="Clique para alterar sua foto de perfil"
+                    />
+                  ) : (
+                    <div
+                      onClick={() => handleAbrirModalFotoUsuario(usuarioLogadoCadastro)}
+                      className="w-14 h-14 rounded-full bg-purple-600/90 text-white font-bold text-lg flex items-center justify-center border-2 border-purple-400 shadow-md cursor-pointer hover:bg-purple-700 transition-colors"
+                      title="Clique para adicionar foto de perfil"
+                    >
+                      {obterIniciais(usuarioLogadoCadastro?.nome || "Administrador Premier")}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleAbrirModalFotoUsuario(usuarioLogadoCadastro)}
+                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-xs transition-colors cursor-pointer"
+                    title="Adicionar ou alterar sua foto de perfil"
+                  >
+                    <Camera className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                      {usuarioLogadoCadastro?.nome || "Administrador Premier"}
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-200 border border-purple-400/30">
+                      Você
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 font-mono mt-0.5">
+                    {usuarioLogadoCadastro?.email || "admin.sgp@premierlogistics.com.br"}
+                  </p>
+                  <div className="flex items-center gap-3 text-xs text-slate-300 mt-1">
+                    <span className="flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{NOMES_PERFIS[usuarioLogadoCadastro?.perfil as PerfilUsuario] || usuarioLogadoCadastro?.perfil}</span>
+                    </span>
+                    <span>•</span>
+                    <span className="text-slate-400">
+                      {usuarioLogadoCadastro?.cargo || "Administrador de Sistemas"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-center">
+                <button
+                  type="button"
+                  onClick={() => handleAbrirModalFotoUsuario(usuarioLogadoCadastro)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-[#0F1E36] text-xs font-bold shadow-xs transition-all cursor-pointer"
+                >
+                  <Camera className="w-3.5 h-3.5 text-[#1F4FD1]" />
+                  <span>
+                    {usuarioLogadoCadastro?.avatarUrl && usuarioLogadoCadastro.avatarUrl !== "/marca/premier-simbolo.png"
+                      ? "Alterar Minha Foto"
+                      : "Adicionar Minha Foto"}
+                  </span>
+                </button>
+              </div>
+            </div>
+
           {/* Barra de Ações: Busca e Botão Novo Usuário */}
           <div className="bg-white p-3.5 rounded-xl border border-[#E3E6EB] shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="relative flex-1 max-w-md">
@@ -1240,6 +1361,113 @@ export default function AdminPage() {
                 className="h-8 px-4 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-2xs transition-colors cursor-pointer"
               >
                 Confirmar Exclusão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: ADICIONAR / ALTERAR FOTO DE PERFIL */}
+      {modalFotoUsuario && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-[#E3E6EB] space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E3E6EB] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1F4FD1] flex items-center justify-center">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#1A2230]">Foto de Perfil</h3>
+                  <p className="text-[11px] text-[#5B6474]">Usuário: {modalFotoUsuario.nome}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setModalFotoUsuario(null)}
+                className="text-[#98A2B3] hover:text-[#344054] p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-col items-center justify-center text-center space-y-4">
+              <div className="relative">
+                {fotoUsuarioPreview ? (
+                  <img
+                    src={fotoUsuarioPreview}
+                    alt="Prévia"
+                    className="w-24 h-24 rounded-full object-cover border-3 border-[#1F4FD1] shadow-md bg-white"
+                  />
+                ) : (
+                  <div className="w-24 h-24 rounded-full bg-purple-100 text-purple-800 border-2 border-purple-300 font-bold text-2xl flex items-center justify-center shadow-md">
+                    {obterIniciais(modalFotoUsuario.nome)}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-xs font-semibold text-[#1A2230]">{modalFotoUsuario.nome}</div>
+                <div className="text-[11px] text-[#5B6474] font-mono">{modalFotoUsuario.email}</div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#D0D5DD] bg-white hover:border-[#1F4FD1] hover:text-[#1F4FD1] text-xs font-semibold text-[#344054] shadow-2xs transition-colors cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Escolher Imagem</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/jpg"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 2 * 1024 * 1024) {
+                        exibirAlerta("A imagem deve ter no máximo 2MB.", true);
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        if (typeof reader.result === "string") {
+                          setFotoUsuarioPreview(reader.result);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                    className="hidden"
+                  />
+                </label>
+
+                {fotoUsuarioPreview && (
+                  <button
+                    type="button"
+                    onClick={() => setFotoUsuarioPreview("")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-medium transition-colors cursor-pointer"
+                    title="Remover foto personalizada"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remover</span>
+                  </button>
+                )}
+              </div>
+
+              <p className="text-[11px] text-[#5B6474]">
+                Formatos aceitos: JPG, PNG ou WEBP (máx. 2MB).
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-[#E3E6EB] flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setModalFotoUsuario(null)}
+                className="h-8 px-3.5 text-xs font-medium text-[#5B6474] hover:bg-[#F2F4F7] rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSalvarFotoUsuario}
+                disabled={salvandoFotoUsuario}
+                className="h-8 px-4 text-xs font-semibold text-white bg-[#1F4FD1] hover:bg-[#163CA8] rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {salvandoFotoUsuario ? "Salvando..." : "Salvar Foto"}
               </button>
             </div>
           </div>

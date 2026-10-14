@@ -46,6 +46,7 @@ export interface UsuarioSessao {
   basesVinculadas: string[]; // ["TODAS"] ou lista como ["UFN-III", "MACAE"]
   cargo?: string;
   ultimoAcesso?: string;
+  avatarUrl?: string;
 }
 
 export interface UsuarioCadastro extends UsuarioSessao {
