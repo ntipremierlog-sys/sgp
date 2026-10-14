@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Armazenamento das liberações de módulos por perfil (somente servidor).
  *
  * - Persistência: `.sgp-dados/permissoes.json` (fora do git) quando o sistema de arquivos

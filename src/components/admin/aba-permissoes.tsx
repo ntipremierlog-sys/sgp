@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, Download, Lock, RotateCcw, Save, Undo2, Info, ShieldCheck, Loader2 } from "lucide-react";
@@ -19,7 +19,7 @@ import {
 import { EVENTO_PERMISSOES_ATUALIZADAS } from "@/lib/auth/use-permissoes";
 import type { PerfilUsuario, Recurso } from "@/lib/auth/tipos";
 
-/** Ordem das linhas: mesma sequência do menu lateral. */
+/** Ordem das linhas: sequencia limpa alinhada ao menu, sem CONCILIACAO_SIFAC. */
 const ORDEM_MODULOS: Recurso[] = [
   "PAINEL",
   "MAPA_OCUPACAO",
@@ -31,16 +31,42 @@ const ORDEM_MODULOS: Recurso[] = [
   "APONTAMENTOS",
   "CONFORMIDADE",
   "IMPORTACOES",
-  "CONCILIACAO_SIFAC",
   "AUDITORIA",
   ...RECURSOS_EXCLUSIVOS_ADMIN,
 ];
 
-const GRUPOS_PERFIS: { titulo: string; perfis: PerfilUsuario[] }[] = [
-  { titulo: "Premier", perfis: ["PREMIER_ADMIN", "PREMIER_GESTOR", "PREMIER_SUPERVISOR", "PREMIER_RH"] },
-  { titulo: "Petrobras", perfis: ["PETROBRAS_FISCAL", "PETROBRAS_GESTOR"] },
-  { titulo: "Externo", perfis: ["AUDITOR"] },
+/** Grupos simplificados: Premier (Administrador, RH, Preposto, Gerente) e Petrobras (Fiscal, Gestor). */
+const GRUPOS_PERFIS: { titulo: string; tipo: "premier" | "petrobras"; perfis: PerfilUsuario[] }[] = [
+  {
+    titulo: "Premier",
+    tipo: "premier",
+    perfis: ["PREMIER_ADMIN", "PREMIER_RH", "PREMIER_SUPERVISOR", "PREMIER_GESTOR"],
+  },
+  {
+    titulo: "Petrobras",
+    tipo: "petrobras",
+    perfis: ["PETROBRAS_FISCAL", "PETROBRAS_GESTOR"],
+  },
 ];
+
+function rotuloPerfil(p: PerfilUsuario): string {
+  switch (p) {
+    case "PREMIER_ADMIN":
+      return "Administrador";
+    case "PREMIER_RH":
+      return "RH";
+    case "PREMIER_SUPERVISOR":
+      return "Preposto";
+    case "PREMIER_GESTOR":
+      return "Gerente";
+    case "PETROBRAS_FISCAL":
+      return "Fiscal";
+    case "PETROBRAS_GESTOR":
+      return "Gestor";
+    default:
+      return NOMES_PERFIS[p] || p;
+  }
+}
 
 type Matriz = Record<string, LiberacaoModulo>;
 const chave = (r: Recurso, p: PerfilUsuario) => `${r}|${p}`;
@@ -63,7 +89,7 @@ function montarMatrizPadrao(): Matriz {
   return m;
 }
 
-/** Grava apenas o que difere da matriz padrão (mudanças futuras no padrão continuam valendo). */
+/** Grava apenas o que difere da matriz padrão (mudanças futuras continuam herdadas). */
 function extrairPersonalizacoes(m: Matriz, padrao: Matriz): PersonalizacoesPermissao {
   const saida: PersonalizacoesPermissao = {};
   for (const regra of MATRIZ_PERMISSOES) {
@@ -159,7 +185,7 @@ export function AbaPermissoes({ onNotificar }: Props) {
       setMeta({ atualizadoEm: dados.atualizadoEm, atualizadoPor: dados.atualizadoPor });
       definirPersonalizacoesPermissao(dados.personalizacoes || {});
       window.dispatchEvent(new Event(EVENTO_PERMISSOES_ATUALIZADAS));
-      onNotificar("Liberações salvas. Passam a valer na próxima ação de cada usuário.");
+      onNotificar("Liberações salvas com sucesso. Em vigor para todos os usuários.");
     } catch (err) {
       onNotificar(err instanceof Error ? err.message : "Falha ao salvar liberações.", true);
     } finally {
@@ -180,8 +206,8 @@ export function AbaPermissoes({ onNotificar }: Props) {
 
   if (!rascunho || !salva) {
     return (
-      <div className="bg-white p-10 rounded-xl border border-[#E3E6EB] flex items-center justify-center gap-2 text-xs text-slate-500">
-        <Loader2 className="w-4 h-4 animate-spin" /> Carregando liberações…
+      <div className="bg-white p-12 rounded-xl border border-slate-200 flex items-center justify-center gap-2 text-xs text-slate-500">
+        <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> Carregando matriz de permissões...
       </div>
     );
   }
@@ -192,13 +218,17 @@ export function AbaPermissoes({ onNotificar }: Props) {
     const exclusivoAdmin = RECURSOS_EXCLUSIVOS_ADMIN.includes(r);
     const temExport = recursoPossuiExportacao(r);
     return (
-      <tr key={r} className="border-t border-[#EEF0F3] hover:bg-slate-50/60">
-        <th scope="row" className="sticky left-0 z-10 bg-white text-left px-4 py-2.5 min-w-[240px] max-w-[300px] font-normal">
-          <div className="text-xs font-semibold text-[#1A2230] flex items-center gap-1.5">
+      <tr key={r} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+        <th scope="row" className="sticky left-0 z-10 bg-white text-left px-4 py-3 min-w-[260px] max-w-[320px] font-normal shadow-[1px_0_0_0_#f1f5f9]">
+          <div className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
             {regra.nomeRecurso}
-            {exclusivoAdmin && <Lock className="w-3 h-3 text-slate-400" aria-label="Exclusivo do Administrador" />}
+            {exclusivoAdmin && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                <Lock className="w-3 h-3 text-slate-400" /> Restrito Admin
+              </span>
+            )}
           </div>
-          <div className="text-[11px] text-[#5B6474] leading-snug">{regra.descricao}</div>
+          <div className="text-[11px] text-slate-500 leading-snug mt-0.5">{regra.descricao}</div>
         </th>
         {PERFIS_CONFIGURAVEIS.map((p) => {
           const k = chave(r, p);
@@ -206,48 +236,57 @@ export function AbaPermissoes({ onNotificar }: Props) {
           const editavel = celulaEditavel(r, p);
           const alterada = cel.ler !== salva[k].ler || cel.exportar !== salva[k].exportar;
           const personalizada = cel.ler !== padrao[k].ler || cel.exportar !== padrao[k].exportar;
-          const nomePerfil = NOMES_PERFIS[p];
+          const nomeP = rotuloPerfil(p);
+          const isAdmin = p === "PREMIER_ADMIN";
+
           return (
             <td
               key={p}
-              className={`px-2 py-2 text-center align-middle border-l border-[#EEF0F3] transition-colors ${
-                alterada ? "bg-amber-50" : ""
+              className={`px-3 py-2 text-center align-middle border-l border-slate-100 transition-colors ${
+                alterada ? "bg-amber-50/70" : ""
               }`}
               title={
                 !editavel
-                  ? p === "PREMIER_ADMIN"
-                    ? "O Administrador tem acesso integral (não editável)"
+                  ? isAdmin
+                    ? "Administrador possui acesso total obrigatório"
                     : "Módulo exclusivo do Administrador"
                   : personalizada
-                    ? "Personalizado (difere do padrão do sistema)"
+                    ? "Regra personalizada (difere do padrão)"
                     : undefined
               }
             >
-              <div className="inline-flex items-center gap-1 relative">
+              <div className="inline-flex items-center justify-center gap-1.5 relative">
+                {/* Botão Visualizar */}
                 <BotaoLiberacao
                   id={`perm-${r}-${p}-ler`}
                   ativo={cel.ler}
                   desabilitado={!editavel}
                   onClick={() => alternar(r, p, "ler")}
-                  rotulo={`Visualizar ${regra.nomeRecurso} — ${nomePerfil}`}
+                  rotulo={`Visualizar ${regra.nomeRecurso} — ${nomeP}`}
                   icone={<Eye className="w-3.5 h-3.5" />}
+                  bloqueadoFixo={isAdmin}
                 />
+
+                {/* Botão Exportar */}
                 {temExport ? (
                   <BotaoLiberacao
                     id={`perm-${r}-${p}-exportar`}
                     ativo={cel.exportar}
                     desabilitado={!editavel}
                     onClick={() => alternar(r, p, "exportar")}
-                    rotulo={`Exportar ${regra.nomeRecurso} — ${nomePerfil}`}
+                    rotulo={`Exportar ${regra.nomeRecurso} — ${nomeP}`}
                     icone={<Download className="w-3.5 h-3.5" />}
+                    bloqueadoFixo={isAdmin}
                   />
                 ) : (
-                  <span className="w-7 h-7 inline-flex items-center justify-center text-slate-300 text-xs" aria-hidden>
+                  <span className="w-7 h-7 inline-flex items-center justify-center text-slate-300 text-xs font-mono" aria-hidden>
                     —
                   </span>
                 )}
+
+                {/* Marcador de personalização */}
                 {personalizada && editavel && (
-                  <span className="absolute -top-1 -right-1.5 w-1.5 h-1.5 rounded-full bg-[#1F4FD1]" aria-hidden />
+                  <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-blue-600 ring-2 ring-white" title="Personalizado" />
                 )}
               </div>
             </td>
@@ -259,30 +298,31 @@ export function AbaPermissoes({ onNotificar }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Barra de ações */}
-      <div className="bg-white p-4 rounded-xl border border-[#E3E6EB] shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="space-y-0.5">
-          <h2 className="text-sm font-bold text-[#1A2230] flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-[#1F4FD1]" />
-            Liberação de módulos por perfil
-          </h2>
-          <p className="text-[11px] text-[#5B6474]">
-            Defina quais perfis podem <strong>visualizar</strong> cada módulo e <strong>exportar</strong> seus dados.
-            Sem liberação, o módulo some do menu, a tela exibe “Acesso negado” e as APIs recusam o acesso.
-          </p>
-          <p className="text-[11px] text-[#98A2B3]">
-            {meta.atualizadoEm
-              ? `Última alteração: ${new Date(meta.atualizadoEm).toLocaleString("pt-BR")} por ${meta.atualizadoPor || "—"}`
-              : "Usando a matriz padrão do sistema"}
-            {totalPersonalizadas > 0 && ` · ${totalPersonalizadas} célula(s) personalizada(s)`}
+      {/* Barra de ações superior simplificada */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-blue-600" />
+            <h2 className="text-sm font-bold text-slate-800">
+              Permissões e Liberação de Módulos
+            </h2>
+            {alteracoesPendentes > 0 && (
+              <span className="text-[10px] font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                {alteracoesPendentes} não salva(s)
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500">
+            Defina o acesso de <strong>Visualização</strong> e <strong>Exportação</strong> para cada perfil da Premier e Petrobras.
           </p>
         </div>
+
         <div className="flex items-center gap-2 shrink-0">
           <button
             id="btn-permissoes-restaurar-padrao"
             onClick={() => setRascunho({ ...padrao })}
-            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg border border-[#D0D5DD] bg-white hover:bg-slate-50 text-[#344054] text-xs font-semibold cursor-pointer"
-            title="Volta todas as células para a matriz padrão (ainda precisa salvar)"
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer transition-colors"
+            title="Restaura os valores para o padrão do sistema"
           >
             <RotateCcw className="w-3.5 h-3.5" /> Restaurar padrão
           </button>
@@ -290,7 +330,7 @@ export function AbaPermissoes({ onNotificar }: Props) {
             id="btn-permissoes-descartar"
             onClick={() => setRascunho({ ...salva })}
             disabled={alteracoesPendentes === 0}
-            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg border border-[#D0D5DD] bg-white hover:bg-slate-50 text-[#344054] text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="h-8 inline-flex items-center gap-1.5 px-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
           >
             <Undo2 className="w-3.5 h-3.5" /> Descartar
           </button>
@@ -298,54 +338,104 @@ export function AbaPermissoes({ onNotificar }: Props) {
             id="btn-permissoes-salvar"
             onClick={salvar}
             disabled={alteracoesPendentes === 0 || salvando}
-            className="h-8 inline-flex items-center gap-1.5 px-4 rounded-lg bg-[#1F4FD1] hover:bg-[#163CA8] text-white text-xs font-semibold shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="h-8 inline-flex items-center gap-1.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
           >
             {salvando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            {alteracoesPendentes > 0 ? `Salvar ${alteracoesPendentes} alteração(ões)` : "Salvar"}
+            {alteracoesPendentes > 0 ? `Salvar (${alteracoesPendentes})` : "Salvar"}
           </button>
         </div>
       </div>
 
-      {/* Legenda */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11px] text-[#5B6474] px-1">
-        <span className="inline-flex items-center gap-1.5"><Eye className="w-3.5 h-3.5 text-[#1F4FD1]" /> Visualizar</span>
-        <span className="inline-flex items-center gap-1.5"><Download className="w-3.5 h-3.5 text-[#1F4FD1]" /> Exportar (Excel/PDF/CSV)</span>
-        <span className="inline-flex items-center gap-1.5"><Lock className="w-3.5 h-3.5 text-slate-400" /> Não editável</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#1F4FD1]" /> Difere do padrão</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-200" /> Alteração não salva</span>
+      {/* Legenda compacta e limpa */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-600 px-1 py-0.5">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-5 h-5 rounded-md bg-blue-600 text-white inline-flex items-center justify-center text-[10px]">
+            <Eye className="w-3 h-3" />
+          </span>
+          Visualizar
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-5 h-5 rounded-md bg-blue-600 text-white inline-flex items-center justify-center text-[10px]">
+            <Download className="w-3 h-3" />
+          </span>
+          Exportar dados
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-5 h-5 rounded-md bg-slate-100 border border-slate-200 text-slate-400 inline-flex items-center justify-center text-[10px]">
+            <Eye className="w-3 h-3" />
+          </span>
+          Sem acesso
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Lock className="w-3.5 h-3.5 text-slate-400" /> Fixo (Admin)
+        </span>
+        {totalPersonalizadas > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-blue-700 font-medium">
+            <span className="w-2 h-2 rounded-full bg-blue-600" />
+            {totalPersonalizadas} regra(s) customizada(s)
+          </span>
+        )}
       </div>
 
-      {/* Matriz */}
-      <div className="bg-white rounded-xl border border-[#E3E6EB] shadow-2xs overflow-x-auto">
+      {/* Matriz minimalista e clean */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
-            <tr className="bg-[#F8F9FB]">
-              <th rowSpan={2} className="sticky left-0 z-20 bg-[#F8F9FB] text-left px-4 py-2 text-[11px] font-bold text-[#5B6474] uppercase tracking-wider">
-                Módulo
+            {/* Linha 1: Divisão dos Grupos Premier e Petrobras */}
+            <tr className="bg-slate-50/90 border-b border-slate-200">
+              <th
+                rowSpan={2}
+                className="sticky left-0 z-20 bg-slate-50 text-left px-4 py-3 text-[11px] font-bold text-slate-600 uppercase tracking-wider shadow-[1px_0_0_0_#e2e8f0]"
+              >
+                Módulo do Sistema
               </th>
               {GRUPOS_PERFIS.map((g) => (
                 <th
                   key={g.titulo}
                   colSpan={g.perfis.length}
-                  className="px-2 pt-2 pb-1 text-[10px] font-bold text-[#98A2B3] uppercase tracking-wider border-l border-[#EEF0F3]"
+                  className={`px-3 py-2 text-center text-[11px] font-bold tracking-wider border-l border-slate-200 ${
+                    g.tipo === "premier"
+                      ? "text-blue-900 bg-blue-50/50"
+                      : "text-emerald-900 bg-emerald-50/50"
+                  }`}
                 >
-                  {g.titulo}
+                  <span
+                    className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                      g.tipo === "premier"
+                        ? "bg-blue-100/70 text-blue-800"
+                        : "bg-emerald-100/70 text-emerald-800"
+                    }`}
+                  >
+                    {g.titulo}
+                  </span>
                 </th>
               ))}
             </tr>
-            <tr className="bg-[#F8F9FB]">
+
+            {/* Linha 2: Nomes dos Perfis */}
+            <tr className="bg-slate-50/70 border-b border-slate-200">
               {GRUPOS_PERFIS.flatMap((g) => g.perfis).map((p) => (
-                <th key={p} scope="col" className="px-2 pb-2 text-[11px] font-semibold text-[#344054] border-l border-[#EEF0F3] min-w-[92px]">
-                  {NOMES_PERFIS[p].replace(" Premier", "").replace(" Petrobras", "")}
+                <th
+                  key={p}
+                  scope="col"
+                  className="px-3 py-2 text-center text-xs font-semibold text-slate-700 border-l border-slate-200 min-w-[100px]"
+                >
+                  {rotuloPerfil(p)}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody>
+
+          <tbody className="divide-y divide-slate-100">
             {ORDEM_MODULOS.map(renderLinha)}
-            <tr className="bg-[#F8F9FB] border-t border-[#E3E6EB]">
-              <td colSpan={PERFIS_CONFIGURAVEIS.length + 1} className="sticky left-0 px-4 py-2 text-[11px] font-bold text-[#5B6474] uppercase tracking-wider">
-                Dados sensíveis dentro das telas
+
+            {/* Linha de separação para dados sensíveis */}
+            <tr className="bg-slate-50/80 border-t-2 border-slate-200">
+              <td
+                colSpan={PERFIS_CONFIGURAVEIS.length + 1}
+                className="sticky left-0 px-4 py-2.5 text-[11px] font-bold text-slate-600 uppercase tracking-wider"
+              >
+                Proteção e Dados Sensíveis nas Telas
               </td>
             </tr>
             {RECURSOS_DADOS_SENSIVEIS.map(renderLinha)}
@@ -353,19 +443,16 @@ export function AbaPermissoes({ onNotificar }: Props) {
         </table>
       </div>
 
-      <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50/60 border border-blue-100 text-[11px] text-blue-900 leading-relaxed">
+      {/* Dica informativa concisa */}
+      <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 leading-relaxed">
         <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
         <div className="space-y-1">
           <p>
-            <strong>Gestor Premier</strong> vale também para contas com perfil “Gestor de Contrato”. O perfil{" "}
-            <strong>Administrador</strong> mantém acesso integral para evitar perda de acesso ao sistema.
+            <strong>Premier:</strong> Administrador, RH, Preposto e Gerente. O perfil <strong>Administrador</strong> tem acesso fixo e integral para manutenção do sistema.
           </p>
           <p>
-            <strong>Glosa financeira</strong>: sem liberação, os valores em R$ aparecem como “Restrito” nas exportações e no Painel.{" "}
-            <strong>Dados médicos</strong>: sem liberação, motivos de afastamento chegam genéricos pelo Painel. Dentro das demais telas,
-            o mascaramento específico do perfil Fiscal Petrobras continua aplicado.
+            <strong>Petrobras:</strong> Fiscal e Gestor. A liberação de visualização controla a exibição no menu; ações avançadas como exclusão e criação obedecem à política de governança.
           </p>
-          <p>Liberar a visualização não concede criar/editar/excluir — essas ações seguem a regra padrão de cada perfil.</p>
         </div>
       </div>
     </div>
@@ -376,6 +463,7 @@ function BotaoLiberacao({
   id,
   ativo,
   desabilitado,
+  bloqueadoFixo = false,
   onClick,
   rotulo,
   icone,
@@ -383,6 +471,7 @@ function BotaoLiberacao({
   id: string;
   ativo: boolean;
   desabilitado: boolean;
+  bloqueadoFixo?: boolean;
   onClick: () => void;
   rotulo: string;
   icone: React.ReactNode;
@@ -396,11 +485,13 @@ function BotaoLiberacao({
       aria-label={rotulo}
       disabled={desabilitado}
       onClick={onClick}
-      className={`w-7 h-7 inline-flex items-center justify-center rounded-md border transition-all ${
+      className={`w-7 h-7 inline-flex items-center justify-center rounded-lg border transition-all ${
         ativo
-          ? "bg-[#1F4FD1] border-[#1F4FD1] text-white shadow-2xs"
-          : "bg-white border-[#D0D5DD] text-[#C0C6D0] hover:border-[#1F4FD1] hover:text-[#1F4FD1]"
-      } ${desabilitado ? "opacity-50 cursor-not-allowed hover:border-current" : "cursor-pointer active:scale-95"}`}
+          ? bloqueadoFixo
+            ? "bg-slate-200 border-slate-300 text-slate-700 cursor-not-allowed"
+            : "bg-blue-600 border-blue-600 text-white shadow-2xs hover:bg-blue-700"
+          : "bg-slate-50 border-slate-200 text-slate-300 hover:border-slate-300 hover:text-slate-500 hover:bg-slate-100"
+      } ${desabilitado && !bloqueadoFixo ? "opacity-40 cursor-not-allowed" : "cursor-pointer active:scale-95"}`}
     >
       {icone}
     </button>

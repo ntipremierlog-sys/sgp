@@ -49,11 +49,11 @@ describe("Liberação de módulos por perfil (Administração → Permissões)",
   it("Exportar pode ser liberado ou retirado independentemente", () => {
     definirPersonalizacoesPermissao({
       RELATORIOS: { PETROBRAS_FISCAL: { ler: true, exportar: false } },
-      GLOSA_FINANCEIRA: { AUDITOR: { ler: true, exportar: true } },
+      GLOSA_FINANCEIRA: { PREMIER_GESTOR: { ler: true, exportar: true } },
     });
     expect(can(usuario("PETROBRAS_FISCAL"), "LER", "RELATORIOS")).toBe(true);
     expect(can(usuario("PETROBRAS_FISCAL"), "EXPORTAR", "RELATORIOS")).toBe(false);
-    expect(can(usuario("AUDITOR"), "EXPORTAR", "GLOSA_FINANCEIRA")).toBe(true);
+    expect(can(usuario("PREMIER_GESTOR"), "EXPORTAR", "GLOSA_FINANCEIRA")).toBe(true);
   });
 
   it("Gestor de Contrato herda a liberação do Gestor Premier", () => {
@@ -82,13 +82,13 @@ describe("Liberação de módulos por perfil (Administração → Permissões)",
     const s = sanitizarPersonalizacoes({
       ADMINISTRACAO: { PREMIER_GESTOR: { ler: true, exportar: true } },
       PAINEL: { PREMIER_ADMIN: { ler: false }, PETROBRAS_FISCAL: { ler: false, exportar: true } },
-      APONTAMENTOS: { AUDITOR: { ler: true, exportar: true } }, // m\u00f3dulo sem exporta\u00e7\u00e3o
-      INEXISTENTE: { AUDITOR: { ler: true } },
+      APONTAMENTOS: { PREMIER_SUPERVISOR: { ler: true, exportar: true } }, // módulo sem exportação
+      INEXISTENTE: { PREMIER_GESTOR: { ler: true } },
     });
     expect(s.ADMINISTRACAO).toBeUndefined();
     expect(s.PAINEL?.PREMIER_ADMIN).toBeUndefined();
     expect(s.PAINEL?.PETROBRAS_FISCAL).toEqual({ ler: false, exportar: false });
-    expect(s.APONTAMENTOS?.AUDITOR).toEqual({ ler: true, exportar: false });
+    expect(s.APONTAMENTOS?.PREMIER_SUPERVISOR).toEqual({ ler: true, exportar: false });
     expect((s as Record<string, unknown>).INEXISTENTE).toBeUndefined();
   });
 
@@ -100,9 +100,9 @@ describe("Liberação de módulos por perfil (Administração → Permissões)",
   });
 
   it("liberação efetiva usada pela tela reflete um rascunho sem alterar o estado em vigor", () => {
-    const rascunho = { PAINEL: { AUDITOR: { ler: false, exportar: false } } };
-    expect(obterLiberacaoEfetiva("PAINEL", "AUDITOR", rascunho)).toEqual({ ler: false, exportar: false });
-    expect(obterLiberacaoEfetiva("PAINEL", "AUDITOR")).toEqual({ ler: true, exportar: true });
+    const rascunho = { PAINEL: { PREMIER_GESTOR: { ler: false, exportar: false } } };
+    expect(obterLiberacaoEfetiva("PAINEL", "PREMIER_GESTOR", rascunho)).toEqual({ ler: false, exportar: false });
+    expect(obterLiberacaoEfetiva("PAINEL", "PREMIER_GESTOR")).toEqual({ ler: true, exportar: true });
   });
 
   it("rotas de tela são associadas ao módulo correto", () => {

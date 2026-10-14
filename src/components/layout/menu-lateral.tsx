@@ -78,7 +78,6 @@ const gruposMenuConfig: GrupoMenu[] = [
     titulo: "SISTEMA",
     itens: [
       { rotulo: "Importações", href: "/importacoes", icone: UploadCloud, recurso: "IMPORTACOES" },
-      { rotulo: "Conciliação SIFAC", href: "/conciliacao-sifac", icone: FileCheck, recurso: "CONCILIACAO_SIFAC" },
       { rotulo: "Auditoria", href: "/auditoria", icone: History, recurso: "AUDITORIA" },
       { rotulo: "Administração", href: "/admin", icone: Settings, recurso: "ADMINISTRACAO", alertaPonto: true, rotasAdicionais: ["/admin/importar-funcionarios"] },
     ],

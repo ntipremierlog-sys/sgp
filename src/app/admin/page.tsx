@@ -48,6 +48,7 @@ import {
 } from "@/lib/auth/parametros";
 import {
   NOMES_PERFIS,
+  PERFIS_CONFIGURAVEIS,
   can,
 } from "@/lib/auth/permissoes";
 import {
@@ -1200,9 +1201,9 @@ export default function AdminPage() {
                   onChange={(e) => setFormPerfil(e.target.value as any)}
                   className="w-full px-3 py-2 text-xs rounded-lg border border-[#D0D5DD] bg-white text-[#344054] cursor-pointer"
                 >
-                  {Object.entries(NOMES_PERFIS).map(([k, v]) => (
+                  {PERFIS_CONFIGURAVEIS.map((k) => (
                     <option key={k} value={k}>
-                      {v}
+                      {NOMES_PERFIS[k]}
                     </option>
                   ))}
                 </select>
@@ -1270,9 +1271,9 @@ export default function AdminPage() {
                 onChange={(e) => setNovoPerfilSelecionado(e.target.value as any)}
                 className="w-full px-3 py-2 text-xs rounded-lg border border-[#D0D5DD] bg-white text-[#344054] cursor-pointer"
               >
-                {Object.entries(NOMES_PERFIS).map(([k, v]) => (
+                {PERFIS_CONFIGURAVEIS.map((k) => (
                   <option key={k} value={k}>
-                    {v}
+                    {NOMES_PERFIS[k]}
                   </option>
                 ))}
               </select>

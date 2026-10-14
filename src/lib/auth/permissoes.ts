@@ -1,4 +1,4 @@
-import {
+﻿import {
   PerfilUsuario,
   UsuarioSessao,
   Acao,
@@ -288,12 +288,11 @@ export type PersonalizacoesPermissao = Partial<Record<Recurso, Partial<Record<Pe
 /** Perfis exibidos na tela de liberação (GESTOR_CONTRATO espelha GESTOR; PENDENTE nunca tem acesso). */
 export const PERFIS_CONFIGURAVEIS: PerfilUsuario[] = [
   "PREMIER_ADMIN",
-  "PREMIER_GESTOR",
-  "PREMIER_SUPERVISOR",
   "PREMIER_RH",
+  "PREMIER_SUPERVISOR",
+  "PREMIER_GESTOR",
   "PETROBRAS_FISCAL",
   "PETROBRAS_GESTOR",
-  "AUDITOR",
 ];
 
 /** Módulos restritos ao Administrador por regra do sistema (o middleware também os bloqueia). */
@@ -436,12 +435,12 @@ export function usuarioTemAcessoBase(
  */
 export const NOMES_PERFIS: Record<PerfilUsuario, string> = {
   PREMIER_ADMIN: "Administrador Premier",
-  PREMIER_GESTOR: "Gestor Premier",
-  PREMIER_GESTOR_CONTRATO: "Gestor Premier",
-  PREMIER_SUPERVISOR: "Supervisor Premier",
-  PREMIER_RH: "Recursos Humanos Premier",
+  PREMIER_RH: "RH Premier",
+  PREMIER_SUPERVISOR: "Preposto Premier",
+  PREMIER_GESTOR: "Gerente Premier",
+  PREMIER_GESTOR_CONTRATO: "Gerente Premier",
   PETROBRAS_FISCAL: "Fiscal Petrobras",
   PETROBRAS_GESTOR: "Gestor Petrobras",
-  AUDITOR: "Auditor",
+  AUDITOR: "Auditor Externo",
   PENDENTE_PERFIL: "Pendente de Atribuição",
 };
