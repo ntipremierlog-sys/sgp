@@ -4,7 +4,6 @@ import React from "react";
 import { usePathname } from "next/navigation";
 import { Cabecalho } from "@/components/layout/cabecalho";
 import { MenuLateral } from "@/components/layout/menu-lateral";
-import { RodapeLgpd } from "@/components/layout/rodape-lgpd";
 import { MonitorInatividade } from "@/components/layout/monitor-inatividade";
 import { GuardaModulo } from "@/components/layout/guarda-modulo";
 
@@ -37,11 +36,6 @@ export function CascaAplicacao({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-y-auto bg-[#F4F5F7] p-6 md:p-8 print:p-0 print:m-0 print:bg-white print:overflow-visible print:h-auto">
           <GuardaModulo>{children}</GuardaModulo>
         </main>
-      </div>
-
-      {/* Rodapé Obrigatório de Finalidade LGPD */}
-      <div className="print:hidden">
-        <RodapeLgpd />
       </div>
     </>
   );

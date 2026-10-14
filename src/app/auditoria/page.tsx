@@ -458,9 +458,14 @@ export default function AuditoriaPage() {
         </div>
       </div>
 
-      {/* Contagem de registros no rodapé */}
-      <div className="text-xs text-slate-500 px-1 pt-1">
-        {logsFiltrados.length} {logsFiltrados.length === 1 ? "registro" : "registros"}
+      {/* Rodapé com contagem e aviso legal LGPD */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 px-1 pt-2 border-t border-slate-100">
+        <div>
+          {logsFiltrados.length} {logsFiltrados.length === 1 ? "registro" : "registros"}
+        </div>
+        <div className="text-[11px] text-slate-400">
+          Aviso de Finalidade (LGPD): Contrato ICJ 5900.0129796.25.2 · Lei nº 13.709/2018 · PostgreSQL Neon (aws-sa-east-1 · São Paulo) · Vercel (gru1)
+        </div>
       </div>
 
       {/* Modal sóbrio de inspeção detalhada caso o usuário clique em um registro com alterações */}

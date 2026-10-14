@@ -178,10 +178,11 @@ export default function ConformidadePage() {
               Trilha de Auditoria e Soberania Territorial
             </div>
             <ul className="list-disc list-inside space-y-1 text-slate-600 text-xs">
+              <li><strong className="text-slate-700">Aviso de Finalidade (LGPD):</strong> Informações disponibilizadas exclusivamente para finalidades de execução, fiscalização e medição do Contrato ICJ 5900.0129796.25.2 (Lei nº 13.709/2018).</li>
               <li><strong className="text-slate-700">Localização do Banco:</strong> Neon PostgreSQL em São Paulo (aws-sa-east-1).</li>
+              <li><strong className="text-slate-700">Hospedagem & Infraestrutura:</strong> Vercel (gru1 · São Paulo) com zero dependências externas.</li>
               <li><strong className="text-slate-700">Logs Imutáveis:</strong> Todo acesso, consulta da Petrobras e alteração são auditados.</li>
               <li><strong className="text-slate-700">Arquivos e Documentos:</strong> Armazenados diretamente em bytea no banco (máx 10 MB).</li>
-              <li><strong className="text-slate-700">Zero Serviços Externos:</strong> Sem dependências em provedores fora de Vercel/Neon.</li>
             </ul>
           </div>
         </div>
