@@ -13,6 +13,8 @@ import {
   Trash2,
   Settings,
   ChevronRight,
+  ChevronDown,
+  KeyRound,
   Search,
   LayoutDashboard,
   CalendarCheck,
@@ -68,14 +70,17 @@ export function Cabecalho({
 
   const [sessao, setSessao] = useState<UsuarioSessao | null>(null);
   const [modalFotoAberta, setModalFotoAberta] = useState(false);
+  const [menuSuspensoAberto, setMenuSuspensoAberto] = useState(false);
   const [fotoPreview, setFotoPreview] = useState<string>("");
   const [salvandoFoto, setSalvandoFoto] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState<string>("");
   const [mensagemErro, setMensagemErro] = useState<string>("");
   const [termoBusca, setTermoBusca] = useState("");
   const [buscaAberta, setBuscaAberta] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const buscaRef = useRef<HTMLDivElement>(null);
+  const menuSuspensoRef = useRef<HTMLDivElement>(null);
 
   const carregarSessao = async () => {
     try {
@@ -120,11 +125,15 @@ export function Cabecalho({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Fecha popup de busca ao clicar fora
+  // Fecha popups ao clicar fora
   useEffect(() => {
     const handleClickFora = (e: MouseEvent) => {
-      if (buscaRef.current && !buscaRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (buscaRef.current && !buscaRef.current.contains(target)) {
         setBuscaAberta(false);
+      }
+      if (menuSuspensoRef.current && !menuSuspensoRef.current.contains(target)) {
+        setMenuSuspensoAberto(false);
       }
     };
     document.addEventListener("mousedown", handleClickFora);
@@ -251,207 +260,215 @@ export function Cabecalho({
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full h-16 bg-white border-b border-[#E3E6EB] shadow-xs select-none">
-        <div className="h-full flex items-center justify-between">
-          {/* BLOCO ESQUERDA: 240px perfeitamente alinhado com a largura do Menu Lateral */}
-          <div className="w-[240px] shrink-0 h-full px-4 sm:px-5 flex items-center justify-between border-r border-[#E3E6EB] bg-slate-50/50 max-[860px]:w-auto max-[860px]:border-r-0">
-            <Link href="/painel" className="flex items-center gap-2.5 group" title="Ir para o Painel SGP">
-              <div className="w-8 h-8 rounded-lg bg-[#0D1B2E] flex items-center justify-center p-1.5 shadow-2xs group-hover:bg-[#1F4FD1] transition-colors shrink-0">
-                <img
-                  src="/marca/premier-simbolo.png"
-                  alt="Premier SGP"
-                  className="w-full h-auto object-contain"
-                />
+      <header className="sticky top-0 z-40 w-full h-16 bg-white border-b border-[#E3E6EB] shadow-xs select-none">
+        <div className="h-full px-4 sm:px-6 flex items-center justify-between gap-4">
+          {/* ESQUERDA: Breadcrumb limpo e direto da tela atual (bloco duplicado SGP PREMIER removido) */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-blue-50/80 border border-blue-100 flex items-center justify-center text-[#1F4FD1] shrink-0 shadow-2xs">
+              <IconePagina className="w-4 h-4" />
+            </div>
+            <div className="truncate leading-tight">
+              <div className="flex items-center gap-1.5 text-xs text-[#5B6474]">
+                <Link href="/painel" className="hover:text-[#1F4FD1] transition-colors font-medium">
+                  SGP
+                </Link>
+                <ChevronRight className="w-3 h-3 text-slate-400 shrink-0" />
+                <span className="font-bold text-[#1A2230] truncate">{infoPagina.titulo}</span>
               </div>
-              <div className="flex flex-col leading-tight">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-extrabold text-sm text-[#0F1E36] tracking-tight group-hover:text-[#1F4FD1] transition-colors">
-                    SGP
-                  </span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100/70 text-[#1F4FD1] border border-blue-200/80">
-                    PREMIER
-                  </span>
-                </div>
-                <span className="text-[10px] text-[#5B6474] font-medium tracking-wide">
-                  Gestão de Postos
-                </span>
-              </div>
-            </Link>
+              <span className="text-[11px] text-[#5B6474] font-normal hidden lg:block truncate mt-0.5">
+                {infoPagina.subtitulo}
+              </span>
+            </div>
           </div>
 
-          {/* BLOCO CENTRAL: Breadcrumb Contextual + Busca Rápida (Preenche o espaço com equilíbrio) */}
-          <div className="flex-1 px-4 sm:px-6 flex items-center justify-between gap-4 min-w-0">
-            {/* Breadcrumb contextual do módulo ativo */}
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-blue-50/80 border border-blue-100 flex items-center justify-center text-[#1F4FD1] shrink-0 shadow-2xs">
-                <IconePagina className="w-4 h-4" />
-              </div>
-              <div className="truncate leading-tight">
-                <div className="flex items-center gap-1.5 text-xs text-[#5B6474]">
-                  <Link href="/painel" className="hover:text-[#1F4FD1] transition-colors font-medium">
-                    SGP
-                  </Link>
-                  <ChevronRight className="w-3 h-3 text-slate-400 shrink-0" />
-                  <span className="font-bold text-[#1A2230] truncate">{infoPagina.titulo}</span>
+          {/* CENTRO: Barra de Busca Rápida de Módulos (mantida conforme solicitado) */}
+          <div ref={buscaRef} className="relative hidden md:flex items-center flex-1 max-w-sm lg:max-w-md mx-4">
+            <Search className="w-3.5 h-3.5 absolute left-3 text-[#98A2B3] pointer-events-none" />
+            <input
+              id="input-busca-sgp"
+              type="text"
+              placeholder="Buscar módulo ou tela... (Ctrl+K)"
+              value={termoBusca}
+              onChange={(e) => {
+                setTermoBusca(e.target.value);
+                setBuscaAberta(true);
+              }}
+              onFocus={() => setBuscaAberta(true)}
+              className="w-full pl-9 pr-12 py-1.5 text-xs rounded-lg border border-[#D0D5DD] bg-[#F8F9FC] text-[#1A2230] placeholder-[#98A2B3] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1F4FD1] focus:border-transparent transition-all shadow-2xs"
+            />
+            <kbd className="absolute right-2.5 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white text-[#5B6474] border border-[#D0D5DD] shadow-2xs pointer-events-none">
+              ⌘K
+            </kbd>
+
+            {/* Popup de sugestões de navegação rápida */}
+            {buscaAberta && termoBusca.trim() && (
+              <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-xl border border-[#D0D5DD] shadow-xl p-2 z-50 space-y-1 animate-in fade-in duration-100">
+                <div className="px-2 py-1 text-[10px] font-bold text-[#7F90AA] uppercase tracking-wider">
+                  Módulos Encontrados
                 </div>
-                <span className="text-[11px] text-[#5B6474] font-normal hidden lg:block truncate mt-0.5">
-                  {infoPagina.subtitulo}
-                </span>
-              </div>
-            </div>
-
-            {/* Barra de Pesquisa Rápida Global (Centralizada e Harmoniosa) */}
-            <div ref={buscaRef} className="relative hidden md:flex items-center flex-1 max-w-xs lg:max-w-sm mx-2">
-              <Search className="w-3.5 h-3.5 absolute left-3 text-[#98A2B3] pointer-events-none" />
-              <input
-                id="input-busca-sgp"
-                type="text"
-                placeholder="Buscar módulo ou tela... (Ctrl+K)"
-                value={termoBusca}
-                onChange={(e) => {
-                  setTermoBusca(e.target.value);
-                  setBuscaAberta(true);
-                }}
-                onFocus={() => setBuscaAberta(true)}
-                className="w-full pl-9 pr-12 py-1.5 text-xs rounded-lg border border-[#D0D5DD] bg-[#F8F9FC] text-[#1A2230] placeholder-[#98A2B3] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#1F4FD1] focus:border-transparent transition-all shadow-2xs"
-              />
-              <kbd className="absolute right-2.5 text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white text-[#5B6474] border border-[#D0D5DD] shadow-2xs pointer-events-none">
-                ⌘K
-              </kbd>
-
-              {/* Popup de resultados rápidos da busca */}
-              {buscaAberta && termoBusca.trim() && (
-                <div className="absolute top-full left-0 right-0 mt-1.5 bg-white rounded-xl border border-[#D0D5DD] shadow-xl p-2 z-50 space-y-1 animate-in fade-in duration-100">
-                  <div className="px-2 py-1 text-[10px] font-bold text-[#7F90AA] uppercase tracking-wider">
-                    Módulos Encontrados
-                  </div>
-                  {itensNavegacaoSugeridos.length > 0 ? (
-                    itensNavegacaoSugeridos.map(([rota, item]) => {
-                      const ItemIcone = item.icone;
-                      return (
-                        <button
-                          key={rota}
-                          type="button"
-                          onClick={() => {
-                            router.push(rota);
-                            setBuscaAberta(false);
-                            setTermoBusca("");
-                          }}
-                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-slate-50 text-left transition-colors cursor-pointer group"
-                        >
-                          <ItemIcone className="w-4 h-4 text-[#1F4FD1] shrink-0" />
-                          <div className="truncate">
-                            <div className="text-xs font-semibold text-[#1A2230] group-hover:text-[#1F4FD1]">
-                              {item.titulo}
-                            </div>
-                            <div className="text-[11px] text-[#5B6474] truncate">
-                              {item.subtitulo}
-                            </div>
+                {itensNavegacaoSugeridos.length > 0 ? (
+                  itensNavegacaoSugeridos.map(([rota, item]) => {
+                    const ItemIcone = item.icone;
+                    return (
+                      <button
+                        key={rota}
+                        type="button"
+                        onClick={() => {
+                          router.push(rota);
+                          setBuscaAberta(false);
+                          setTermoBusca("");
+                        }}
+                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-slate-50 text-left transition-colors cursor-pointer group"
+                      >
+                        <ItemIcone className="w-4 h-4 text-[#1F4FD1] shrink-0" />
+                        <div className="truncate">
+                          <div className="text-xs font-semibold text-[#1A2230] group-hover:text-[#1F4FD1]">
+                            {item.titulo}
                           </div>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <div className="p-3 text-center text-xs text-[#5B6474]">
-                      Nenhum módulo encontrado para &quot;{termoBusca}&quot;
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* BLOCO DIREITA: Status Online + Usuário + Foto + Ações */}
-            <div className="flex items-center gap-3 sm:gap-4 shrink-0">
-              {/* Badge sutil de status online */}
-              <div className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Online</span>
+                          <div className="text-[11px] text-[#5B6474] truncate">
+                            {item.subtitulo}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="p-3 text-center text-xs text-[#5B6474]">
+                    Nenhum módulo encontrado para &quot;{termoBusca}&quot;
+                  </div>
+                )}
               </div>
+            )}
+          </div>
 
-              {/* Bloco do Perfil com Avatar interativo */}
-              <div
-                onClick={handleAbrirModalFoto}
-                className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors group"
-                title="Clique para gerenciar a foto do seu perfil"
-              >
-                {/* Avatar do Usuário com botão de câmera ao passar o mouse */}
-                <div className="relative shrink-0">
-                  {temAvatarPersonalizado ? (
-                    <img
-                      src={sessao!.avatarUrl}
-                      alt={nome}
-                      className="w-8 h-8 rounded-full object-cover border border-[#D0D5DD] shadow-2xs bg-white"
-                    />
-                  ) : (
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-2xs ${
-                        isAdmin
-                          ? "bg-purple-100 text-purple-800 border border-purple-200"
-                          : isFiscal
-                          ? "bg-[#E7F6EE] text-[#0F7B4F] border border-[#A7F3D0]"
-                          : "bg-[#E8EEFD] text-[#1F4FD1] border border-[#BFDBFE]"
-                      }`}
-                    >
-                      {iniciais}
+          {/* DIREITA: APENAS A IMAGEM DO USUÁRIO COM MENU SUSPENSO (Zero poluição visual) */}
+          <div ref={menuSuspensoRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setMenuSuspensoAberto((prev) => !prev)}
+              className="flex items-center gap-2 p-1 pl-1.5 pr-2 rounded-full hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1F4FD1]/20 group"
+              title="Menu do Usuário"
+            >
+              <div className="relative shrink-0">
+                {temAvatarPersonalizado ? (
+                  <img
+                    src={sessao!.avatarUrl}
+                    alt={nome}
+                    className="w-8 h-8 rounded-full object-cover border border-[#D0D5DD] shadow-2xs bg-white"
+                  />
+                ) : (
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-2xs ${
+                      isAdmin
+                        ? "bg-purple-100 text-purple-800 border border-purple-200"
+                        : isFiscal
+                        ? "bg-[#E7F6EE] text-[#0F7B4F] border border-[#A7F3D0]"
+                        : "bg-[#E8EEFD] text-[#1F4FD1] border border-[#BFDBFE]"
+                    }`}
+                  >
+                    {iniciais}
+                  </div>
+                )}
+              </div>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 group-hover:text-slate-800 ${
+                  menuSuspensoAberto ? "rotate-180 text-[#1F4FD1]" : ""
+                }`}
+              />
+            </button>
+
+            {/* MENU SUSPENSO CORPORATIVO (Dropdown) */}
+            {menuSuspensoAberto && (
+              <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl border border-[#E3E6EB] shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100 divide-y divide-slate-100">
+                {/* Cabeçalho do Perfil no Menu Suspenso */}
+                <div className="p-3 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="relative shrink-0">
+                      {temAvatarPersonalizado ? (
+                        <img
+                          src={sessao!.avatarUrl}
+                          alt={nome}
+                          className="w-11 h-11 rounded-full object-cover border-2 border-[#1F4FD1] shadow-xs bg-white"
+                        />
+                      ) : (
+                        <div
+                          className={`w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm shadow-xs ${
+                            isAdmin
+                              ? "bg-purple-100 text-purple-800 border-2 border-purple-200"
+                              : isFiscal
+                              ? "bg-[#E7F6EE] text-[#0F7B4F] border-2 border-[#A7F3D0]"
+                              : "bg-[#E8EEFD] text-[#1F4FD1] border-2 border-[#BFDBFE]"
+                          }`}
+                        >
+                          {iniciais}
+                        </div>
+                      )}
                     </div>
-                  )}
-
-                  {/* Ícone de câmera no hover */}
-                  <div className="absolute inset-0 rounded-full bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                    <Camera className="w-3.5 h-3.5" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-[#1A2230] truncate">{nome}</div>
+                      <div className="text-[11px] text-[#5B6474] truncate font-mono">{sessao?.email || ""}</div>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full mt-1 border border-purple-200/50">
+                        <Shield className="w-2.5 h-2.5" />
+                        <span>{nomePerfilLegivel}</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="text-left hidden sm:block leading-tight">
-                  <span className="font-semibold text-xs text-[#1A2230] group-hover:text-[#1F4FD1] transition-colors block">
-                    {nome}
-                  </span>
-                  <span className="text-[11px] text-[#5B6474] flex items-center gap-1 font-medium">
-                    <Shield
-                      className={`w-2.5 h-2.5 ${
-                        isAdmin
-                          ? "text-purple-600"
-                          : isFiscal
-                          ? "text-[#0F7B4F]"
-                          : "text-[#1F4FD1]"
-                      }`}
-                    />
-                    <span>{nomePerfilLegivel}</span>
-                  </span>
+                {/* Opções de Configuração e Gestão */}
+                <div className="py-1.5 space-y-0.5">
+                  {/* Alterar Foto */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuSuspensoAberto(false);
+                      handleAbrirModalFoto();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#344054] hover:bg-slate-50 hover:text-[#1F4FD1] transition-colors cursor-pointer text-left"
+                  >
+                    <Camera className="w-4 h-4 text-slate-500" />
+                    <span>Alterar Foto de Perfil</span>
+                  </button>
+
+                  {/* Configurações / Administração (se for admin) */}
+                  {isAdmin && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setMenuSuspensoAberto(false)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#344054] hover:bg-slate-50 hover:text-[#1F4FD1] transition-colors cursor-pointer"
+                    >
+                      <Settings className="w-4 h-4 text-slate-500" />
+                      <span>Configurações & Administração</span>
+                    </Link>
+                  )}
+
+                  {/* Alterar Senha */}
+                  <Link
+                    href="/login/trocar-senha"
+                    onClick={() => setMenuSuspensoAberto(false)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#344054] hover:bg-slate-50 hover:text-[#1F4FD1] transition-colors cursor-pointer"
+                  >
+                    <KeyRound className="w-4 h-4 text-slate-500" />
+                    <span>Alterar Minha Senha</span>
+                  </Link>
+                </div>
+
+                {/* Rodapé: Sair do Login */}
+                <div className="pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuSuspensoAberto(false);
+                      handleLogout();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer text-left"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Sair do Sistema</span>
+                  </button>
                 </div>
               </div>
-
-              <div className="h-6 w-px bg-[#E3E6EB] hidden sm:block" />
-
-              {/* Ações: Atalho Admin (se for admin) + Alterar senha + Logout */}
-              <div className="flex items-center gap-1">
-                {isAdmin && (
-                  <Link
-                    href="/admin"
-                    className="hidden md:inline-flex items-center gap-1 text-[11px] font-medium text-[#5B6474] hover:text-[#1F4FD1] px-2 py-1 rounded hover:bg-[#F2F4F7] transition-colors"
-                    title="Abrir painel de Administração"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    <span>Administração</span>
-                  </Link>
-                )}
-
-                <Link
-                  href="/login/trocar-senha"
-                  className="text-[11px] font-medium text-[#5B6474] hover:text-[#1F4FD1] px-2 py-1 rounded hover:bg-[#F2F4F7] transition-colors"
-                  title="Alterar a senha da sua conta local"
-                >
-                  Alterar senha
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="text-[#5B6474] hover:text-[#B42318] p-1.5 rounded-lg hover:bg-[#FEF3F2] transition-colors cursor-pointer"
-                  title="Encerrar sessão"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </header>

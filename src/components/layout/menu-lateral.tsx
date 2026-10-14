@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
@@ -9,7 +9,6 @@ import {
   Briefcase,
   Users,
   AlertTriangle,
-  AlertCircle,
   UserCheck2,
   MessageSquare,
   UploadCloud,
@@ -18,11 +17,9 @@ import {
   Settings,
   FileCheck,
   FileSpreadsheet,
-  Clock,
-  Construction,
 } from "lucide-react";
 import { carregarEstado } from "@/lib/dados/estado-operacional";
-import { can, definirPersonalizacoesPermissao } from "@/lib/auth/permissoes";
+import { can } from "@/lib/auth/permissoes";
 import { EVENTO_PERMISSOES_ATUALIZADAS } from "@/lib/auth/use-permissoes";
 import { UsuarioSessao, Recurso } from "@/lib/auth/tipos";
 import { temConfiguracaoPendente, obterParametrosContrato } from "@/lib/auth/parametros";
@@ -52,11 +49,11 @@ const gruposMenuConfig: GrupoMenu[] = [
   {
     titulo: "OPERAÇÃO",
     itens: [
-      { rotulo: "Painel", href: "/painel", icone: LayoutDashboard, recurso: "PAINEL", rotasAdicionais: ["/alertas"] },
-      { rotulo: "Mapa de cobertura", href: "/mapa-ocupacao", icone: CalendarCheck, recurso: "MAPA_OCUPACAO", rotasAdicionais: ["/descobertos", "/presenca-diaria"] },
-      { rotulo: "Coberturas e ocorrências", href: "/coberturas", icone: UserCheck2, recurso: "COBERTURAS", rotasAdicionais: ["/ocorrencias"] },
+      { rotulo: "Painel Executivo", href: "/painel", icone: LayoutDashboard, recurso: "PAINEL", rotasAdicionais: ["/alertas"] },
+      { rotulo: "Mapa de Cobertura", href: "/mapa-ocupacao", icone: CalendarCheck, recurso: "MAPA_OCUPACAO", rotasAdicionais: ["/descobertos", "/presenca-diaria"] },
+      { rotulo: "Coberturas e Ocorrências", href: "/coberturas", icone: UserCheck2, recurso: "COBERTURAS", rotasAdicionais: ["/ocorrencias"] },
       { rotulo: "Profissionais", href: "/profissionais", icone: Users, recurso: "PROFISSIONAIS" },
-      { rotulo: "Postos (Anexo 1-A)", href: "/postos", icone: Briefcase, recurso: "POSTOS" },
+      { rotulo: "Postos de Trabalho", href: "/postos", icone: Briefcase, recurso: "POSTOS" },
     ],
   },
   {
@@ -70,7 +67,7 @@ const gruposMenuConfig: GrupoMenu[] = [
         rotasAdicionais: ["/relatorios/coberturas"],
         subitens: [
           { rotulo: "Ocupação por Posto", href: "/relatorios" },
-          { rotulo: "Coberturas", href: "/relatorios/coberturas" },
+          { rotulo: "Coberturas (PPU)", href: "/relatorios/coberturas" },
         ],
       },
       { rotulo: "Apontamentos Petrobras", href: "/apontamentos", icone: MessageSquare, temBadge: true, recurso: "APONTAMENTOS" },
@@ -87,7 +84,6 @@ const gruposMenuConfig: GrupoMenu[] = [
     ],
   },
 ];
-
 
 export function MenuLateral() {
   const pathname = usePathname();
@@ -108,15 +104,13 @@ export function MenuLateral() {
       const params = obterParametrosContrato();
       setTemPendenciaAdmin(temConfiguracaoPendente(params));
 
-      // 3. Sessão atual
+      // 3. Sessão
       try {
         const res = await fetch("/api/auth");
         if (res.ok) {
           const data = await res.json();
-          definirPersonalizacoesPermissao(data.permissoes || {});
           if (data.autenticado && data.usuario) {
-            setSessao({ ...data.usuario });
-            return;
+            setSessao(data.usuario);
           }
         }
       } catch {
@@ -125,10 +119,12 @@ export function MenuLateral() {
     };
 
     atualizar();
+
     window.addEventListener("sgp-dados-atualizados", atualizar);
     window.addEventListener("sgp-sessao-alterada", atualizar);
     window.addEventListener("sgp-parametros-atualizados", atualizar);
     window.addEventListener(EVENTO_PERMISSOES_ATUALIZADAS, atualizar);
+
     return () => {
       window.removeEventListener("sgp-dados-atualizados", atualizar);
       window.removeEventListener("sgp-sessao-alterada", atualizar);
@@ -138,34 +134,32 @@ export function MenuLateral() {
   }, []);
 
   return (
-    <aside className="w-[240px] h-full bg-[#0F1E36] text-[#C9D2E0] flex flex-col shrink-0 select-none border-r border-[#1E2E4A]">
-      {/* Topo: marca oficial Premier Logistics (versão para fundo escuro) + "SGP · Gestão de Postos" */}
+    <aside className="w-[240px] h-full bg-[#0F1E36] text-[#C9D2E0] flex flex-col shrink-0 select-none border-r border-[#1E2E4A]/80 shadow-sm">
+      {/* Topo: Marca Oficial Premier Logistics com contraste refinado */}
       <Link
         href="/painel"
-        className="px-4 pt-4 pb-3 border-b border-[#1E2E4A] flex flex-col items-center gap-1.5 shrink-0 hover:bg-[#13233F] transition-colors"
-        title="Premier Logistics · SGP"
+        className="px-5 py-4 border-b border-[#1E2E4A]/80 flex flex-col items-center gap-1.5 shrink-0 hover:bg-[#13233F] transition-colors group"
+        title="Premier Logistics — SGP"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/marca/premier-logistics-claro.png"
           alt="Premier Logistics"
-          width={150}
-          height={80}
-          className="w-[150px] h-auto select-none"
+          width={140}
+          height={60}
+          className="w-[140px] h-auto select-none transition-transform group-hover:scale-[1.02]"
           draggable={false}
         />
-        <span className="text-[10px] text-[#7F90AA] tracking-[0.18em] uppercase">
-          SGP · Gestão de Postos
+        <span className="text-[10px] text-[#8EA0BD] font-medium tracking-[0.16em] uppercase">
+          SGP • Gestão de Postos
         </span>
       </Link>
 
-      {/* Navegação agrupada por seções com títulos em caixa alta pequena */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-5">
+      {/* Navegação agrupada com espaçamento harmonioso */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5 scrollbar-thin scrollbar-thumb-slate-700">
         {gruposMenuConfig.map((grupo) => {
           // Filtra itens que o usuário autenticado tem permissão de ver
           const itensVisiveis = grupo.itens.filter((item) => {
             if (!item.recurso) return true;
-            // Sem sessão carregada não exibe módulos protegidos (fail-closed)
             if (!sessao) return false;
             return can(sessao, "LER", item.recurso);
           });
@@ -174,11 +168,11 @@ export function MenuLateral() {
 
           return (
             <div key={grupo.titulo} className="space-y-1">
-              <div className="px-2.5 text-[11px] font-bold text-[#7F90AA] tracking-wider uppercase">
+              <div className="px-2.5 py-1 text-[10px] font-bold text-[#6D80A0] tracking-wider uppercase">
                 {grupo.titulo}
               </div>
 
-              <div className="space-y-0.5 pt-1">
+              <div className="space-y-0.5">
                 {itensVisiveis.map((item) => {
                   const Icone = item.icone;
                   const ativo =
@@ -199,24 +193,24 @@ export function MenuLateral() {
                     <div key={item.href} className="space-y-0.5">
                       <Link
                         href={item.href}
-                        className={`flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-all ${
+                        className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all group ${
                           ativo
-                            ? "bg-[#1F3A66] text-white font-semibold shadow-xs"
+                            ? "bg-[#1F4FD1] text-white font-semibold shadow-md shadow-blue-950/40"
                             : "text-[#C9D2E0] hover:bg-[#162947] hover:text-white"
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="relative">
+                          <div className="relative shrink-0">
                             <Icone
-                              className={`w-4 h-4 shrink-0 ${
-                                ativo ? "text-[#1F4FD1] bg-white rounded p-0.5" : "text-[#7F90AA]"
+                              className={`w-4 h-4 transition-colors ${
+                                ativo ? "text-white" : "text-[#7F90AA] group-hover:text-white"
                               }`}
                             />
-                            {/* Ponto discreto indicador de configurações pendentes */}
+                            {/* Ponto indicador de configurações pendentes */}
                             {mostrarPontoAlerta && (
                               <span
                                 className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#F79009] ring-2 ring-[#0F1E36]"
-                                title="Configurações contratuais pendentes de preenchimento"
+                                title="Configurações pendentes de preenchimento"
                               />
                             )}
                           </div>
@@ -224,7 +218,7 @@ export function MenuLateral() {
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {/* Ponto discreto indicador na lateral */}
+                          {/* Ponto indicador na lateral */}
                           {mostrarPontoAlerta && (
                             <span
                               className="w-1.5 h-1.5 rounded-full bg-[#F79009]"
@@ -232,18 +226,18 @@ export function MenuLateral() {
                             />
                           )}
 
-                          {/* Contador vermelho de pendências */}
+                          {/* Contador de pendências */}
                           {item.temBadge && totalPendencias > 0 && (
-                            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-[#B42318] text-white tabular-nums">
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-600 text-white tabular-nums shadow-xs">
                               {totalPendencias}
                             </span>
                           )}
                         </div>
                       </Link>
 
-                      {/* Sub-itens indentados para módulos que agrupam telas (ex.: Relatórios > Coberturas) */}
+                      {/* Sub-itens indentados para relatórios */}
                       {temSubitens && subitensAbertos && (
-                        <div className="ml-5 pl-2.5 border-l border-[#1E2E4A] space-y-0.5 pt-0.5 pb-1">
+                        <div className="ml-5 pl-2.5 border-l border-[#1E2E4A] space-y-0.5 pt-1 pb-1">
                           {item.subitens!.map((sub) => {
                             const subAtivo =
                               pathname === sub.href ||
@@ -254,7 +248,7 @@ export function MenuLateral() {
                               <Link
                                 key={sub.href}
                                 href={sub.href}
-                                className={`flex items-center gap-2 px-2 py-1.5 rounded text-[11px] font-medium transition-colors ${
+                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${
                                   subAtivo
                                     ? "text-white font-semibold bg-[#162947]"
                                     : "text-[#7F90AA] hover:text-[#C9D2E0] hover:bg-[#13233F]"
@@ -280,15 +274,15 @@ export function MenuLateral() {
         })}
       </nav>
 
-      {/* Rodapé: Indicador verde "Ambiente seguro · LGPD" e versão v1.0 */}
-      <div className="p-3.5 bg-[#0B1628] border-t border-[#1E2E4A] text-xs text-[#7F90AA] flex items-center justify-between shrink-0">
+      {/* Rodapé: Indicador discreto de governança e versão */}
+      <div className="p-3.5 bg-[#0B1628] border-t border-[#1E2E4A]/80 text-xs text-[#7F90AA] flex items-center justify-between shrink-0">
         <Link
           href="/admin/ambiente"
           className="flex items-center gap-2 hover:text-white transition-colors"
           title="Ver infraestrutura e governança LGPD"
         >
           <span className="w-2 h-2 rounded-full bg-[#12B76A] shrink-0" />
-          <span className="text-[11px] font-medium truncate">Ambiente seguro · LGPD</span>
+          <span className="text-[11px] font-medium truncate">Ambiente seguro • LGPD</span>
         </Link>
         <span className="text-[10px] text-[#4E5D78] font-mono">v1.0</span>
       </div>
