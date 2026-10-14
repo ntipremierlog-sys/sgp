@@ -20,6 +20,7 @@ import {
   Eye,
   Info,
   ChevronRight,
+  ChevronDown,
   Search,
   Lock,
   Unlock,
@@ -102,6 +103,7 @@ type ResultadoSimulacaoQualquer = any;
 export default function ImportacoesPage() {
   const [sessao, setSessao] = useState<UsuarioSessao | null>(null);
   const [carregandoSessao, setCarregandoSessao] = useState(true);
+  const [menuModelosAberto, setMenuModelosAberto] = useState(false);
 
   // Competência selecionada (Ano-Mês de apuração)
   const [competencia, setCompetencia] = useState<string>("2026-09");
@@ -674,45 +676,66 @@ export default function ImportacoesPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8 font-sans">
       {/* 1. CABEÇALHO */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded text-[11px] font-semibold text-slate-700 border border-slate-200 bg-white uppercase tracking-wide">
-              MOMENTO 1 · Carga Real
-            </span>
-            <span className="text-slate-400 text-xs">Contrato Petrobras ICJ 5900.0129796.25.2</span>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mt-1">Importações de Dados</h1>
-          <p className="text-xs text-slate-500">
-            Carga mensal por competência: Funcionários → Ponto → Abonos
-          </p>
+          <h1 className="text-xl font-bold text-slate-900">Importações de Dados</h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Menu suspenso de Modelos de Planilha */}
+        <div className="relative">
           <button
-            onClick={handleBaixarModeloFuncionarios}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
-            title="Baixar planilha modelo com abas CADASTRO e AFASTAMENTOS_FERIAS"
+            type="button"
+            onClick={() => setMenuModelosAberto((prev) => !prev)}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-slate-500" />
-            <span>Modelo Funcionários</span>
+            <span>Modelos de Planilha</span>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
           </button>
-          <button
-            onClick={handleBaixarModeloAbono}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
-            title="Baixar planilha modelo de Cubo de Abono (ocorrências/atestados)"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            <span>Modelo Cubo de Abono</span>
-          </button>
-          <button
-            onClick={handleBaixarModeloPonto}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
-            title="Baixar planilha modelo de Ponto / Cubo de Registros"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
-            <span>Modelo Ponto / Registros</span>
-          </button>
+
+          {menuModelosAberto && (
+            <>
+              <div
+                className="fixed inset-0 z-20"
+                onClick={() => setMenuModelosAberto(false)}
+              />
+              <div className="absolute right-0 mt-1 w-52 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-30 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuModelosAberto(false);
+                    handleBaixarModeloFuncionarios();
+                  }}
+                  className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Modelo Funcionários</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuModelosAberto(false);
+                    handleBaixarModeloPonto();
+                  }}
+                  className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Modelo Ponto / Registros</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuModelosAberto(false);
+                    handleBaixarModeloAbono();
+                  }}
+                  className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Modelo Cubo de Abono</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -1035,28 +1058,25 @@ export default function ImportacoesPage() {
           </div>
         </div>
 
-        {/* Cartões Adicionais: Memória de Cálculo e Base Estruturada REV04 */}
+        {/* Cartões Adicionais: Memória de Cálculo e Base Estruturada */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
           {/* Card 4: Memória de Cálculo (MC) */}
           <div
             className={`border rounded-xl p-4 transition-all ${
               tipoAlvo === "MEMORIA_CALCULO"
-                ? "bg-blue-50/50 border-blue-400 ring-2 ring-blue-200"
+                ? "bg-slate-50 border-slate-400 ring-1 ring-slate-300"
                 : "bg-white border-slate-200"
             }`}
           >
             <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                <span className="text-xs font-bold text-slate-800">4. Memória de Cálculo (MC)</span>
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                Mensal da Competência
+              <span className="text-xs font-bold text-slate-800">4. Memória de Cálculo (MC)</span>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                Mensal
               </span>
             </div>
 
-            <p className="text-[11px] text-slate-600 mb-3">
-              Carga das alocações e medição da competência com saneamento automático, vinculação por IDENTIFICADOR e bloqueio impeditivo se o ciclo das linhas divergir.
+            <p className="text-[11px] text-slate-500 mb-3">
+              Carga das alocações e medição da competência com saneamento automático e vinculação por identificador.
             </p>
 
             <div className="text-[11px] text-slate-600 space-y-1 mb-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
@@ -1067,53 +1087,42 @@ export default function ImportacoesPage() {
                 </strong>{" "}
                 <span className="text-slate-400">(dia {String(diaInicioCiclo).padStart(2, "0")} ao dia {String(diaFimCiclo).padStart(2, "0")})</span>
               </div>
-              <div>
-                <span className="text-slate-400">Regra de Bloqueio: </span>
-                <span className="text-rose-700 font-semibold">Bloqueia se o ciclo das linhas divergir da competência</span>
-              </div>
             </div>
 
             <div className="pt-2 border-t border-slate-100 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => handleSelecionarTipoParaImportar("MEMORIA_CALCULO")}
-                className="w-full py-1.5 px-3 rounded-lg text-xs font-bold text-center bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-2xs cursor-pointer"
+                className="w-full py-1.5 px-3 rounded-lg text-xs font-bold text-center bg-slate-800 text-white hover:bg-slate-900 transition-colors shadow-2xs cursor-pointer"
               >
                 Importar Memória de Cálculo (MC)
               </button>
             </div>
           </div>
 
-          {/* Card 5: Base Estruturada REV04 */}
+          {/* Card 5: Base Estruturada */}
           <div
             className={`border rounded-xl p-4 transition-all ${
               tipoAlvo === "BASE_REV04"
-                ? "bg-indigo-50/50 border-indigo-400 ring-2 ring-indigo-200"
+                ? "bg-slate-50 border-slate-400 ring-1 ring-slate-300"
                 : "bg-white border-slate-200"
             }`}
           >
             <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
-                <span className="text-xs font-bold text-slate-800">5. Base Estruturada Oficial (REV04)</span>
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
-                Modelo Etapa 1
+              <span className="text-xs font-bold text-slate-800">5. Base Estruturada de Postos</span>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                Estrutural
               </span>
             </div>
 
-            <p className="text-[11px] text-slate-600 mb-3">
-              Carga oficial do modelo estrutural: 29 Imóveis com cidade/UF corrigidos (Unidade_RM), 244 Postos, 311 Posições e 23 Feristas de cobertura.
+            <p className="text-[11px] text-slate-500 mb-3">
+              Carga do modelo estrutural oficial de Imóveis, Postos de trabalho, Posições e Feristas de cobertura.
             </p>
 
             <div className="text-[11px] text-slate-600 space-y-1 mb-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
               <div>
                 <span className="text-slate-400">Totais Oficiais: </span>
-                <strong className="text-slate-800">29 Imóveis | 244 Postos | 311 Posições | 23 Feristas</strong>
-              </div>
-              <div>
-                <span className="text-slate-400">Municípios Corrigidos: </span>
-                <span className="text-emerald-700 font-semibold">Zero imóveis com cidade errada (Paulínia apenas na REPLAN)</span>
+                <strong className="text-slate-800">29 Imóveis · 244 Postos · 311 Posições · 23 Feristas</strong>
               </div>
             </div>
 
@@ -1121,9 +1130,9 @@ export default function ImportacoesPage() {
               <button
                 type="button"
                 onClick={() => handleSelecionarTipoParaImportar("BASE_REV04")}
-                className="w-full py-1.5 px-3 rounded-lg text-xs font-bold text-center bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-2xs cursor-pointer"
+                className="w-full py-1.5 px-3 rounded-lg text-xs font-bold text-center bg-slate-800 text-white hover:bg-slate-900 transition-colors shadow-2xs cursor-pointer"
               >
-                Carregar Base Estruturada REV04
+                Carregar Base Estruturada
               </button>
             </div>
           </div>
