@@ -1,4 +1,18 @@
-/**
+
+function carregarFallbackTeste<T>(arquivo: string): T[] {
+  if (typeof window === "undefined") {
+    try {
+      const fsModule = require("fs");
+      const pathModule = require("path");
+      const p = pathModule.resolve(process.cwd(), "src/lib/dados", arquivo);
+      if (fsModule.existsSync(p)) {
+        return JSON.parse(fsModule.readFileSync(p, "utf-8")) || [];
+      }
+    } catch {}
+  }
+  return [];
+}
+﻿/**
  * SGP — Sistema de Gestão de Postos (Premier Logistics / Contrato Petrobras ICJ 5900.0129796.25.2)
  * Camada de Dados Operacionais e Motor de Consolidação de Ocupação Diária
  *
@@ -8,9 +22,9 @@
 
 import { StatusOcupacao } from "@/components/ui/badge-status";
 import { mascararCpf } from "@/lib/importadores/tipos";
-import funcionariosReais from "./funcionarios-reais.json";
-import ocorrenciasReais from "./ocorrencias-reais.json";
-import sifacReais from "./sifac-reais.json";
+// import funcionariosReais removido (Neon DB)
+// import ocorrenciasReais removido (Neon DB)
+// import sifacReais removido (Neon DB)
 import {
   ItemAlocadoSifac,
   DivergenciaConciliacao,
@@ -569,6 +583,7 @@ export interface EstadoOperacionalCompleto {
   diasFolgaRm?: string[];
   pendenciasPonto?: PendenciaPontoItem[];
   pendenciasEscala?: PendenciaEscalaItem[];
+  feristas?: any[];
   ajustesManuaisDia?: AjusteManualDia[];
   dataReferenciaPonto?: string;
   fechamentosCompetencia?: FechamentoCompetencia[];
@@ -965,8 +980,179 @@ export const POSTOS_INICIAIS: PostoOperacional[] = [
   },
 ];
 
-export const PROFISSIONAIS_INICIAIS: ProfissionalOperacional[] = (funcionariosReais as unknown as ProfissionalOperacional[]) || [];
-export const OCORRENCIAS_INICIAIS: OcorrenciaOperacional[] = (ocorrenciasReais as unknown as OcorrenciaOperacional[]) || [];
+export const OCORRENCIAS_CADASTRO_2026_09: OcorrenciaOperacional[] = [
+  {
+    id: "ocorr-rm-cad-035918-20260810",
+    matricula: "035918",
+    profissionalNome: "CAROLINE DA SILVA SA",
+    postoCodigo: "PST-EDIBRA-030",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "FERIAS",
+    categoriaAusencia: "Férias",
+    observacaoPublica: "Ausência RM: Férias (Férias)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+  {
+    id: "ocorr-rm-cad-035987-20260810",
+    matricula: "035987",
+    profissionalNome: "FELIPE DA SILVA PROENCA",
+    postoCodigo: "PST-RECAP-181",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "FERIAS",
+    categoriaAusencia: "Férias",
+    observacaoPublica: "Ausência RM: Férias (Férias)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+  {
+    id: "ocorr-rm-cad-036475-20260810",
+    matricula: "036475",
+    profissionalNome: "IZAC NEVES DOS SANTOS",
+    postoCodigo: "PST-BOAVENTURA-006",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "FERIAS",
+    categoriaAusencia: "Férias",
+    observacaoPublica: "Ausência RM: Férias (Férias)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+  {
+    id: "ocorr-rm-cad-037218-20260810",
+    matricula: "037218",
+    profissionalNome: "RENAN GARCIA PARRA",
+    postoCodigo: "PST-RECAP-176",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "FERIAS",
+    categoriaAusencia: "Férias",
+    observacaoPublica: "Ausência RM: Férias (Férias)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+  {
+    id: "ocorr-rm-cad-036029-20260810",
+    matricula: "036029",
+    profissionalNome: "ROSELAINE APARECIDA SIMIAO",
+    postoCodigo: "PST-EDIHB-115",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "FERIAS",
+    categoriaAusencia: "Férias",
+    observacaoPublica: "Ausência RM: Férias (Férias)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+  {
+    id: "ocorr-rm-cad-037583-20260810",
+    matricula: "037583",
+    profissionalNome: "SATIRO DE SOUZA ANJOS NETO",
+    postoCodigo: "PST-RNEST-229",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "FERIAS",
+    categoriaAusencia: "Férias",
+    observacaoPublica: "Ausência RM: Férias (Férias)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+  {
+    id: "ocorr-rm-cad-038437-20260810",
+    matricula: "038437",
+    profissionalNome: "THIAGO DE NOVAIS TIEPO",
+    postoCodigo: "PST-EDISA-121",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "FERIAS",
+    categoriaAusencia: "Férias",
+    observacaoPublica: "Ausência RM: Férias (Férias)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+  {
+    id: "ocorr-rm-cad-042009-20260810",
+    matricula: "042009",
+    profissionalNome: "DANIEL DOS SANTOS SILVA",
+    postoCodigo: "PST-RPBC-250",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "ATESTADO_MEDICO",
+    categoriaAusencia: "Afastamento",
+    observacaoPublica: "Ausência RM: Afastamento (Af.Previdência)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+  {
+    id: "ocorr-rm-cad-035999-20260810",
+    matricula: "035999",
+    profissionalNome: "ERICK RUBENS DE CARVALHO",
+    postoCodigo: "PST-PITUBA-172",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "ATESTADO_MEDICO",
+    categoriaAusencia: "Afastamento",
+    observacaoPublica: "Ausência RM: Afastamento (Af.Previdência)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+  {
+    id: "ocorr-rm-cad-042012-20260810",
+    matricula: "042012",
+    profissionalNome: "NADIA NARA DE SOUZA CRUZ",
+    postoCodigo: "PST-REVAP-183",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "ATESTADO_MEDICO",
+    categoriaAusencia: "Afastamento",
+    observacaoPublica: "Ausência RM: Afastamento (Af.Previdência)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+  {
+    id: "ocorr-rm-cad-035936-20260810",
+    matricula: "035936",
+    profissionalNome: "DEBORA MARCHITO DE LIMA DOS SANTOS",
+    postoCodigo: "PST-EDIHB-063",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "FALTA_JUSTIFICADA",
+    categoriaAusencia: "Licença",
+    observacaoPublica: "Ausência RM: Licença (Licença Mater.)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+  {
+    id: "ocorr-rm-cad-036139-20260810",
+    matricula: "036139",
+    profissionalNome: "VANESSA FERNANDA SILVA DE SOUZA ALBUQUERQUE",
+    postoCodigo: "PST-RNEST-234",
+    dataInicio: "2026-08-10",
+    dataFim: "2026-09-09",
+    diasAfetados: 31,
+    tipoOcorrencia: "FALTA_JUSTIFICADA",
+    categoriaAusencia: "Licença",
+    observacaoPublica: "Ausência RM: Licença (Licença Mater.)",
+    criadoEm: "2026-10-06T20:00:00.000Z",
+    status: "VALIDADA",
+  },
+];
+
+export const PROFISSIONAIS_INICIAIS: ProfissionalOperacional[] = [];
+export const OCORRENCIAS_INICIAIS: OcorrenciaOperacional[] = [...OCORRENCIAS_CADASTRO_2026_09];
 export const COBERTURAS_INICIAIS: CoberturaOperacional[] = [];
 export const APONTAMENTOS_INICIAIS: ApontamentoOperacional[] = [
   {
@@ -2544,13 +2730,13 @@ let estadoMemoria: EstadoOperacionalCompleto = {
   vagas: [...VAGAS_MC_REAIS],
   alocacoes: [...ALOCACOES_MC_REAIS],
   tiposPosto: [...LISTA_TIPOS_POSTO],
-  profissionais: [...PROFISSIONAIS_INICIAIS],
-  ocorrencias: [...OCORRENCIAS_INICIAIS],
+  profissionais: carregarFallbackTeste<ProfissionalOperacional>("funcionarios-reais.json"),
+  ocorrencias: carregarFallbackTeste<OcorrenciaOperacional>("ocorrencias-reais.json"),
   coberturas: [...COBERTURAS_INICIAIS],
   apontamentos: [...APONTAMENTOS_INICIAIS],
   logsAuditoria: [...LOGS_INICIAIS],
   lotesImportacao: [...LOTES_INICIAIS],
-  alocadosSifac: (sifacReais as unknown as ItemAlocadoSifac[]) || [],
+  alocadosSifac: carregarFallbackTeste<ItemAlocadoSifac>("sifac-reais.json"),
   divergenciasConciliacao: {},
   equivalenciasConciliacao: { ...EQUIVALENCIAS_PADRAO },
   fechamentosCompetencia: [...FECHAMENTOS_INICIAIS],
@@ -2560,176 +2746,7 @@ let estadoMemoria: EstadoOperacionalCompleto = {
   unidadeSelecionada: "TODAS",
 };
 
-export const OCORRENCIAS_CADASTRO_2026_09: OcorrenciaOperacional[] = [
-  {
-    id: "ocorr-rm-cad-035918-20260810",
-    matricula: "035918",
-    profissionalNome: "CAROLINE DA SILVA SA",
-    postoCodigo: "PST-EDIBRA-030",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "FERIAS",
-    categoriaAusencia: "Férias",
-    observacaoPublica: "Ausência RM: Férias (Férias)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-  {
-    id: "ocorr-rm-cad-035987-20260810",
-    matricula: "035987",
-    profissionalNome: "FELIPE DA SILVA PROENCA",
-    postoCodigo: "PST-RECAP-181",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "FERIAS",
-    categoriaAusencia: "Férias",
-    observacaoPublica: "Ausência RM: Férias (Férias)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-  {
-    id: "ocorr-rm-cad-036475-20260810",
-    matricula: "036475",
-    profissionalNome: "IZAC NEVES DOS SANTOS",
-    postoCodigo: "PST-BOAVENTURA-006",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "FERIAS",
-    categoriaAusencia: "Férias",
-    observacaoPublica: "Ausência RM: Férias (Férias)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-  {
-    id: "ocorr-rm-cad-037218-20260810",
-    matricula: "037218",
-    profissionalNome: "RENAN GARCIA PARRA",
-    postoCodigo: "PST-RECAP-176",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "FERIAS",
-    categoriaAusencia: "Férias",
-    observacaoPublica: "Ausência RM: Férias (Férias)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-  {
-    id: "ocorr-rm-cad-036029-20260810",
-    matricula: "036029",
-    profissionalNome: "ROSELAINE APARECIDA SIMIAO",
-    postoCodigo: "PST-EDIHB-115",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "FERIAS",
-    categoriaAusencia: "Férias",
-    observacaoPublica: "Ausência RM: Férias (Férias)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-  {
-    id: "ocorr-rm-cad-037583-20260810",
-    matricula: "037583",
-    profissionalNome: "SATIRO DE SOUZA ANJOS NETO",
-    postoCodigo: "PST-RNEST-229",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "FERIAS",
-    categoriaAusencia: "Férias",
-    observacaoPublica: "Ausência RM: Férias (Férias)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-  {
-    id: "ocorr-rm-cad-038437-20260810",
-    matricula: "038437",
-    profissionalNome: "THIAGO DE NOVAIS TIEPO",
-    postoCodigo: "PST-EDISA-121",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "FERIAS",
-    categoriaAusencia: "Férias",
-    observacaoPublica: "Ausência RM: Férias (Férias)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-  {
-    id: "ocorr-rm-cad-042009-20260810",
-    matricula: "042009",
-    profissionalNome: "DANIEL DOS SANTOS SILVA",
-    postoCodigo: "PST-RPBC-250",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "ATESTADO_MEDICO",
-    categoriaAusencia: "Afastamento",
-    observacaoPublica: "Ausência RM: Afastamento (Af.Previdência)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-  {
-    id: "ocorr-rm-cad-035999-20260810",
-    matricula: "035999",
-    profissionalNome: "ERICK RUBENS DE CARVALHO",
-    postoCodigo: "PST-PITUBA-172",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "ATESTADO_MEDICO",
-    categoriaAusencia: "Afastamento",
-    observacaoPublica: "Ausência RM: Afastamento (Af.Previdência)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-  {
-    id: "ocorr-rm-cad-042012-20260810",
-    matricula: "042012",
-    profissionalNome: "NADIA NARA DE SOUZA CRUZ",
-    postoCodigo: "PST-REVAP-183",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "ATESTADO_MEDICO",
-    categoriaAusencia: "Afastamento",
-    observacaoPublica: "Ausência RM: Afastamento (Af.Previdência)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-  {
-    id: "ocorr-rm-cad-035936-20260810",
-    matricula: "035936",
-    profissionalNome: "DEBORA MARCHITO DE LIMA DOS SANTOS",
-    postoCodigo: "PST-EDIHB-063",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "FALTA_JUSTIFICADA",
-    categoriaAusencia: "Licença",
-    observacaoPublica: "Ausência RM: Licença (Licença Mater.)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-  {
-    id: "ocorr-rm-cad-036139-20260810",
-    matricula: "036139",
-    profissionalNome: "VANESSA FERNANDA SILVA DE SOUZA ALBUQUERQUE",
-    postoCodigo: "PST-RNEST-234",
-    dataInicio: "2026-08-10",
-    dataFim: "2026-09-09",
-    diasAfetados: 31,
-    tipoOcorrencia: "FALTA_JUSTIFICADA",
-    categoriaAusencia: "Licença",
-    observacaoPublica: "Ausência RM: Licença (Licença Mater.)",
-    criadoEm: "2026-10-06T20:00:00.000Z",
-    status: "VALIDADA",
-  },
-];
+
 
 export function carregarEstado(): EstadoOperacionalCompleto {
   if (typeof window !== "undefined") {
@@ -2737,6 +2754,11 @@ export function carregarEstado(): EstadoOperacionalCompleto {
       const salvo = localStorage.getItem(CHAVE_STORAGE);
       if (salvo) {
         const parsed = JSON.parse(salvo);
+        delete parsed.coberturas;
+        delete parsed.ocorrencias;
+        delete parsed.apontamentos;
+        delete parsed.profissionais;
+        delete parsed.marcacoesPonto;
         estadoMemoria = { ...estadoMemoria, ...parsed };
 
         // Garante que coberturas estejam limpas de dados fictícios legados
@@ -2803,6 +2825,36 @@ export function carregarEstado(): EstadoOperacionalCompleto {
 
 let avisoFalhaGravacaoExibido = false;
 
+export function aplicarEstadoDoServidor(dados: any) {
+  if (!dados) return;
+  if (Array.isArray(dados.postos) && dados.postos.length > 0) estadoMemoria.postos = dados.postos;
+  if (Array.isArray(dados.vagas) && dados.vagas.length > 0) estadoMemoria.vagas = dados.vagas;
+  if (Array.isArray(dados.profissionais) && dados.profissionais.length > 0) estadoMemoria.profissionais = dados.profissionais;
+  if (Array.isArray(dados.alocacoes) && dados.alocacoes.length > 0) estadoMemoria.alocacoes = dados.alocacoes;
+  if (Array.isArray(dados.feristas) && dados.feristas.length > 0) estadoMemoria.feristas = dados.feristas;
+  if (Array.isArray(dados.ocorrencias)) estadoMemoria.ocorrencias = dados.ocorrencias;
+  if (Array.isArray(dados.coberturas)) estadoMemoria.coberturas = dados.coberturas;
+  if (Array.isArray(dados.apontamentos)) estadoMemoria.apontamentos = dados.apontamentos;
+}
+
+export async function sincronizarEstadoServidor(): Promise<EstadoOperacionalCompleto> {
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/operacional/estado");
+      if (res.ok) {
+        const dados = await res.json();
+        if (dados.sucesso && dados.estado) {
+          aplicarEstadoDoServidor(dados.estado);
+          window.dispatchEvent(new CustomEvent("sgp-dados-atualizados"));
+          return estadoMemoria;
+        }
+      }
+    } catch (err) {
+      console.warn("[SGP] Falha ao sincronizar com Neon:", err);
+    }
+  }
+  return estadoMemoria;
+}
 export function salvarEstado(novo: Partial<EstadoOperacionalCompleto>) {
   estadoMemoria = { ...estadoMemoria, ...novo };
   if (typeof window !== "undefined") {
@@ -2823,7 +2875,7 @@ export function salvarEstado(novo: Partial<EstadoOperacionalCompleto>) {
       });
 
       // 2. Isola marcações de ponto do localStorage para nunca estourar a quota de 5MB
-      const { marcacoesPonto: _marc, ...estadoParaLocalStorage } = estadoMemoria;
+      const { marcacoesPonto: _marc, coberturas: _cobs, ocorrencias: _ocorr, apontamentos: _apts, profissionais: _profs, ...estadoParaLocalStorage } = estadoMemoria;
 
       // 3. Compacta snapshotAnterior em lotesImportacao para salvar apenas dados estritamente necessários
       if (estadoParaLocalStorage.lotesImportacao) {
@@ -2852,7 +2904,7 @@ export function salvarEstado(novo: Partial<EstadoOperacionalCompleto>) {
     } catch (erro) {
       console.warn("[SGP] Cota do localStorage atingida, aplicando compactação de segurança...", erro);
       try {
-        const { marcacoesPonto: _marc, ...estadoCompacto } = estadoMemoria;
+      const { marcacoesPonto: _marc, coberturas: _cobs, ocorrencias: _ocorr, apontamentos: _apts, profissionais: _profs, ...estadoCompacto } = estadoMemoria;
         if (estadoCompacto.lotesImportacao) {
           estadoCompacto.lotesImportacao = estadoCompacto.lotesImportacao.map((l) => ({
             ...l,
@@ -4479,6 +4531,20 @@ function carregarMarcacoesReaisServidor(): MarcacaoPontoOriginal[] {
   if (marcacoesReaisCache) return marcacoesReaisCache;
   try {
     if (typeof window === "undefined") {
+      const fs = require("fs");
+      const path = require("path");
+      const p = path.resolve(process.cwd(), "src/lib/dados/marcacoes-reais.json");
+      if (fs.existsSync(p)) {
+        marcacoesReaisCache = JSON.parse(fs.readFileSync(p, "utf-8"));
+        return marcacoesReaisCache || [];
+      }
+    }
+  } catch {}
+  return [];
+} /*
+  if (marcacoesReaisCache) return marcacoesReaisCache;
+  try {
+    if (typeof window === "undefined") {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fs = require("fs");
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -4493,9 +4559,9 @@ function carregarMarcacoesReaisServidor(): MarcacaoPontoOriginal[] {
     // Fallback
   }
   return [];
-}
+*/
 
-function carregarDiasFolgaServidor(): string[] {
+function carregarDiasFolgaServidor(): string[] { return []; } /*
   if (diasFolgaReaisCache) return diasFolgaReaisCache;
   try {
     if (typeof window === "undefined") {
@@ -4513,7 +4579,7 @@ function carregarDiasFolgaServidor(): string[] {
     // Fallback
   }
   return [];
-}
+*/
 
 /**
  * Retorna lista de chaves de dias sem previsão no RM (${chapa}_${dataLocal})
@@ -4629,5 +4695,4 @@ export function registrarLogAuditoria(
     logsAuditoria: [novoLog, ...(estado.logsAuditoria || [])],
   });
 }
-
 

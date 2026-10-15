@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SGP — Sistema de Gestão de Postos (Contrato Petrobras ICJ 5900.0129796.25.2)
  * Camada de Dados: Relatório Agregado de Coberturas do Período
  *
@@ -22,7 +22,7 @@ import prisma from "@/lib/prisma";
 import { CATALOGO_ITEM_PPU, obterItemPPU } from "@/lib/dados/painel-calculo";
 import { carregarEstado } from "@/lib/dados/estado-operacional";
 import { COBERTURAS_PADRAO_REV04 } from "@/lib/servicos/relatorios-oficiais";
-import postosRev04Json from "@/lib/dados/postos-rev04.json";
+import { POSTOS_REV04 as postosRev04Json } from "@/lib/dados/estrutura-postos";
 
 export interface FiltrosRelatorioCoberturas {
   competencia: string; // "YYYY-MM" ou "MM/YYYY"

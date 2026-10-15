@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SGP — Alertas contratuais do Painel (substitui a faixa "Atenção Gerencial")
  * Contrato Petrobras ICJ 5900.0129796.25.2
  *
@@ -20,12 +20,14 @@
  * Nenhum CPF ou CID é lido ou exposto.
  */
 
-import imoveisRev04Json from "@/lib/dados/imoveis-rev04.json";
-import posicoesRev04Json from "@/lib/dados/posicoes-rev04.json";
-import feristasRev04Json from "@/lib/dados/feristas-rev04.json";
-import pendentesRmJson from "@/lib/dados/pendentes-rm-rev02.json";
-import validacoesJson from "@/lib/dados/validacoes-rev02.json";
-import pendenciasEscalaJson from "@/lib/dados/pendencias-escala-rev04.json";
+import {
+  IMOVEIS_REV04 as imoveisRev04Json,
+  POSICOES_REV04 as posicoesRev04Json,
+  FERISTAS_REV04 as feristasRev04Json,
+  PENDENTES_RM_REV02 as pendentesRmJson,
+  VALIDACOES_REV02 as validacoesJson,
+  PENDENCIAS_ESCALA_REV04 as pendenciasEscalaJson,
+} from "@/lib/dados/estrutura-postos";
 
 // =============================================================================
 // PARÂMETROS CONTRATUAIS

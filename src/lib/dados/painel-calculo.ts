@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SGP — Sistema de Gestão de Postos
  * Contrato Petrobras ICJ 5900.0129796.25.2
  *
@@ -15,9 +15,11 @@
  * 4. Faturamento e valores em R$ estão FORA do escopo desta fase.
  */
 
-import postosRev04Json from "./postos-rev04.json";
-import posicoesRev04Json from "./posicoes-rev04.json";
-import feristasRev04Json from "./feristas-rev04.json";
+import {
+  POSTOS_REV04 as postosRev04Json,
+  POSICOES_REV04 as posicoesRev04Json,
+  FERISTAS_REV04 as feristasRev04Json,
+} from "./estrutura-postos";
 import imoveisRev04Json from "./imoveis-rev04.json";
 
 // =============================================================================

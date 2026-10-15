@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { obterSessaoServidor } from "@/lib/auth/sessao";
 import { canServidor } from "@/lib/auth/permissoes-servidor";
+import { obterMarcacoesPonto } from "@/lib/repositorio/marcacoes";
+import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -10,54 +10,10 @@ function negado(status: 401 | 403) {
   return NextResponse.json(
     {
       sucesso: false,
-      erro: status === 401 ? "Autenticação necessária." : "Acesso não liberado para o seu perfil.",
+      erro: status === 401 ? "Autenticacao necessaria." : "Acesso nao liberado para o seu perfil.",
     },
     { status }
   );
-}
-
-let cacheMarcacoes: any[] | null = null;
-let cacheDiasFolga: string[] | null = null;
-const cacheLotesPonto: unknown[] = [];
-
-function obterCaminhosArquivos() {
-  const marcacoesPath = path.resolve(process.cwd(), "src/lib/dados/marcacoes-reais.json");
-  const diasFolgaPath = path.resolve(process.cwd(), "src/lib/dados/dias-folga-reais.json");
-  return { marcacoesPath, diasFolgaPath };
-}
-
-function carregarDadosIniciaisServidor() {
-  if (cacheMarcacoes && cacheMarcacoes.length > 0 && cacheDiasFolga) {
-    return { marcacoes: cacheMarcacoes, diasFolga: cacheDiasFolga };
-  }
-
-  const { marcacoesPath, diasFolgaPath } = obterCaminhosArquivos();
-
-  try {
-    if (fs.existsSync(marcacoesPath)) {
-      const rawM = fs.readFileSync(marcacoesPath, "utf-8");
-      cacheMarcacoes = JSON.parse(rawM);
-    } else {
-      cacheMarcacoes = [];
-    }
-  } catch (err) {
-    console.error("Erro ao ler marcacoes-reais.json:", err);
-    cacheMarcacoes = [];
-  }
-
-  try {
-    if (fs.existsSync(diasFolgaPath)) {
-      const rawF = fs.readFileSync(diasFolgaPath, "utf-8");
-      cacheDiasFolga = JSON.parse(rawF);
-    } else {
-      cacheDiasFolga = [];
-    }
-  } catch (err) {
-    console.error("Erro ao ler dias-folga-reais.json:", err);
-    cacheDiasFolga = [];
-  }
-
-  return { marcacoes: cacheMarcacoes || [], diasFolga: cacheDiasFolga || [] };
 }
 
 export async function GET(request: NextRequest) {
@@ -72,24 +28,51 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const dataFiltro = searchParams.get("data");
+    const dataInicioParam = searchParams.get("dataInicio") || dataFiltro;
+    const dataFimParam = searchParams.get("dataFim") || dataFiltro;
+    const chapaParam = searchParams.get("chapa") || undefined;
+    const chapasParam = searchParams.get("chapas")
+      ? searchParams.get("chapas")!.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined;
+    const unidadeParam = searchParams.get("unidade") || searchParams.get("unidadeNome") || undefined;
+    const limiteParam = searchParams.get("limite") ? parseInt(searchParams.get("limite")!, 10) : 5000;
 
-    const dados = carregarDadosIniciaisServidor();
-    let listaMarcacoes = dados.marcacoes;
+    // Regra estrita: nunca retornar as 38.901 linhas de uma vez.
+    // Se nenhum filtro de data for passado, limita a janela de 31 dias da competencia ativa.
+    const dataInicio = dataInicioParam || "2026-08-10";
+    const dataFim = dataFimParam || "2026-09-15";
 
-    if (dataFiltro) {
-      listaMarcacoes = listaMarcacoes.filter((m: any) => m.dataLocal === dataFiltro);
-    }
+    const lista = await obterMarcacoesPonto({
+      dataInicio,
+      dataFim,
+      chapa: chapaParam,
+      chapas: chapasParam,
+      unidadeNome: unidadeParam,
+      limite: Math.min(limiteParam, 10000),
+    });
+
+    const marcacoes = lista.map((m) => ({
+      colaboradorId: m.colaboradorId || undefined,
+      chapa: m.chapa,
+      cpfLimpo: m.cpfLimpo || undefined,
+      dataHoraUtc: m.dataHoraUtc ? m.dataHoraUtc.toISOString() : undefined,
+      dataLocal: m.dataLocal,
+      horaLocal: m.horaLocal,
+      nsr: m.nsr || undefined,
+      equipamentoOrigem: m.equipamentoOrigem || undefined,
+    }));
 
     return NextResponse.json({
       sucesso: true,
-      total: listaMarcacoes.length,
-      marcacoes: listaMarcacoes,
-      diasFolgaRm: dados.diasFolga,
-      dataReferencia: listaMarcacoes.length > 0 ? "2026-09-15 23:59" : null,
-      lotes: cacheLotesPonto,
+      total: marcacoes.length,
+      marcacoes,
+      diasFolgaRm: [],
+      dataReferencia: marcacoes.length > 0 ? "2026-09-15 23:59" : null,
+      lotes: [],
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno ao obter dados de ponto.";
+    console.error("Erro em /api/ponto GET:", err);
     return NextResponse.json({ sucesso: false, erro: msg }, { status: 500 });
   }
 }
@@ -101,45 +84,40 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { lote, marcacoes, diasFolgaRm } = body;
+    const { lote, marcacoes } = body;
 
-    const dadosAtuais = carregarDadosIniciaisServidor();
+    let totalInseridos = 0;
+    if (Array.isArray(marcacoes) && marcacoes.length > 0) {
+      const loteId = lote?.id || `lote-ponto-${Date.now()}`;
+      const dadosInserir = marcacoes.map((m: any, index: number) => ({
+        id: `${loteId}-${m.chapa}-${m.dataLocal}-${m.horaLocal}-${index}`,
+        loteId,
+        colaboradorId: m.colaboradorId || null,
+        chapa: String(m.chapa),
+        cpfLimpo: m.cpfLimpo || null,
+        dataHoraUtc: m.dataHoraUtc ? new Date(m.dataHoraUtc) : null,
+        dataLocal: m.dataLocal,
+        horaLocal: m.horaLocal,
+        nsr: m.nsr || null,
+        equipamentoOrigem: m.equipamentoOrigem || null,
+        importadoEm: new Date(),
+      }));
 
-    // Evita duplicidades
-    const setExistentes = new Set(
-      dadosAtuais.marcacoes.map((m: any) => `${m.colaboradorId}_${m.dataHoraUtc}_${m.nsr || "S_NSR"}`)
-    );
-
-    const novasValidas = (marcacoes || []).filter(
-      (m: any) => !setExistentes.has(`${m.colaboradorId}_${m.dataHoraUtc}_${m.nsr || "S_NSR"}`)
-    );
-
-    cacheMarcacoes = [...dadosAtuais.marcacoes, ...novasValidas];
-
-    const setFolgas = new Set([...dadosAtuais.diasFolga, ...(diasFolgaRm || [])]);
-    cacheDiasFolga = Array.from(setFolgas);
-
-    if (lote) {
-      cacheLotesPonto.push(lote);
-    }
-
-    // Persiste assincronamente em disco para preservar após restart
-    try {
-      const { marcacoesPath, diasFolgaPath } = obterCaminhosArquivos();
-      fs.writeFileSync(marcacoesPath, JSON.stringify(cacheMarcacoes));
-      fs.writeFileSync(diasFolgaPath, JSON.stringify(cacheDiasFolga));
-    } catch (persistErr) {
-      console.warn("Aviso: Falha ao persistir em arquivo JSON local:", persistErr);
+      const res = await prisma.marcacaoPonto.createMany({
+        data: dadosInserir,
+        skipDuplicates: true,
+      });
+      totalInseridos = res.count;
     }
 
     return NextResponse.json({
       sucesso: true,
-      mensagem: `${novasValidas.length} novas marcações gravadas com sucesso no servidor.`,
-      totalAcumulado: cacheMarcacoes.length,
-      totalFolgas: cacheDiasFolga.length,
+      mensagem: `${totalInseridos} novas marcacoes gravadas com sucesso no banco de dados.`,
+      totalInseridos,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Erro ao salvar marcações no servidor.";
+    const msg = err instanceof Error ? err.message : "Erro ao salvar marcacoes no banco.";
+    console.error("Erro em /api/ponto POST:", err);
     return NextResponse.json({ sucesso: false, erro: msg }, { status: 500 });
   }
 }

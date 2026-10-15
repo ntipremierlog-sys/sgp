@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
@@ -24,6 +24,7 @@ import { usePermissoes } from "@/lib/auth/use-permissoes";
 import { useSessaoUsuario } from "@/lib/auth/use-sessao-usuario";
 import {
   carregarEstado,
+  sincronizarEstadoServidor,
   adicionarCobertura,
   atualizarCobertura,
   excluirCobertura,
@@ -294,6 +295,11 @@ export default function PaginaGestaoCoberturas() {
   };
 
   useEffect(() => {
+    sincronizarEstadoServidor().then(() => {
+      const estado = carregarEstado();
+      setPostos(obterTodosPostosContrato(estado.postos));
+      setProfissionais(estado.profissionais || []);
+    });
     carregarCoberturasServidor();
   }, [carregarCoberturasServidor]);
 
@@ -415,7 +421,7 @@ export default function PaginaGestaoCoberturas() {
   };
 
   // Salvar Cobertura (Inclusão / Edição)
-  const handleSubmitCobertura = (e: React.FormEvent) => {
+  const handleSubmitCobertura = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formPostoCodigo || !formSubstitutoMatricula || !formDataInicio || !formDataFim) {
       alert("Preencha todos os campos obrigatórios.");
@@ -427,46 +433,104 @@ export default function PaginaGestaoCoberturas() {
 
     try {
       if (coberturaEmEdicao) {
-        atualizarCobertura(coberturaEmEdicao.id, {
-          postoCodigo: formPostoCodigo,
-          funcaoPosto: postoObj?.funcao || "Operacional",
-          itemPpu: formItemPpu,
-          substitutoMatricula: formSubstitutoMatricula,
-          substitutoNome: substitutoObj?.nome || coberturaEmEdicao.substitutoNome,
-          dataInicio: formDataInicio,
-          dataFim: formDataFim,
-          tipoCobertura: formTipo,
-          justificativa: formJustificativa,
-          previaConferencia: (formPrevia as any) || null,
-          statusConferenciaPosto: formStatusPostoPrevia,
-          comentarioConferencia: formComentarioConferencia,
+        const res = await fetch("/api/coberturas", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: coberturaEmEdicao.id,
+            postoCodigo: formPostoCodigo,
+            funcaoPosto: postoObj?.funcao || "Operacional",
+            itemPpu: formItemPpu,
+            substitutoMatricula: formSubstitutoMatricula,
+            substitutoNome: substitutoObj?.nome || coberturaEmEdicao.substitutoNome,
+            dataInicio: formDataInicio,
+            dataFim: formDataFim,
+            tipoCobertura: formTipo,
+            justificativa: formJustificativa,
+            previaConferencia: (formPrevia as any) || null,
+            statusConferenciaPosto: formStatusPostoPrevia,
+            comentarioConferencia: formComentarioConferencia,
+          }),
         });
+        const ret = await res.json();
+        if (!res.ok || !ret.sucesso) {
+          throw new Error(ret.erro || "Falha ao atualizar cobertura no servidor Neon.");
+        }
         setMensagemSucesso("Cobertura atualizada com sucesso!");
       } else {
-        adicionarCobertura({
-          postoCodigo: formPostoCodigo,
-          idPosto: postoObj?.idPosto || formPostoCodigo,
-          funcaoPosto: postoObj?.funcao || "Operacional",
-          itemPpu: formItemPpu,
-          titularMatricula: postoObj?.titularMatricula,
-          titularNome: postoObj?.titularNome,
-          substitutoMatricula: formSubstitutoMatricula,
-          substitutoNome: substitutoObj?.nome || "Ferista",
-          dataInicio: formDataInicio,
-          dataFim: formDataFim,
-          tipoCobertura: formTipo,
-          status: "CONFIRMADA",
-          justificativa: formJustificativa || "Cobertura de posto",
-          previaConferencia: (formPrevia as any) || null,
-          statusConferenciaPosto: formStatusPostoPrevia,
-          comentarioConferencia: formComentarioConferencia,
+        const res = await fetch("/api/coberturas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            postoCodigo: formPostoCodigo,
+            idPosto: postoObj?.idPosto || formPostoCodigo,
+            funcaoPosto: postoObj?.funcao || "Operacional",
+            itemPpu: formItemPpu,
+            titularMatricula: postoObj?.titularMatricula,
+            titularNome: postoObj?.titularNome,
+            substitutoMatricula: formSubstitutoMatricula,
+            substitutoNome: substitutoObj?.nome || "Ferista",
+            dataInicio: formDataInicio,
+            dataFim: formDataFim,
+            tipoCobertura: formTipo,
+            status: "CONFIRMADA",
+            justificativa: formJustificativa || "Cobertura de posto",
+            previaConferencia: (formPrevia as any) || null,
+            statusConferenciaPosto: formStatusPostoPrevia,
+            comentarioConferencia: formComentarioConferencia,
+          }),
         });
+        const ret = await res.json();
+        if (!res.ok || !ret.sucesso) {
+          throw new Error(ret.erro || "Falha ao registrar cobertura no servidor Neon.");
+        }
         setMensagemSucesso("Cobertura registrada com sucesso!");
       }
 
       setModalAberto(false);
-      carregarCoberturasServidor();
+      await carregarCoberturasServidor();
       setTimeout(() => setMensagemSucesso(""), 4000);
+      return;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     } catch (err: any) {
       alert(err?.message || "Não foi possível salvar a cobertura.");
     }
@@ -1056,11 +1120,22 @@ export default function PaginaGestaoCoberturas() {
                 {coberturaEmEdicao && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       if (confirm("Remover esta cobertura?")) {
-                        excluirCobertura(coberturaEmEdicao.id);
-                        setModalAberto(false);
-                        carregarCoberturasServidor();
+                        try {
+                          const res = await fetch(`/api/coberturas?id=${encodeURIComponent(coberturaEmEdicao.id)}`, { method: "DELETE" });
+                          const ret = await res.json();
+                          if (!res.ok || !ret.sucesso) {
+                            alert(ret.erro || "Falha ao excluir cobertura.");
+                            return;
+                          }
+                          setModalAberto(false);
+                          await carregarCoberturasServidor();
+                        } catch (e: any) {
+                          alert(e?.message || "Erro ao excluir cobertura.");
+                        }
+
+
                       }
                     }}
                     className="inline-flex items-center gap-1 text-rose-700 hover:text-rose-900 font-semibold cursor-pointer"

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
@@ -314,7 +314,22 @@ export default function OcorrenciasPage() {
   const [formSubstitutoChapa, setFormSubstitutoChapa] = useState("");
   const [mensagemSucesso, setMensagemSucesso] = useState("");
 
-  const carregarDados = () => {
+  const carregarDados = async () => {
+    try {
+      const res = await fetch("/api/ocorrencias");
+      if (res.ok) {
+        const dados = await res.json();
+        if (dados.sucesso && Array.isArray(dados.ocorrencias)) {
+          setOcorrencias(dados.ocorrencias);
+          if (Array.isArray(dados.profissionais) && dados.profissionais.length > 0) {
+            setProfissionais(dados.profissionais);
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Falha ao consultar /api/ocorrencias:", e);
+    }
     const estado = carregarEstado();
     setOcorrencias(estado.ocorrencias);
     setProfissionais(estado.profissionais);
@@ -511,7 +526,7 @@ export default function OcorrenciasPage() {
     setTimeout(() => setMensagemSucesso(""), 4000);
   };
 
-  const handleSubmitNovaOcorrencia = (e: React.FormEvent) => {
+  const handleSubmitNovaOcorrencia = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formMatricula || !formDataInicio || !formDataFim) {
       alert("Preencha o colaborador e o período da ocorrência.");
@@ -577,12 +592,40 @@ export default function OcorrenciasPage() {
 
     try {
       if (ocorrenciaEmEdicao) {
-        atualizarOcorrencia(ocorrenciaEmEdicao.id, dadosOcorrencia);
+        const res = await fetch("/api/ocorrencias", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: ocorrenciaEmEdicao.id,
+            ...dadosOcorrencia,
+          }),
+        });
+        const ret = await res.json();
+        if (!res.ok || !ret.sucesso) {
+          throw new Error(ret.erro || "Falha ao atualizar ocorrência no servidor Neon.");
+        }
         setMensagemSucesso(`Ocorrência de ${formatarNome(prof.nome)} atualizada com sucesso!`);
       } else {
-        adicionarOcorrencia({ ...dadosOcorrencia, status: "VALIDADA" });
+        const res = await fetch("/api/ocorrencias", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...dadosOcorrencia,
+            status: "VALIDADA",
+          }),
+        });
+        const ret = await res.json();
+        if (!res.ok || !ret.sucesso) {
+          throw new Error(ret.erro || "Falha ao registrar ocorrência no servidor Neon.");
+        }
         setMensagemSucesso(`Ocorrência registrada com sucesso para ${formatarNome(prof.nome)}!`);
       }
+
+
+
+
+
+
     } catch (erro) {
       alert(erro instanceof Error ? erro.message : "Não foi possível salvar a ocorrência.");
       return;

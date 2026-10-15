@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { usePermissoes } from "@/lib/auth/use-permissoes";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
@@ -68,8 +68,10 @@ import {
   obterTodasSituacoesRm,
   obterTodasFuncoesRm,
 } from "@/lib/importadores/processador-rm-totvs";
-import posicoesRev04Json from "@/lib/dados/posicoes-rev04.json";
-import feristasRev04Json from "@/lib/dados/feristas-rev04.json";
+import {
+  POSICOES_REV04 as posicoesRev04Json,
+  FERISTAS_REV04 as feristasRev04Json,
+} from "@/lib/dados/estrutura-postos";
 
 const FUNCOES_PADRAO: Record<string, string> = {
   "almoxarife lider": "Almoxarife líder",

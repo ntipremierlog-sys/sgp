@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useMemo, Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -28,6 +28,7 @@ import {
   obterFeristasREV04,
 } from "@/lib/dados/painel-calculo";
 import { POSTOS_REV04, POSICOES_REV04 } from "@/lib/dados/estrutura-postos";
+import { sincronizarEstadoServidor } from "@/lib/dados/estado-operacional";
 import { ArvoreImovel } from "@/components/painel/arvore-imovel";
 import { AlertasGerenciais } from "@/components/painel/alertas-gerenciais";
 
@@ -96,6 +97,7 @@ function PainelExecutivoContent() {
   }, [competenciaParam]);
 
   useEffect(() => {
+    sincronizarEstadoServidor().then(() => setDadosVersao((v) => v + 1));
     const handler = () => setDadosVersao((v) => v + 1);
     window.addEventListener("sgp-dados-atualizados", handler);
     return () => window.removeEventListener("sgp-dados-atualizados", handler);

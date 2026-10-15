@@ -1,102 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
-import { carregarEstado, CoberturaOperacional } from "@/lib/dados/estado-operacional";
 import { obterSessaoServidor } from "@/lib/auth/sessao";
 import { canServidor } from "@/lib/auth/permissoes-servidor";
-import { CATALOGO_ITEM_PPU, obterItemPPU } from "@/lib/dados/painel-calculo";
-import { COBERTURAS_PADRAO_REV04 } from "@/lib/servicos/relatorios-oficiais";
-import postosRev04Json from "@/lib/dados/postos-rev04.json";
+import {
+  obterCoberturas,
+  criarCobertura,
+  atualizarCobertura,
+  excluirCobertura,
+  obterPareceresVigentes,
+  PeriodoCongeladoError,
+} from "@/lib/repositorio";
+import { obterItemPPU } from "@/lib/dados/painel-calculo";
 
 export const dynamic = "force-dynamic";
 
 export type CategoriaMotivoLgpd = "Férias" | "Licença" | "Afastamento" | "Falta" | "Outros";
 
-export interface CoberturaItemServidor {
-  id: string;
-  imovel: string;
-  postoCodigo: string;
-  postoFuncao: string;
-  itemPpu: string;
-  itemPpuDescricao: string;
-  titularNome: string;
-  titularMatricula: string;
-  substitutoNome: string;
-  substitutoMatricula: string;
-  dataInicio: string;
-  dataFim: string;
-  periodoFormatado: string;
-  diarias: number;
-  motivoCategoria: CategoriaMotivoLgpd;
-  status: "CONFIRMADA" | "PLANEJADA" | "CANCELADA";
-  tipoCobertura: string;
-  alertaInterjornada?: boolean;
-  previaConferencia?: string | null;
-  statusConferenciaPosto?: string | null;
-  comentarioConferencia?: string;
-}
-
-/**
- * Normaliza e sanitiza qualquer justificativa em estrita categoria LGPD.
- * Nunca expõe detalhes médicos, atestados ou CID.
- */
-function classificarMotivoLgpd(motivo?: string): CategoriaMotivoLgpd {
-  if (!motivo) return "Outros";
-  const m = motivo.trim().toLowerCase();
-  if (m.includes("férias") || m.includes("ferias")) return "Férias";
-  if (m.includes("licença") || m.includes("licenca")) return "Licença";
-  if (
-    m.includes("afastamento") ||
-    m.includes("médic") ||
-    m.includes("medic") ||
-    m.includes("saúde") ||
-    m.includes("saude") ||
-    m.includes("atestado") ||
-    m.includes("cid")
-  ) {
-    return "Afastamento";
-  }
-  if (m.includes("falta") || m.includes("injustificada")) return "Falta";
+function classificarMotivoLgpd(justificativa?: string | null): CategoriaMotivoLgpd {
+  if (!justificativa) return "Outros";
+  const j = justificativa.toLowerCase();
+  if (j.includes("férias") || j.includes("ferias")) return "Férias";
+  if (j.includes("licença") || j.includes("licenca") || j.includes("maternidade") || j.includes("paternidade")) return "Licença";
+  if (j.includes("afastamento") || j.includes("inss") || j.includes("médic") || j.includes("medic") || j.includes("atestado")) return "Afastamento";
+  if (j.includes("falta")) return "Falta";
   return "Outros";
 }
 
-function calcularDiarias(dInicio: string, dFim: string): number {
-  if (!dInicio || !dFim) return 1;
-  const d1 = new Date(dInicio + "T00:00:00");
-  const d2 = new Date(dFim + "T00:00:00");
-  const diff = d2.getTime() - d1.getTime();
-  if (isNaN(diff) || diff < 0) return 1;
-  return Math.round(diff / (1000 * 60 * 60 * 24)) + 1;
+function formatarPeriodoDdMm(dtInicio: string, dtFim: string): string {
+  try {
+    const [, mIni, dIni] = dtInicio.split("-");
+    const [, mFim, dFim] = dtFim.split("-");
+    return `${dIni}/${mIni} a ${dFim}/${mFim}`;
+  } catch {
+    return `${dtInicio} a ${dtFim}`;
+  }
 }
 
-function formatarPeriodoDdMm(dInicio: string, dFim: string): string {
-  if (!dInicio) return "—";
-  const pIni = dInicio.split("-");
-  const ddIni = pIni[2] || "01";
-  const mmIni = pIni[1] || "01";
-  if (!dFim || dInicio === dFim) {
-    return `${ddIni}/${mmIni}`;
+function calcularDiarias(dtInicio: string, dtFim: string): number {
+  try {
+    const ini = new Date(dtInicio + "T00:00:00.000Z").getTime();
+    const fim = new Date(dtFim + "T00:00:00.000Z").getTime();
+    const diff = Math.round((fim - ini) / (1000 * 60 * 60 * 24)) + 1;
+    return Math.max(1, diff);
+  } catch {
+    return 1;
   }
-  const pFim = dFim.split("-");
-  const ddFim = pFim[2] || "01";
-  const mmFim = pFim[1] || "01";
-  return `${ddIni}/${mmIni} – ${ddFim}/${mmFim}`;
-}
-
-function normalizarItemPpu(codigo?: string): string {
-  if (!codigo) return "1.1";
-  const c = String(codigo).trim();
-  const partes = c.split(".");
-  if (partes.length === 2) {
-    const p1 = parseInt(partes[0], 10);
-    const p2 = parseInt(partes[1], 10);
-    if (!isNaN(p1) && !isNaN(p2)) {
-      return `${p1}.${p2}`;
-    }
-  }
-  return c;
 }
 
 export async function GET(request: NextRequest) {
-  // 1. Verificação de Sessão do Servidor
   const usuario = await obterSessaoServidor();
   if (!usuario) {
     return NextResponse.json({ sucesso: false, erro: "Autenticação necessária." }, { status: 401 });
@@ -121,135 +71,103 @@ export async function GET(request: NextRequest) {
 
     const semPaginacao = searchParams.get("semPaginacao") === "true";
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-    const pageSize = semPaginacao ? 999999 : 25; // Requisito estrito: 25 registros por página no servidor (exceto exportação de arquivo)
+    const pageSize = semPaginacao ? 999999 : 25;
 
-    // 2. Carrega catálogo de postos para resolução de Imóvel e PPU padrão
-    const mapaPostosRev04 = new Map<string, { imovel: string; funcao: string; itemPpu: string }>();
-    (postosRev04Json as any[]).forEach((p) => {
-      const cod = String(p.posto_id_sgp || p.idPosto || p.codigoPosto || "").trim();
-      const imovel = String(p.imovel_id || p.base || p.localAtuacao || p.municipio || "Base").trim();
-      const funcao = String(p.descricao || p.funcao || "Operacional").trim();
-      const itemPpu = normalizarItemPpu(p.item_ppu || p.itemPPU || "1.1");
-      if (cod) {
-        mapaPostosRev04.set(cod, { imovel, funcao, itemPpu });
-      }
-    });
+    // Buscar coberturas ativas e pareceres do banco Neon
+    const [coberturasDb, pareceresDb] = await Promise.all([
+      obterCoberturas({
+        imovelNome: imovelFiltro !== "TODOS" ? imovelFiltro : undefined,
+      }),
+      obterPareceresVigentes({ competencia, tipoRegistro: "COBERTURA" }),
+    ]);
 
-    // 3. Carrega base de coberturas no servidor
-    const estado = carregarEstado();
-    const cobMemoria = Array.isArray(estado.coberturas) ? estado.coberturas : [];
+    const mapaPareceres = new Map<string, typeof pareceresDb[0]>();
+    for (const p of pareceresDb) {
+      mapaPareceres.set(`${p.registroId}:${p.previaNumero}`, p);
+      mapaPareceres.set(p.registroId, p);
+    }
 
-    // Mescla coberturas da memória com as contratuais padrão da REV04 (sem duplicar IDs)
-    const mapaCoberturas = new Map<string, CoberturaOperacional>();
-    COBERTURAS_PADRAO_REV04.forEach((c) => mapaCoberturas.set(c.id, c));
-    cobMemoria.forEach((c) => mapaCoberturas.set(c.id, c));
-    const todasCoberturas = Array.from(mapaCoberturas.values());
-
-    // 4. Mapeamento e Enriquecimento das coberturas com Imóvel, PPU e LGPD
     const [anoComp, mesComp] = competencia.split("-").map(Number);
     const ultimoDiaComp = new Date(anoComp, mesComp, 0).getDate();
     const inicioMes = `${competencia}-01`;
     const fimMes = `${competencia}-${String(ultimoDiaComp).padStart(2, "0")}`;
 
-    const listaMapeada: CoberturaItemServidor[] = todasCoberturas
+    const listaMapeada = coberturasDb
       .filter((c) => {
-        // Pertence ao mês da competência (dataInicio <= fimMes e dataFim >= inicioMes)
-        return c.dataInicio <= fimMes && c.dataFim >= inicioMes;
+        const dtIni = c.dataInicio.toISOString().slice(0, 10);
+        const dtFim = c.dataFim.toISOString().slice(0, 10);
+        return dtIni <= fimMes && dtFim >= inicioMes;
       })
       .map((c) => {
-        const postoRef = mapaPostosRev04.get(c.postoCodigo) || mapaPostosRev04.get(c.idPosto || "");
-        const imovel = postoRef?.imovel || "Base Petrobras";
-        const postoFuncao = c.funcaoPosto || postoRef?.funcao || "Suporte Operacional";
-        const itemPpuCod = normalizarItemPpu(c.itemPpu || postoRef?.itemPpu || "1.1");
+        const dtIni = c.dataInicio.toISOString().slice(0, 10);
+        const dtFim = c.dataFim.toISOString().slice(0, 10);
+        const imovel = c.posto.imovel?.nome || c.posto.unidade.nome || "Base Petrobras";
+        const postoFuncao = c.posto.funcao || "Suporte Operacional";
+        const itemPpuCod = c.itemPpuCodigo || c.posto.itemPpuCodigo || "1.1";
         const itemPpuObj = obterItemPPU(itemPpuCod);
         const itemPpuDescricao = itemPpuObj?.descricao || `Item ${itemPpuCod}`;
         const motivoCategoria = classificarMotivoLgpd(c.justificativa);
-        const periodoFormatado = formatarPeriodoDdMm(c.dataInicio, c.dataFim);
-        const diarias = calcularDiarias(c.dataInicio, c.dataFim);
+        const periodoFormatado = formatarPeriodoDdMm(dtIni, dtFim);
+        const diarias = calcularDiarias(dtIni, dtFim);
+        const parecer = mapaPareceres.get(c.id);
 
         return {
           id: c.id,
           imovel,
-          postoCodigo: c.postoCodigo,
+          postoCodigo: c.posto.postoIdSgp || c.posto.codigoPosto,
           postoFuncao,
           itemPpu: itemPpuCod,
           itemPpuDescricao,
-          titularNome: c.titularNome?.trim() || "Posto vago",
-          titularMatricula: c.titularMatricula?.trim() || "—",
-          substitutoNome: c.substitutoNome?.trim() || "Ferista designado",
-          substitutoMatricula: c.substitutoMatricula?.trim() || "—",
-          dataInicio: c.dataInicio,
-          dataFim: c.dataFim,
+          titularNome: c.ocorrencia?.profissional?.nome || "Posto vago",
+          titularMatricula: c.ocorrencia?.profissional?.matricula || "—",
+          substitutoNome: c.profissionalSubstituto.nome,
+          substitutoMatricula: c.profissionalSubstituto.matricula,
+          dataInicio: dtIni,
+          dataFim: dtFim,
           periodoFormatado,
           diarias,
           motivoCategoria,
-          status: (c.status || "CONFIRMADA") as "CONFIRMADA" | "PLANEJADA" | "CANCELADA",
-          tipoCobertura: c.tipoCobertura || "SUBSTITUICAO_INTERNA",
-          alertaInterjornada: c.alertaInterjornada,
-          previaConferencia: c.previaConferencia || null,
-          statusConferenciaPosto: c.statusConferenciaPosto || null,
-          comentarioConferencia: c.comentarioConferencia || "",
+          status: c.status as "CONFIRMADA" | "PLANEJADA" | "CANCELADA",
+          tipoCobertura: c.tipoCobertura,
+          previaConferencia: parecer ? `Prévia ${parecer.previaNumero}` : null,
+          statusConferenciaPosto: parecer?.status || null,
+          comentarioConferencia: parecer?.comentario || "",
         };
       });
 
-    // 5. Aplicação dos Filtros do Servidor
     const filtradas = listaMapeada.filter((item) => {
-      // Filtro Imóvel
-      if (imovelFiltro !== "TODOS" && item.imovel.toLowerCase() !== imovelFiltro.toLowerCase()) {
-        return false;
-      }
-      // Filtro Item PPU
-      if (itemPpuFiltro !== "TODOS" && normalizarItemPpu(item.itemPpu) !== normalizarItemPpu(itemPpuFiltro)) {
-        return false;
-      }
-      // Filtro Motivo (categoria)
-      if (motivoFiltro !== "TODOS" && item.motivoCategoria.toLowerCase() !== motivoFiltro.toLowerCase()) {
-        return false;
-      }
-      // Filtro Status
-      if (statusFiltro !== "TODOS" && item.status !== statusFiltro) {
-        return false;
-      }
-      // Filtro Prévia Petrobras (Prévia 1, 2 ou 3)
-      if (previaFiltro !== "TODOS" && item.previaConferencia !== previaFiltro) {
-        return false;
-      }
-      // Filtro Busca Textual
+      if (imovelFiltro !== "TODOS" && item.imovel.toLowerCase() !== imovelFiltro.toLowerCase()) return false;
+      if (itemPpuFiltro !== "TODOS" && item.itemPpu !== itemPpuFiltro) return false;
+      if (motivoFiltro !== "TODOS" && item.motivoCategoria.toLowerCase() !== motivoFiltro.toLowerCase()) return false;
+      if (statusFiltro !== "TODOS" && item.status !== statusFiltro) return false;
+      if (previaFiltro !== "TODOS" && item.previaConferencia !== previaFiltro) return false;
       if (busca) {
-        const atendeBusca =
+        const atende =
           item.postoCodigo.toLowerCase().includes(busca) ||
           item.titularNome.toLowerCase().includes(busca) ||
           item.substitutoNome.toLowerCase().includes(busca) ||
           item.imovel.toLowerCase().includes(busca) ||
           item.itemPpu.toLowerCase().includes(busca) ||
           item.motivoCategoria.toLowerCase().includes(busca);
-        if (!atendeBusca) return false;
+        if (!atende) return false;
       }
       return true;
     });
 
-    // Ordenação consistente (por dataInicio decrescente, depois código do posto)
     filtradas.sort((a, b) => {
-      const cmpData = b.dataInicio.localeCompare(a.dataInicio);
-      if (cmpData !== 0) return cmpData;
+      const cmp = b.dataInicio.localeCompare(a.dataInicio);
+      if (cmp !== 0) return cmp;
       return a.postoCodigo.localeCompare(b.postoCodigo);
     });
 
-    // 6. Paginação no Servidor (25 itens por página)
     const totalRegistros = filtradas.length;
     const totalPaginas = Math.max(1, Math.ceil(totalRegistros / pageSize));
     const paginaAtual = Math.min(page, totalPaginas);
     const inicioIndice = (paginaAtual - 1) * pageSize;
     const registrosPaginados = filtradas.slice(inicioIndice, inicioIndice + pageSize);
 
-    // Listas únicas para alimentar os selects de filtros
     const imoveisDisponiveis = Array.from(new Set(listaMapeada.map((c) => c.imovel))).sort();
-    const itensPpuDisponiveis = Array.from(new Set(listaMapeada.map((c) => c.itemPpu))).sort((a, b) => {
-      const [a1, a2] = a.split(".").map(Number);
-      const [b1, b2] = b.split(".").map(Number);
-      if (a1 !== b1) return a1 - b1;
-      return a2 - b2;
-    });
+    const itensPpuDisponiveis = Array.from(new Set(listaMapeada.map((c) => c.itemPpu))).sort();
 
     return NextResponse.json({
       sucesso: true,
@@ -271,6 +189,89 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { sucesso: false, erro: erro?.message || "Falha ao processar coberturas." },
       { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const usuario = await obterSessaoServidor();
+  if (!usuario) {
+    return NextResponse.json({ sucesso: false, erro: "Autenticação necessária." }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const usuarioIdentificador = usuario.email || usuario.nome || "usuario-sistema";
+    const nova = await criarCobertura(body, usuarioIdentificador);
+    return NextResponse.json({ sucesso: true, cobertura: nova }, { status: 201 });
+  } catch (erro: any) {
+    if (erro instanceof PeriodoCongeladoError) {
+      return NextResponse.json(
+        { sucesso: false, erro: erro.message, codigo: erro.codigo },
+        { status: erro.statusCode }
+      );
+    }
+    return NextResponse.json(
+      { sucesso: false, erro: erro?.message || "Falha ao criar cobertura." },
+      { status: 400 }
+    );
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  const usuario = await obterSessaoServidor();
+  if (!usuario) {
+    return NextResponse.json({ sucesso: false, erro: "Autenticação necessária." }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const { id, ...dados } = body;
+    if (!id) {
+      return NextResponse.json({ sucesso: false, erro: "ID da cobertura é obrigatório." }, { status: 400 });
+    }
+    const usuarioIdentificador = usuario.email || usuario.nome || "usuario-sistema";
+    const atualizada = await atualizarCobertura(id, dados, usuarioIdentificador);
+    return NextResponse.json({ sucesso: true, cobertura: atualizada });
+  } catch (erro: any) {
+    if (erro instanceof PeriodoCongeladoError) {
+      return NextResponse.json(
+        { sucesso: false, erro: erro.message, codigo: erro.codigo },
+        { status: erro.statusCode }
+      );
+    }
+    return NextResponse.json(
+      { sucesso: false, erro: erro?.message || "Falha ao atualizar cobertura." },
+      { status: 400 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const usuario = await obterSessaoServidor();
+  if (!usuario) {
+    return NextResponse.json({ sucesso: false, erro: "Autenticação necessária." }, { status: 401 });
+  }
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    if (!id) {
+      return NextResponse.json({ sucesso: false, erro: "ID da cobertura é obrigatório." }, { status: 400 });
+    }
+    const usuarioIdentificador = usuario.email || usuario.nome || "usuario-sistema";
+    await excluirCobertura(id, usuarioIdentificador);
+    return NextResponse.json({ sucesso: true, mensagem: "Cobertura excluída com sucesso." });
+  } catch (erro: any) {
+    if (erro instanceof PeriodoCongeladoError) {
+      return NextResponse.json(
+        { sucesso: false, erro: erro.message, codigo: erro.codigo },
+        { status: erro.statusCode }
+      );
+    }
+    return NextResponse.json(
+      { sucesso: false, erro: erro?.message || "Falha ao excluir cobertura." },
+      { status: 400 }
     );
   }
 }

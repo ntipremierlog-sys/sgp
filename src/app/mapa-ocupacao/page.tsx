@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { usePermissoes } from "@/lib/auth/use-permissoes";
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
@@ -31,6 +31,7 @@ import { CampoItemPpu } from "@/components/cobertura/campo-item-ppu";
 import { BASES_SGP_SISTEMA } from "@/lib/dados/secoes-horarios";
 import {
   carregarEstado,
+  sincronizarEstadoServidor,
   calcularStatusDia,
   calcularStatusVagaDia,
   calcularTotaisVagaCiclo,
@@ -628,6 +629,7 @@ export default function MapaOcupacaoPage() {
 
   // Carregamento de dados
   const carregarDados = useCallback(async () => {
+    await sincronizarEstadoServidor();
     const estado = carregarEstado();
 
     const todosPostos = obterTodosPostosContrato(estado.postos);
@@ -649,7 +651,9 @@ export default function MapaOcupacaoPage() {
 
     if (!pts || pts.length === 0) {
       try {
-        const res = await fetch("/api/ponto");
+        const dIni = dataInicioFiltro || "2026-08-10";
+        const dFim = dataFimFiltro || "2026-09-15";
+        const res = await fetch(`/api/ponto?dataInicio=${dIni}&dataFim=${dFim}`);
         if (res.ok) {
           const data = await res.json();
           if (data.sucesso && Array.isArray(data.marcacoes) && data.marcacoes.length > 0) {
