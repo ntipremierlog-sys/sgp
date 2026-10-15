@@ -28,7 +28,6 @@ import {
   Upload,
   Camera,
 } from "lucide-react";
-import { AbaLimpezaDados } from "@/components/admin/aba-limpeza-dados";
 import { AbaPermissoes } from "@/components/admin/aba-permissoes";
 import {
   carregarUsuarios,
@@ -586,18 +585,6 @@ export default function AdminPage() {
           <span>Mapeamento de Seções RM</span>
         </button>
 
-        <button
-          onClick={() => setAbaAtiva("LIMPEZA")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all shrink-0 cursor-pointer ${
-            abaAtiva === "LIMPEZA"
-              ? "border-[#1F4FD1] text-[#1F4FD1] bg-white"
-              : "border-transparent text-[#5B6474] hover:text-[#1A2230]"
-          }`}
-        >
-          <Database className="w-4 h-4 text-emerald-600" />
-          <span>Limpeza & Backups (MOMENTO 1)</span>
-        </button>
-
         <Link
           href="/admin/importar-funcionarios"
           className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-blue-700 hover:text-blue-900 bg-blue-50/70 hover:bg-blue-100/70 rounded-t-lg transition-all shrink-0 ml-auto"
@@ -1055,16 +1042,6 @@ export default function AdminPage() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* ABA 4: LIMPEZA DE DADOS FICTÍCIOS & BACKUPS (MOMENTO 1) */}
-      {/* ===================================================================== */}
-      {abaAtiva === "LIMPEZA" && (
-        <AbaLimpezaDados
-          usuarioNome={sessao?.nome || SESSAO_PADRAO_DEV.nome}
-          onNotificar={exibirAlerta}
-        />
       )}
 
       {/* ===================================================================== */}

@@ -21,7 +21,6 @@
 import prisma from "@/lib/prisma";
 import { CATALOGO_ITEM_PPU, obterItemPPU } from "@/lib/dados/painel-calculo";
 import { carregarEstado } from "@/lib/dados/estado-operacional";
-import { COBERTURAS_PADRAO_REV04 } from "@/lib/servicos/relatorios-oficiais";
 import { POSTOS_REV04 as postosRev04Json } from "@/lib/dados/estrutura-postos";
 
 export interface FiltrosRelatorioCoberturas {
@@ -200,9 +199,10 @@ export async function consultarDadosRelatorioCoberturas(
         FROM ocorrencia o
         JOIN posto p ON o.posto_id = p.id
         LEFT JOIN imovel i ON p.imovel_id = i.id
-        LEFT JOIN cobertura c ON c.ocorrencia_id = o.id AND c.status = 'CONFIRMADA'
+        LEFT JOIN cobertura c ON c.ocorrencia_id = o.id AND c.status = 'CONFIRMADA' AND c.deleted_at IS NULL
         LEFT JOIN profissional pr ON c.profissional_substituto_id = pr.id
         WHERE o.status != 'CANCELADA'
+          AND o.deleted_at IS NULL
           AND o.data_inicio::date <= $2::date
           AND o.data_fim::date >= $1::date
           AND ($3::text IS NULL OR LOWER(i.nome) = LOWER($3))
@@ -395,7 +395,6 @@ function consolidarComMotorAnalitico(
   // 2. Carrega coberturas
   const estado = carregarEstado();
   const mapaCoberturas = new Map<string, any>();
-  COBERTURAS_PADRAO_REV04.forEach((c) => mapaCoberturas.set(c.id, c));
   (estado.coberturas || []).forEach((c) => mapaCoberturas.set(c.id, c));
   const todasCoberturas = Array.from(mapaCoberturas.values());
 

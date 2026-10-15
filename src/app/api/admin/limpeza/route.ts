@@ -1,164 +1,25 @@
-import { NextRequest, NextResponse } from "next/server";
-import { obterSessaoServidor } from "@/lib/auth/sessao";
-import { can } from "@/lib/auth/permissoes";
-import {
-  simularLimpezaDadosDemo,
-  executarLimpezaDadosDemo,
-} from "@/lib/dados/limpeza-dados-demo";
-import {
-  salvarBackupEmDisco,
-  listarBackupsDisco,
-  lerBackupDisco,
-} from "@/lib/dados/backup-servidor";
-import { restaurarSnapshotSistema } from "@/lib/dados/backup-dados";
+import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/admin/limpeza
- * Retorna a simulação da limpeza atual e a lista de backups disponíveis em disco.
+ * /api/admin/limpeza — DESATIVADA (Etapa 3 / B2).
+ *
+ * Não existem mais dados de demonstração: coberturas, ocorrências, pareceres,
+ * apontamentos, postos, posições e profissionais vêm exclusivamente do banco
+ * Neon PostgreSQL. A rotina de limpeza/restauração de dados demo foi desativada
+ * para impedir que snapshots locais (com dados fictícios) sejam reinjetados.
  */
-export async function GET(request: NextRequest) {
-  try {
-    const usuario = await obterSessaoServidor();
+const RESPOSTA_DESATIVADA = {
+  sucesso: false,
+  erro: "Rotina de limpeza de dados de demonstração desativada. Os dados operacionais são gerenciados exclusivamente no banco de dados.",
+  codigo: "ROTINA_DESATIVADA",
+};
 
-    // Verificação estrita de autorização
-    if (!usuario || !can(usuario, "LER", "ADMINISTRACAO")) {
-      return NextResponse.json(
-        {
-          sucesso: false,
-          erro: "Acesso não permitido. Módulo restrito ao perfil Administrador Premier.",
-        },
-        { status: 403 }
-      );
-    }
-
-    const { searchParams } = new URL(request.url);
-    const downloadArquivo = searchParams.get("download");
-
-    // Rota de download direto de um arquivo de backup
-    if (downloadArquivo) {
-      const conteudo = lerBackupDisco(downloadArquivo);
-      if (!conteudo) {
-        return NextResponse.json(
-          { sucesso: false, erro: "Arquivo de backup não encontrado." },
-          { status: 404 }
-        );
-      }
-
-      return new NextResponse(JSON.stringify(conteudo, null, 2), {
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Disposition": `attachment; filename="${downloadArquivo}"`,
-        },
-      });
-    }
-
-    const simulacao = simularLimpezaDadosDemo(usuario.nome);
-    const backups = listarBackupsDisco();
-
-    return NextResponse.json({
-      sucesso: true,
-      simulacao,
-      backups,
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Erro desconhecido";
-    return NextResponse.json({ sucesso: false, erro: msg }, { status: 500 });
-  }
+export async function GET() {
+  return NextResponse.json(RESPOSTA_DESATIVADA, { status: 410 });
 }
 
-/**
- * POST /api/admin/limpeza
- * Executa simulação, limpeza definitiva com backup em disco, ou restauração de backup.
- */
-export async function POST(request: NextRequest) {
-  try {
-    const usuario = await obterSessaoServidor();
-
-    // Somente PREMIER_ADMIN pode executar limpeza ou restauração
-    if (!usuario || !can(usuario, "CRIAR", "ADMINISTRACAO")) {
-      return NextResponse.json(
-        { sucesso: false, erro: "Acesso não permitido." },
-        { status: 403 }
-      );
-    }
-
-    const body = await request.json().catch(() => ({}));
-    const acao = body.acao || "EXECUTAR";
-
-    if (acao === "SIMULAR") {
-      const simulacao = simularLimpezaDadosDemo(usuario.nome);
-      return NextResponse.json({ sucesso: true, simulacao });
-    }
-
-    if (acao === "EXECUTAR") {
-      const resultado = executarLimpezaDadosDemo(usuario.nome);
-      const backupGravado = salvarBackupEmDisco(
-        resultado.snapshotBackup,
-        "backup_limpeza_dados"
-      );
-
-      const backupsAtualizados = listarBackupsDisco();
-
-      return NextResponse.json({
-        sucesso: true,
-        mensagem: "Limpeza de dados operacionais fictícios concluída com sucesso.",
-        relatorio: resultado,
-        backupGerado: backupGravado,
-        backups: backupsAtualizados,
-      });
-    }
-
-    if (acao === "LIMPAR_MAPA_OCUPACAO") {
-      const { limparDadosOperacionaisOcupacao } = await import("@/lib/dados/limpeza-dados-demo");
-      const resultado = limparDadosOperacionaisOcupacao(usuario.nome);
-      const backupGravado = salvarBackupEmDisco(
-        resultado.snapshotBackup,
-        "backup_limpeza_mapa"
-      );
-
-      const backupsAtualizados = listarBackupsDisco();
-
-      return NextResponse.json({
-        sucesso: true,
-        mensagem: "Limpeza das informações operacionais do Mapa de Ocupação concluída com sucesso.",
-        relatorio: resultado,
-        backupGerado: backupGravado,
-        backups: backupsAtualizados,
-      });
-    }
-
-    if (acao === "RESTAURAR") {
-      const { nomeArquivo, snapshot } = body;
-      let snapshotParaRestaurar = snapshot;
-
-      if (!snapshotParaRestaurar && nomeArquivo) {
-        snapshotParaRestaurar = lerBackupDisco(nomeArquivo);
-      }
-
-      if (!snapshotParaRestaurar) {
-        return NextResponse.json(
-          { sucesso: false, erro: "Snapshot de backup não informado ou não encontrado no disco." },
-          { status: 400 }
-        );
-      }
-
-      restaurarSnapshotSistema(snapshotParaRestaurar);
-
-      return NextResponse.json({
-        sucesso: true,
-        mensagem: "Estado operacional restaurado com sucesso a partir do backup.",
-        snapshot: snapshotParaRestaurar,
-      });
-    }
-
-    return NextResponse.json(
-      { sucesso: false, erro: `Ação "${acao}" não reconhecida.` },
-      { status: 400 }
-    );
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Erro ao processar solicitação de limpeza";
-    return NextResponse.json({ sucesso: false, erro: msg }, { status: 500 });
-  }
+export async function POST() {
+  return NextResponse.json(RESPOSTA_DESATIVADA, { status: 410 });
 }

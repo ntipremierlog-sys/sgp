@@ -1,6 +1,7 @@
 
 function carregarFallbackTeste<T>(arquivo: string): T[] {
-  if (typeof window === "undefined") {
+  // Somente nos testes automatizados; em execução real a fonte é o banco.
+  if (typeof window === "undefined" && process.env.NODE_ENV === "test") {
     try {
       const fsModule = require("fs");
       const pathModule = require("path");
@@ -1154,38 +1155,8 @@ export const OCORRENCIAS_CADASTRO_2026_09: OcorrenciaOperacional[] = [
 export const PROFISSIONAIS_INICIAIS: ProfissionalOperacional[] = [];
 export const OCORRENCIAS_INICIAIS: OcorrenciaOperacional[] = [...OCORRENCIAS_CADASTRO_2026_09];
 export const COBERTURAS_INICIAIS: CoberturaOperacional[] = [];
-export const APONTAMENTOS_INICIAIS: ApontamentoOperacional[] = [
-  {
-    id: "apt-001",
-    postoCodigo: "PST-0001",
-    funcaoPosto: "Técnico de Suporte Operacional",
-    dataReferencia: "2026-09-08",
-    competencia: "Setembro / 2026",
-    origem: "PETROBRAS",
-    texto: "Ausência verificada no início do turno matutino sem cobertura identificada na escala.",
-    criadoPor: "Carlos Eduardo Mendes (Fiscal Técnico Petrobras)",
-    dataCriacao: "2026-09-08 08:30",
-    status: "RESPONDIDO",
-    respostaPremier: "Colaborador titular apresentou atestado médico; profissional ferista alocado a partir das 09:15 conforme escala de contingência.",
-    respondidoPor: "Marcos Valério (Gestor Premier)",
-    respondidoEm: "2026-09-08 09:45",
-  },
-  {
-    id: "apt-002",
-    postoCodigo: "PST-0004",
-    funcaoPosto: "Almoxarife",
-    dataReferencia: "2026-09-09",
-    competencia: "Setembro / 2026",
-    origem: "PREMIER",
-    texto: "Observação operacional: ajuste preventivo de horário para acompanhar descarga de materiais críticos na UFN III, com ciência prévia do fiscal local.",
-    criadoPor: "Marcos Valério (Preposto / Gestor Premier)",
-    dataCriacao: "2026-09-09 10:15",
-    status: "RESPONDIDO",
-    respostaPremier: "Operação executada conforme previsto; posto mantido com 100% de presença sem ocorrência de glosa.",
-    respondidoPor: "Supervisão Premier",
-    respondidoEm: "2026-09-09 11:20",
-  },
-];
+// Apontamentos vêm exclusivamente do banco (API /api/apontamentos). Sem dados de exemplo.
+export const APONTAMENTOS_INICIAIS: ApontamentoOperacional[] = [];
 
 export const FECHAMENTOS_INICIAIS: FechamentoCompetencia[] = [
   {
@@ -2748,82 +2719,65 @@ let estadoMemoria: EstadoOperacionalCompleto = {
 
 
 
+/** Preferências de tela (única informação mantida no navegador). */
+const CHAVE_PREFERENCIAS_TELA = "sgp_preferencias_tela_v1";
+
+/** Chaves antigas que guardavam dados operacionais no navegador: ignoradas e apagadas na abertura. */
+const CHAVES_OPERACIONAIS_LEGADAS = [
+  CHAVE_STORAGE,
+  "sgp_estado_operacional",
+  "sgp_estado_operacional_v1",
+  "sgp_estado_operacional_v2",
+  "sgp_estado_operacional_v3",
+  "sgp_backup_dados",
+  "sgp_backup_coberturas",
+];
+
+let chavesOperacionaisLegadasRemovidas = false;
+
+export function removerDadosOperacionaisDoNavegador(): string[] {
+  if (typeof window === "undefined" || chavesOperacionaisLegadasRemovidas) return [];
+  chavesOperacionaisLegadasRemovidas = true;
+  const removidas: string[] = [];
+  try {
+    const todas: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) todas.push(k);
+    }
+    for (const k of todas) {
+      if (CHAVES_OPERACIONAIS_LEGADAS.includes(k) || k.startsWith("sgp_estado_operacional") || k.startsWith("sgp_backup_")) {
+        localStorage.removeItem(k);
+        removidas.push(k);
+      }
+    }
+  } catch {}
+  return removidas;
+}
+
 export function carregarEstado(): EstadoOperacionalCompleto {
   if (typeof window !== "undefined") {
+    removerDadosOperacionaisDoNavegador();
     try {
-      const salvo = localStorage.getItem(CHAVE_STORAGE);
-      if (salvo) {
-        const parsed = JSON.parse(salvo);
-        delete parsed.coberturas;
-        delete parsed.ocorrencias;
-        delete parsed.apontamentos;
-        delete parsed.profissionais;
-        delete parsed.marcacoesPonto;
-        estadoMemoria = { ...estadoMemoria, ...parsed };
-
-        // Garante que coberturas estejam limpas de dados fictícios legados
-        if (!Array.isArray(estadoMemoria.coberturas)) {
-          estadoMemoria.coberturas = [];
-        } else {
-          estadoMemoria.coberturas = estadoMemoria.coberturas.filter(
-            (c) =>
-              !c.id.startsWith("COB-CABIUNAS-") &&
-              !c.id.startsWith("COB-BOAVENTURA-") &&
-              !c.id.startsWith("cob-demo-")
-          );
-        }
-
-        const excluidas = new Set(estadoMemoria.coberturasExcluidasIds || []);
-        for (const cIni of COBERTURAS_INICIAIS) {
-          if (excluidas.has(cIni.id)) continue;
-          if (!estadoMemoria.coberturas.some((c) => c.id === cIni.id)) {
-            estadoMemoria.coberturas.push(cIni);
-          }
-        }
-
-        // Garante pendências de escala da REV04 se não houver no storage
-        if (!estadoMemoria.pendenciasEscala || estadoMemoria.pendenciasEscala.length === 0) {
-          estadoMemoria.pendenciasEscala = [...PENDENCIAS_ESCALA_REV04];
-        }
-
-        // Sincroniza postos das ocorrências se faltar postoCodigo
-        if (Array.isArray(estadoMemoria.ocorrencias)) {
-          const mapaPostosIniciais = new Map(OCORRENCIAS_INICIAIS.map((o) => [o.id, o.postoCodigo]));
-          const mapaAlocPosto = new Map<string, string>();
-          const alocs =
-            estadoMemoria.alocacoes && estadoMemoria.alocacoes.length > 0
-              ? estadoMemoria.alocacoes
-              : ALOCACOES_MC_REAIS;
-          alocs.forEach((aloc) => {
-            if (aloc.matricula && aloc.postoIdSGP) {
-              mapaAlocPosto.set(aloc.matricula, aloc.postoIdSGP);
-              mapaAlocPosto.set(aloc.matricula.replace(/^0+/, ""), aloc.postoIdSGP);
-            }
-          });
-
-          estadoMemoria.ocorrencias = estadoMemoria.ocorrencias.map((oc) => {
-            if (!oc.postoCodigo) {
-              const postoIni = mapaPostosIniciais.get(oc.id);
-              const chapaNorm = (oc.matricula || "").replace(/^0+/, "");
-              const postoAloc = mapaAlocPosto.get(oc.matricula) || (chapaNorm ? mapaAlocPosto.get(chapaNorm) : undefined);
-              const novoCod = postoIni || postoAloc;
-              if (novoCod) {
-                return { ...oc, postoCodigo: novoCod };
-              }
-            }
-            return oc;
-          });
+      const pref = localStorage.getItem(CHAVE_PREFERENCIAS_TELA);
+      if (pref) {
+        const p = JSON.parse(pref);
+        if (p && typeof p.unidadeSelecionada === "string") {
+          estadoMemoria.unidadeSelecionada = p.unidadeSelecionada;
         }
       }
     } catch {
-      // Falha silenciosa de localStorage (usa estadoMemoria)
+      // Preferência inválida: ignora
     }
+  }
+
+  if (!estadoMemoria.pendenciasEscala || estadoMemoria.pendenciasEscala.length === 0) {
+    estadoMemoria.pendenciasEscala = [...PENDENCIAS_ESCALA_REV04];
   }
 
   return estadoMemoria;
 }
 
-let avisoFalhaGravacaoExibido = false;
 
 export function aplicarEstadoDoServidor(dados: any) {
   if (!dados) return;
@@ -2858,77 +2812,14 @@ export async function sincronizarEstadoServidor(): Promise<EstadoOperacionalComp
 export function salvarEstado(novo: Partial<EstadoOperacionalCompleto>) {
   estadoMemoria = { ...estadoMemoria, ...novo };
   if (typeof window !== "undefined") {
+    // Dados operacionais NÃO são mais gravados no navegador (fonte única: banco Neon).
+    // Apenas preferências de tela são persistidas localmente.
     try {
-      // 1. Limpeza proativa de chaves legadas para liberar cota de 5MB do domínio
-      const chavesAntigas = [
-        "sgp_estado_operacional",
-        "sgp_estado_operacional_v1",
-        "sgp_estado_operacional_v2",
-        "sgp_estado_operacional_v3",
-        "sgp_backup_dados",
-        "sgp_backup_coberturas",
-      ];
-      chavesAntigas.forEach((k) => {
-        try {
-          localStorage.removeItem(k);
-        } catch {}
-      });
-
-      // 2. Isola marcações de ponto do localStorage para nunca estourar a quota de 5MB
-      const { marcacoesPonto: _marc, coberturas: _cobs, ocorrencias: _ocorr, apontamentos: _apts, profissionais: _profs, ...estadoParaLocalStorage } = estadoMemoria;
-
-      // 3. Compacta snapshotAnterior em lotesImportacao para salvar apenas dados estritamente necessários
-      if (estadoParaLocalStorage.lotesImportacao) {
-        estadoParaLocalStorage.lotesImportacao = estadoParaLocalStorage.lotesImportacao.map((lote) => {
-          if (!lote.snapshotAnterior) return lote;
-          const snap = lote.snapshotAnterior as any;
-          return {
-            ...lote,
-            snapshotAnterior: {
-              profissionais: snap.profissionais,
-              ocorrencias: snap.ocorrencias,
-              coberturas: snap.coberturas,
-              alocadosSifac: snap.alocadosSifac,
-            },
-          };
-        });
-      }
-
-      // 4. Limita logsAuditoria salvos no localStorage a no máximo 50
-      if (estadoParaLocalStorage.logsAuditoria && estadoParaLocalStorage.logsAuditoria.length > 50) {
-        estadoParaLocalStorage.logsAuditoria = estadoParaLocalStorage.logsAuditoria.slice(0, 50);
-      }
-
-      localStorage.setItem(CHAVE_STORAGE, JSON.stringify(estadoParaLocalStorage));
-      avisoFalhaGravacaoExibido = false;
-    } catch (erro) {
-      console.warn("[SGP] Cota do localStorage atingida, aplicando compactação de segurança...", erro);
-      try {
-      const { marcacoesPonto: _marc, coberturas: _cobs, ocorrencias: _ocorr, apontamentos: _apts, profissionais: _profs, ...estadoCompacto } = estadoMemoria;
-        if (estadoCompacto.lotesImportacao) {
-          estadoCompacto.lotesImportacao = estadoCompacto.lotesImportacao.map((l) => ({
-            ...l,
-            snapshotAnterior: undefined,
-          }));
-        }
-        if (estadoCompacto.logsAuditoria && estadoCompacto.logsAuditoria.length > 20) {
-          estadoCompacto.logsAuditoria = estadoCompacto.logsAuditoria.slice(0, 20);
-        }
-        localStorage.setItem(CHAVE_STORAGE, JSON.stringify(estadoCompacto));
-        avisoFalhaGravacaoExibido = false;
-      } catch (segundoErro) {
-        console.error("[SGP] Falha ao gravar o estado no navegador:", segundoErro);
-        if (!avisoFalhaGravacaoExibido) {
-          avisoFalhaGravacaoExibido = true;
-          try {
-            window.alert(
-              "ATENÇÃO: não foi possível gravar os dados no navegador (espaço de armazenamento esgotado ou bloqueado).\n\nA alteração foi aplicada apenas nesta sessão e será perdida ao recarregar a página."
-            );
-          } catch {}
-        }
-      }
-    }
-    // A tela é atualizada mesmo que a gravação persistente falhe.
+      localStorage.setItem(
+        CHAVE_PREFERENCIAS_TELA,
+        JSON.stringify({ unidadeSelecionada: estadoMemoria.unidadeSelecionada })
+      );
+    } catch {}
     window.dispatchEvent(new CustomEvent("sgp-dados-atualizados", { detail: estadoMemoria }));
   }
   return estadoMemoria;

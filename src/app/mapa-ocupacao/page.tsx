@@ -96,7 +96,6 @@ import {
   podeVerDadosPessoaisCompletos,
 } from "@/lib/dados/rm-tipos";
 import { useSessaoUsuario } from "@/lib/auth/use-sessao-usuario";
-import { limparDadosOperacionaisOcupacao } from "@/lib/dados/limpeza-dados-demo";
 import { analisarJornadaDia, montarEspelhoPeriodo } from "@/lib/servicos/analise-jornada";
 import type { CicloEscalaColaborador } from "@/lib/dados/ponto-tipos";
 import {
@@ -491,30 +490,6 @@ export default function MapaOcupacaoPage() {
   // Perfil REAL da sessão (/api/auth). Enquanto carrega ou se falhar, é null → visão restrita (LGPD fail-closed).
   const { perfil: perfilAtivo, sessao: sessaoUsuario } = useSessaoUsuario();
   const [pendenciasEscala, setPendenciasEscala] = useState<PendenciaEscalaItem[]>([]);
-
-  // Limpeza de Dados Operacionais do Mapa (mantém posições, exclui presença/cobertura/descoberto)
-  const [modalConfirmarLimpezaOperacional, setModalConfirmarLimpezaOperacional] = useState(false);
-  const [limpandoOperacional, setLimpandoOperacional] = useState(false);
-  const [mensagemLimpezaSucesso, setMensagemLimpezaSucesso] = useState("");
-
-  const handleLimparDadosOperacionais = async () => {
-    setLimpandoOperacional(true);
-    try {
-      limparDadosOperacionaisOcupacao(
-        sessaoUsuario?.nome || "Administrador Premier"
-      );
-      setModalConfirmarLimpezaOperacional(false);
-      setMensagemLimpezaSucesso(
-        "Dados operacionais de presença, cobertura e ausências excluídos com sucesso. Todas as posições contratuais foram preservadas!"
-      );
-      await carregarDados();
-      setTimeout(() => setMensagemLimpezaSucesso(""), 6000);
-    } catch (err) {
-      console.error("Erro ao limpar dados operacionais do mapa:", err);
-    } finally {
-      setLimpandoOperacional(false);
-    }
-  };
 
   // Visões: Grade de Ocupação, Árvore e Painel de Pendências (Premier)
   const [abaVisao, setAbaVisao] = useState<"GRADE" | "PPU" | "PENDENCIAS">("GRADE");
@@ -2664,17 +2639,6 @@ export default function MapaOcupacaoPage() {
             )}
           </div>
 
-          {podeEditarOperacao && (
-            <button
-              onClick={() => setModalConfirmarLimpezaOperacional(true)}
-              className="inline-flex items-center justify-center w-7 h-7 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-              title="Limpar dados de presença, coberturas e ausências do mapa mantendo todas as posições"
-              aria-label="Limpar dados do mapa"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          )}
-
           {podeExportarMapa && (
           <button
             onClick={handleExportarXlsx}
@@ -2687,22 +2651,6 @@ export default function MapaOcupacaoPage() {
           )}
         </div>
       </div>
-
-      {/* Alerta de Feedback de Limpeza Operacional */}
-      {mensagemLimpezaSucesso && (
-        <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-2xs animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{mensagemLimpezaSucesso}</span>
-          </div>
-          <button
-            onClick={() => setMensagemLimpezaSucesso("")}
-            className="text-emerald-700 hover:text-emerald-950 p-0.5 cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* 2. INDICADORES (faixa única; cor só quando há problema) */}
       <div className="grid grid-cols-2 md:grid-cols-4 rounded-lg border border-slate-200 bg-white divide-y md:divide-y-0 md:divide-x divide-slate-100">
@@ -4362,60 +4310,6 @@ export default function MapaOcupacaoPage() {
                 className="px-4 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-semibold rounded border border-slate-300 text-xs transition-colors cursor-pointer"
               >
                 Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 8. MODAL DE CONFIRMAÇÃO DE LIMPEZA OPERACIONAL DO MAPA */}
-      {modalConfirmarLimpezaOperacional && (
-        <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Trash2 className="w-5 h-5 text-rose-400" />
-                <h3 className="font-bold text-sm">Limpeza de Dados Operacionais</h3>
-              </div>
-              <button
-                onClick={() => setModalConfirmarLimpezaOperacional(false)}
-                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-3.5 text-xs text-slate-600">
-              <p className="leading-relaxed">
-                Esta ação remove todas as informações operacionais registradas no Mapa de Ocupação:
-              </p>
-              <ul className="space-y-1.5 list-disc list-inside bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-700">
-                <li><strong className="text-emerald-700">Preserva integralmente:</strong> Todas as posições e postos do contrato.</li>
-                <li><strong className="text-rose-700">Exclui presenças:</strong> Marcações de ponto e batidas importadas.</li>
-                <li><strong className="text-rose-700">Exclui coberturas:</strong> Substituições temporárias registradas.</li>
-                <li><strong className="text-rose-700">Exclui descobertos:</strong> Faltas, atestados, ocorrências e apontamentos.</li>
-                <li><strong className="text-rose-700">Exclui apontamentos manuais:</strong> Ajustes diários aplicados na escala.</li>
-              </ul>
-              <div className="p-2.5 bg-blue-50 border border-blue-200 rounded text-blue-900 text-[11px] leading-relaxed">
-                Um backup completo do estado atual será gerado automaticamente antes da limpeza.
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2">
-              <button
-                onClick={() => setModalConfirmarLimpezaOperacional(false)}
-                disabled={limpandoOperacional}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 rounded border border-slate-300 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleLimparDadosOperacionais}
-                disabled={limpandoOperacional}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>{limpandoOperacional ? "Limpando..." : "Confirmar Limpeza"}</span>
               </button>
             </div>
           </div>

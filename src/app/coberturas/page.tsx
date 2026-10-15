@@ -1131,6 +1131,7 @@ export default function PaginaGestaoCoberturas() {
                           }
                           setModalAberto(false);
                           await carregarCoberturasServidor();
+                          await sincronizarEstadoServidor();
                         } catch (e: any) {
                           alert(e?.message || "Erro ao excluir cobertura.");
                         }
