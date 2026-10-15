@@ -168,16 +168,13 @@ export function RegistrosPontoDia({
     <div className="rounded-lg border border-slate-200 bg-white p-3.5 space-y-3" id="registros-ponto-dia">
       <div className="flex items-center justify-between gap-2 flex-wrap border-b border-slate-100 pb-2">
         <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-blue-700" />
+          <Clock className="w-4 h-4 text-slate-700" />
           <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Registros de Ponto do Dia</span>
-          <span className="text-[9px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-semibold">
-            Restrito Premier (LGPD)
-          </span>
         </div>
         <button
           id="btn-abrir-espelho-periodo"
           onClick={() => onAbrirEspelho(Math.min(pessoaAtiva, pessoas.length - 1))}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-900 hover:bg-blue-800 text-white text-[11px] font-bold shadow-xs cursor-pointer transition-colors"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-medium shadow-xs cursor-pointer transition-colors"
         >
           <FileSpreadsheet className="w-3.5 h-3.5" />
           Espelho completo do período
@@ -207,34 +204,34 @@ export function RegistrosPontoDia({
           <div className="font-bold text-slate-900">{atual.nome}</div>
           <div className="text-slate-500 font-mono text-[11px]">Chapa {atual.chapa} • {atual.papel}</div>
         </div>
-        <span className={`text-[11px] font-semibold ${textoSituacao(rot.classes)}`}>{rot.label}</span>
+        <span className="text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+          {rot.label}
+        </span>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
         <Metrica rotulo="Previsto" valor={a.previstoInicio ? `${a.previstoInicio} – ${a.previstoFim}` : "—"} />
-        <Metrica rotulo="1ª entrada" valor={a.primeiraEntrada || "—"} icone={<LogIn className="w-3 h-3" />} destaque={!a.compensado && a.atrasoMin > a.toleranciaMin ? "rose" : undefined} />
-        <Metrica rotulo="Última saída" valor={a.ultimaSaida || (a.batidas.length % 2 === 1 ? "não registrada" : "—")} icone={<LogOut className="w-3 h-3" />} destaque={!a.compensado && a.saidaAntecipadaMin > a.toleranciaMin ? "orange" : undefined} />
+        <Metrica rotulo="1ª entrada" valor={a.primeiraEntrada || "—"} icone={<LogIn className="w-3 h-3 text-slate-400" />} />
+        <Metrica rotulo="Última saída" valor={a.ultimaSaida || (a.batidas.length % 2 === 1 ? "não registrada" : "—")} icone={<LogOut className="w-3 h-3 text-slate-400" />} />
         <Metrica
           rotulo="Efetivo / carga"
           valor={a.minutosEfetivos || a.cargaPrevistaMin ? `${a.minutosEfetivos ? formatarDuracao(a.minutosEfetivos) : "—"} / ${a.temJornadaPrevista ? formatarDuracao(a.cargaPrevistaMin) : "—"}` : "—"}
-          icone={<Timer className="w-3 h-3" />}
+          icone={<Timer className="w-3 h-3 text-slate-400" />}
         />
         <Metrica rotulo="Não cumprido" valor={a.minutosNaoCumpridos ? formatarDuracao(a.minutosNaoCumpridos) : "—"} destaque={a.minutosNaoCumpridos ? "rose" : undefined} />
       </div>
 
+      {/* Alerta sutil exibido apenas em caso de inconsistência real */}
       {(() => {
         const ehAlerta = ["SAIDA_ANTECIPADA", "ATRASO_E_SAIDA_ANTECIPADA", "ATRASO", "CARGA_INCOMPLETA", "MARCACAO_INCOMPLETA", "SEM_MARCACAO"].includes(a.situacao);
-        return ehAlerta ? (
-          <div className="flex items-start gap-2 p-2.5 rounded-md border border-orange-200 text-orange-900 text-xs">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-orange-600" />
+        if (!ehAlerta) return null;
+        return (
+          <div className="flex items-start gap-2 p-2 rounded-md border border-amber-200 bg-amber-50/50 text-amber-900 text-xs">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
             <span>{a.descricao}</span>
           </div>
-        ) : (
-          <p className="text-[11px] text-slate-600">{a.descricao}</p>
         );
       })()}
-
-      <LinhaTempoJornada analise={a} />
 
       {a.batidas.length > 0 && (
         <div className="overflow-x-auto">
@@ -251,24 +248,21 @@ export function RegistrosPontoDia({
             </thead>
             <tbody className="font-mono divide-y divide-slate-100">
               {a.batidas.map((b, i) => (
-                <tr key={i}>
-                  <td className="py-1 pr-2 text-slate-400">{i + 1}</td>
-                  <td className="py-1 pr-2 font-sans font-semibold">
-                    {i % 2 === 0 ? <span className="text-emerald-700">Entrada</span> : <span className="text-slate-700">Saída</span>}
+                <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="py-1.5 pr-2 text-slate-400">{i + 1}</td>
+                  <td className="py-1.5 pr-2 font-sans font-medium text-slate-700">
+                    {i % 2 === 0 ? "Entrada" : "Saída"}
                   </td>
-                  <td className="py-1 pr-2 font-bold text-slate-900">{b.hora}</td>
-                  <td className="py-1 pr-2">{dataBr(b.dataLocal)}{b.diaSeguinte ? " (+1)" : ""}</td>
-                  <td className="py-1 pr-2">{b.nsr || "—"}</td>
-                  <td className="py-1 truncate max-w-[200px] text-slate-500" title={b.arquivoOrigem}>{b.loteId || "—"}</td>
+                  <td className="py-1.5 pr-2 font-bold text-slate-900">{b.hora}</td>
+                  <td className="py-1.5 pr-2 text-slate-600">{dataBr(b.dataLocal)}{b.diaSeguinte ? " (+1)" : ""}</td>
+                  <td className="py-1.5 pr-2 text-slate-600">{b.nsr || "—"}</td>
+                  <td className="py-1.5 truncate max-w-[200px] text-slate-500 font-sans" title={b.arquivoOrigem}>{b.loteId || "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      <p className="text-[10px] text-slate-400">
-        Cumprimento medido pela carga horária do posto (faixa prevista − intervalo de {a.intervaloPrevistoMin || 60} min), com tolerância de {a.toleranciaMin} min. Entrada/saída fora do horário com a carga cumprida aparecem como &quot;horário alterado&quot;. Evidência de gestão — não substitui a apuração oficial de ponto.
-      </p>
     </div>
   );
 }

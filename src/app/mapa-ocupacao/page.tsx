@@ -1283,7 +1283,7 @@ export default function MapaOcupacaoPage() {
 
   // Pessoas com registros de ponto no dia inspecionado (ocupante/cobertura e titular)
   const pessoasPontoDrawer = useMemo(() => {
-    if (!drawerInspecao || ehFiscal) return [] as Array<PessoaRegistroPonto & { horarioDescricao?: string; ehTitular: boolean }>;
+    if (!drawerInspecao) return [] as Array<PessoaRegistroPonto & { horarioDescricao?: string; ehTitular: boolean }>;
     const { vaga, dataStr, ocupacao } = drawerInspecao;
     const ctx = obterContextoPontoVaga(vaga, dataStr);
     const lista: Array<PessoaRegistroPonto & { horarioDescricao?: string; ehTitular: boolean }> = [];
@@ -1327,11 +1327,11 @@ export default function MapaOcupacaoPage() {
       ocupacao.status === "FOLGA" ? false : ocupacao.status === "PRESENTE" ? true : undefined
     );
     return lista;
-  }, [drawerInspecao, ehFiscal, obterContextoPontoVaga, mapaProfissionaisPorChapa, marcacoes]);
+  }, [drawerInspecao, obterContextoPontoVaga, mapaProfissionaisPorChapa, marcacoes]);
 
   // Espelho completo do período (ciclo da competência) para o colaborador selecionado
   const espelhoPeriodo = useMemo(() => {
-    if (!espelhoPeriodoAberto || !drawerInspecao || ehFiscal || diasCiclo.length === 0) return null;
+    if (!espelhoPeriodoAberto || !drawerInspecao || diasCiclo.length === 0) return null;
     const { vaga, posto } = drawerInspecao;
     const datas = diasCiclo.map((d) => d.dataStr);
     const statusPorData = new Map<string, OcupacaoVagaDia>();
@@ -1362,7 +1362,7 @@ export default function MapaOcupacaoPage() {
       }
     );
     return { ...resultado, statusPorData };
-  }, [espelhoPeriodoAberto, drawerInspecao, ehFiscal, diasCiclo, alocacoes, ocorrencias, coberturas, apontamentos, marcacoesSet, dataRefLote, marcacoes, obterContextoPontoVaga]);
+  }, [espelhoPeriodoAberto, drawerInspecao, diasCiclo, alocacoes, ocorrencias, coberturas, apontamentos, marcacoesSet, dataRefLote, marcacoes, obterContextoPontoVaga]);
 
   const abrirEspelhoPeriodo = (idx: number) => {
     const p = pessoasPontoDrawer[idx];
@@ -3941,23 +3941,7 @@ export default function MapaOcupacaoPage() {
                     </div>
                   )}
 
-                  {/* Se PRESENTE (P) - Resumo compacto em linha única */}
-                  {drawerInspecao.ocupacao.status === "PRESENTE" && (
-                    <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200 text-emerald-950 text-xs flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>
-                          <strong>{drawerInspecao.ocupacao.ocupanteNome}</strong>
-                          {drawerInspecao.ocupacao.ocupanteMatricula && (
-                            <span className="text-emerald-700 font-mono text-[11px] ml-1">({drawerInspecao.ocupacao.ocupanteMatricula})</span>
-                          )}
-                        </span>
-                      </div>
-                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
-                        Jornada em cumprimento
-                      </span>
-                    </div>
-                  )}
+                  
 
                   {/* Se DESCOBERTO (D) */}
                   {drawerInspecao.ocupacao.status === "DESCOBERTO" && (
@@ -4268,19 +4252,13 @@ export default function MapaOcupacaoPage() {
                     </div>
                   )}
 
-                  {/* REGISTROS DE PONTO DO DIA (previsto × realizado) — oculto para Fiscal Petrobras (LGPD) */}
-                  {!ehFiscal ? (
-                    <RegistrosPontoDia
-                      pessoas={pessoasPontoDrawer}
-                      pessoaAtiva={pessoaPontoAtiva}
-                      onSelecionarPessoa={setPessoaPontoAtiva}
-                      onAbrirEspelho={abrirEspelhoPeriodo}
-                    />
-                  ) : (
-                    <div className="bg-slate-50 border border-slate-200 rounded p-2 text-[11px] text-slate-500 italic">
-                      Marcações individuais de ponto não são exibidas ao perfil Fiscal Petrobras (LGPD). Consulte a situação consolidada do posto.
-                    </div>
-                  )}
+                  {/* REGISTROS DE PONTO DO DIA (previsto × realizado) — acessível para Premier e Fiscal Petrobras */}
+                  <RegistrosPontoDia
+                    pessoas={pessoasPontoDrawer}
+                    pessoaAtiva={pessoaPontoAtiva}
+                    onSelecionarPessoa={setPessoaPontoAtiva}
+                    onAbrirEspelho={abrirEspelhoPeriodo}
+                  />
 
                   {/* Evidência Operacional */}
                   <div className="pt-1">
