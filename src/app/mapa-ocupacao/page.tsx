@@ -72,6 +72,7 @@ import {
   StatusAgregadoPosto,
   MarcacaoPontoOriginal,
   ProfissionalOperacional,
+  rotuloPrevia,
 } from "@/lib/dados/estado-operacional";
 import { calcularPeriodoCompetencia } from "@/lib/servicos/periodo-competencia";
 import { obterItemPPU } from "@/lib/dados/painel-calculo";
@@ -448,6 +449,30 @@ function getSeloEstiloPercentualCiclo(percentual: number | null, formatado: stri
   return "bg-amber-100 text-amber-800 border-amber-300 font-bold";
 }
 
+
+type TipoPeriodoFiltro = "SEMANA_ATUAL" | "COMPETENCIA" | "INTERVALO_DATAS";
+
+
+function calcularDiferencaDias(data1: string, data2: string): number {
+  const [a1, m1, d1] = data1.split("-").map(Number);
+  const [a2, m2, d2] = data2.split("-").map(Number);
+  const t1 = new Date(a1, m1 - 1, d1).getTime();
+  const t2 = new Date(a2, m2 - 1, d2).getTime();
+  return Math.round((t1 - t2) / (1000 * 60 * 60 * 24));
+}
+
+function obterLimitesSemanaAtual(dataBase?: Date): { inicio: string; fim: string } {
+  const agora = dataBase || new Date();
+  const diaSemana = agora.getDay(); // 0 = Domingo, 1 = Segunda...
+  const diffSegunda = diaSemana === 0 ? -6 : 1 - diaSemana;
+  const seg = new Date(agora);
+  seg.setDate(agora.getDate() + diffSegunda);
+  const dom = new Date(seg);
+  dom.setDate(seg.getDate() + 6);
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return { inicio: fmt(seg), fim: fmt(dom) };
+}
+
 export default function MapaOcupacaoPage() {
   const { pode: podePermissao } = usePermissoes();
   const podeExportarMapa = podePermissao("EXPORTAR", "MAPA_OCUPACAO");
@@ -497,12 +522,6 @@ export default function MapaOcupacaoPage() {
   const [competencia, setCompetencia] = useState<string>("2026-09");
   const [filtroBase, setFiltroBase] = useState<string>("TODAS");
   const [filtroStatusAgregado, setFiltroStatusAgregado] = useState<string>("TODOS");
-  const [filtroPrevia, setFiltroPrevia] = useState<string>("TODAS");
-  const [previaConferenciaDrawer, setPreviaConferenciaDrawer] = useState<"PREVIA_1" | "PREVIA_2" | "PREVIA_3">("PREVIA_1");
-  const [statusConferenciaDrawer, setStatusConferenciaDrawer] = useState<"COBERTO" | "DESCOBERTO">("COBERTO");
-  const [comentarioConferenciaDrawer, setComentarioConferenciaDrawer] = useState<string>("");
-  const [salvandoConferenciaDrawer, setSalvandoConferenciaDrawer] = useState(false);
-  const [mensagemConferenciaSucesso, setMensagemConferenciaSucesso] = useState("");
   const [mostrarFichaCadastral, setMostrarFichaCadastral] = useState<boolean>(false);
   const [busca, setBusca] = useState<string>("");
 
@@ -511,9 +530,11 @@ export default function MapaOcupacaoPage() {
   const [filtroSituacao, setFiltroSituacao] = useState<string>("TODAS");
   const [mostrarMaisFiltros, setMostrarMaisFiltros] = useState<boolean>(false);
 
-  // Intervalo de Datas do Filtro (Data Início e Data Fim)
-  const [dataInicioFiltro, setDataInicioFiltro] = useState<string>("2026-08-10");
-  const [dataFimFiltro, setDataFimFiltro] = useState<string>("2026-09-09");
+  // Filtro de Período (Padrão: Semana atual; Opções: Competência e Intervalo até 62 dias)
+  const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodoFiltro>("SEMANA_ATUAL");
+  const [dataInicioFiltro, setDataInicioFiltro] = useState<string>(() => obterLimitesSemanaAtual().inicio);
+  const [dataFimFiltro, setDataFimFiltro] = useState<string>(() => obterLimitesSemanaAtual().fim);
+  const [alertaLimiteDias, setAlertaLimiteDias] = useState<string>("");
   const diaReferenciaStr = dataInicioFiltro === dataFimFiltro ? dataInicioFiltro : "2026-09-02";
 
   // Controle de expansão da árvore (inicia fechado por padrão conforme Item 4)
@@ -670,12 +691,13 @@ export default function MapaOcupacaoPage() {
     return set;
   }, [marcacoes]);
 
-  // Passo 1 & 2: Dias do ciclo padrão (dia 10 ao dia 09 do mês seguinte)
+  // Dias do período ativo (Semana atual, Competência ou Intervalo livre de até 62 dias)
   const diasCiclo: DiaCiclo[] = useMemo(() => {
-    // Fonte única da regra de competência (igual à MC): 10 do mês anterior a 09 do mês da competência
-    const periodo = calcularPeriodoCompetencia(competencia);
-    const [anoIni, mesIni, diaIni] = periodo.dataInicio.split("-").map(Number);
-    const [anoFim, mesFim, diaFim] = periodo.dataFim.split("-").map(Number);
+    const ini = dataInicioFiltro || "2026-08-10";
+    const fim = dataFimFiltro || "2026-09-09";
+
+    const [anoIni, mesIni, diaIni] = ini.split("-").map(Number);
+    const [anoFim, mesFim, diaFim] = fim.split("-").map(Number);
 
     const dtInicio = new Date(anoIni, mesIni - 1, diaIni);
     const dtFim = new Date(anoFim, mesFim - 1, diaFim);
@@ -685,7 +707,8 @@ export default function MapaOcupacaoPage() {
     const dt = new Date(dtInicio);
     const nomesSemana = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 
-    while (dt <= dtFim) {
+    let count = 0;
+    while (dt <= dtFim && count < 62) {
       const y = dt.getFullYear();
       const m = dt.getMonth() + 1;
       const d = dt.getDate();
@@ -703,20 +726,16 @@ export default function MapaOcupacaoPage() {
       });
 
       dt.setDate(dt.getDate() + 1);
+      count++;
     }
 
     return lista;
-  }, [competencia]);
+  }, [dataInicioFiltro, dataFimFiltro]);
 
   const datasDoCicloStr = useMemo(() => diasCiclo.map((d) => d.dataStr), [diasCiclo]);
 
-  // Intervalo de dias visíveis no filtro (Data Início a Data Fim)
-  const diasExibidosCiclo = useMemo(() => {
-    if (diasCiclo.length === 0) return [];
-    const ini = dataInicioFiltro || diasCiclo[0].dataStr;
-    const fim = dataFimFiltro || diasCiclo[diasCiclo.length - 1].dataStr;
-    return diasCiclo.filter((d) => d.dataStr >= ini && d.dataStr <= fim);
-  }, [diasCiclo, dataInicioFiltro, dataFimFiltro]);
+  // Intervalo de dias exibidos no grid (idêntico ao período selecionado)
+  const diasExibidosCiclo = diasCiclo;
 
   // Mapeamento de vagas por Posto
   const vagasPorPosto = useMemo(() => {
@@ -900,18 +919,7 @@ export default function MapaOcupacaoPage() {
         }
       }
 
-      if (filtroPrevia !== "TODAS") {
-        const idChaveCod = p.idPosto || p.id;
-        const temCobPrevia = coberturas.some(
-          (c) => (c.postoCodigo === idChaveCod || c.idPosto === idChaveCod) && c.previaConferencia === filtroPrevia
-        );
-        const vgsPosto = vagasPorPosto.get(idChaveCod) || [];
-        const chapasPosto = new Set(vgsPosto.map((v) => (v as any).chapaTitular).filter(Boolean));
-        const temOcoPrevia = ocorrencias.some(
-          (o) => (o.postoCodigo === idChaveCod || chapasPosto.has(o.matricula)) && o.previaConferencia === filtroPrevia
-        );
-        if (!temCobPrevia && !temOcoPrevia) return false;
-      }
+      
 
       // Filtros RM (Cadastros Importados)
       const temFiltroRM =
@@ -1364,6 +1372,63 @@ export default function MapaOcupacaoPage() {
     return { ...resultado, statusPorData };
   }, [espelhoPeriodoAberto, drawerInspecao, diasCiclo, alocacoes, ocorrencias, coberturas, apontamentos, marcacoesSet, dataRefLote, marcacoes, obterContextoPontoVaga]);
 
+  
+  const handleTrocarTipoPeriodo = (tipo: TipoPeriodoFiltro) => {
+    setTipoPeriodo(tipo);
+    setAlertaLimiteDias("");
+    if (tipo === "SEMANA_ATUAL") {
+      const sem = obterLimitesSemanaAtual();
+      setDataInicioFiltro(sem.inicio);
+      setDataFimFiltro(sem.fim);
+    } else if (tipo === "COMPETENCIA") {
+      const periodo = calcularPeriodoCompetencia(competencia);
+      setDataInicioFiltro(periodo.dataInicio);
+      setDataFimFiltro(periodo.dataFim);
+    }
+  };
+
+  const handleDataInicioChange = (novaDataIni: string) => {
+    setTipoPeriodo("INTERVALO_DATAS");
+    setDataInicioFiltro(novaDataIni);
+    if (novaDataIni && dataFimFiltro) {
+      const diff = calcularDiferencaDias(dataFimFiltro, novaDataIni);
+      if (diff > 61) {
+        const dt = new Date(novaDataIni + "T12:00:00");
+        dt.setDate(dt.getDate() + 61);
+        const fimAjustado = dt.toISOString().slice(0, 10);
+        setDataFimFiltro(fimAjustado);
+        setAlertaLimiteDias("Intervalo limitado ao máximo de 62 dias.");
+      } else if (diff < 0) {
+        setDataFimFiltro(novaDataIni);
+        setAlertaLimiteDias("");
+      } else {
+        setAlertaLimiteDias("");
+      }
+    }
+  };
+
+  const handleDataFimChange = (novaDataFim: string) => {
+    setTipoPeriodo("INTERVALO_DATAS");
+    if (dataInicioFiltro && novaDataFim) {
+      const diff = calcularDiferencaDias(novaDataFim, dataInicioFiltro);
+      if (diff > 61) {
+        const dt = new Date(dataInicioFiltro + "T12:00:00");
+        dt.setDate(dt.getDate() + 61);
+        const fimAjustado = dt.toISOString().slice(0, 10);
+        setDataFimFiltro(fimAjustado);
+        setAlertaLimiteDias("Intervalo limitado ao máximo de 62 dias.");
+        return;
+      } else if (diff < 0) {
+        setDataFimFiltro(dataInicioFiltro);
+        setAlertaLimiteDias("");
+        return;
+      } else {
+        setAlertaLimiteDias("");
+      }
+    }
+    setDataFimFiltro(novaDataFim);
+  };
+
   const abrirEspelhoPeriodo = (idx: number) => {
     const p = pessoasPontoDrawer[idx];
     if (!p) return;
@@ -1422,14 +1487,7 @@ export default function MapaOcupacaoPage() {
       o.matricula === chapaTit && o.dataInicio <= dataStr && o.dataFim >= dataStr
     );
 
-    setPreviaConferenciaDrawer(cobExistente?.previaConferencia || ocoExistente?.previaConferencia || "PREVIA_1");
-    setStatusConferenciaDrawer(
-      cobExistente?.statusConferenciaPosto ||
-      ocoExistente?.statusConferenciaPosto ||
-      (apuracao.status === "COBERTO" ? "COBERTO" : "DESCOBERTO")
-    );
-    setComentarioConferenciaDrawer(cobExistente?.comentarioConferencia || ocoExistente?.comentarioConferencia || "");
-    setMensagemConferenciaSucesso("");
+    
 
     // Inicializa valores da edição de escala
     setFormGrupo(vaga.grupoRevezamento || vaga.grupo_revezamento || "");
@@ -1593,72 +1651,10 @@ export default function MapaOcupacaoPage() {
       o.matricula === chapaTit && o.dataInicio <= dataStr && o.dataFim >= dataStr
     );
 
-    setPreviaConferenciaDrawer(cobExistente?.previaConferencia || ocoExistente?.previaConferencia || "PREVIA_1");
-    setStatusConferenciaDrawer(
-      cobExistente?.statusConferenciaPosto ||
-      ocoExistente?.statusConferenciaPosto ||
-      (apuracao.status === "COBERTO" ? "COBERTO" : "DESCOBERTO")
-    );
-    setComentarioConferenciaDrawer(cobExistente?.comentarioConferencia || ocoExistente?.comentarioConferencia || "");
-    setMensagemConferenciaSucesso("");
+    
   };
 
-  // Salvar parecer de conferência da Prévia Petrobras (Item 11.3)
-  const handleSalvarConferenciaDrawer = async () => {
-    if (!drawerInspecao) return;
-    setSalvandoConferenciaDrawer(true);
-    try {
-      const cobAtiva = (coberturas || []).find((c) =>
-        isCoberturaAtivaParaPosicao(c, drawerInspecao.dataStr, drawerInspecao.posto, drawerInspecao.vaga)
-      );
-
-      let alterado = false;
-      if (cobAtiva) {
-        atualizarCobertura(cobAtiva.id, {
-          previaConferencia: previaConferenciaDrawer,
-          statusConferenciaPosto: statusConferenciaDrawer,
-          comentarioConferencia: comentarioConferenciaDrawer,
-        });
-        alterado = true;
-      }
-
-      const titularVigente = obterAlocacaoVigenteVaga(drawerInspecao.vaga.id, alocacoes, drawerInspecao.dataStr);
-      const chapaTitular = titularVigente?.matricula || (drawerInspecao.vaga as any).chapaTitular;
-      const ocoAtiva = (ocorrencias || []).find((o) =>
-        o.matricula === chapaTitular &&
-        o.dataInicio <= drawerInspecao.dataStr &&
-        o.dataFim >= drawerInspecao.dataStr
-      );
-
-      if (ocoAtiva) {
-        atualizarOcorrencia(ocoAtiva.id, {
-          previaConferencia: previaConferenciaDrawer,
-          statusConferenciaPosto: statusConferenciaDrawer,
-          comentarioConferencia: comentarioConferenciaDrawer,
-        });
-        alterado = true;
-      }
-
-      const codigoPos = obterCodigoVisualPosicao(drawerInspecao.vaga, drawerInspecao.posto);
-      const nomePrevia = previaConferenciaDrawer === "PREVIA_1" ? "Prévia 1" : previaConferenciaDrawer === "PREVIA_2" ? "Prévia 2" : "Prévia 3";
-
-      if (!alterado) {
-        registrarLog(
-          "CONFERENCIA_PREVIA_PETROBRAS",
-          `Posição ${codigoPos} (${drawerInspecao.dataStr})`,
-          `Conferência Petrobras [${nomePrevia}] - Posto ${statusConferenciaDrawer}: ${comentarioConferenciaDrawer || "Sem comentários adicionais"}`
-        );
-      }
-
-      setMensagemConferenciaSucesso(`Parecer da ${nomePrevia} salvo com sucesso!`);
-      await carregarDados();
-      setTimeout(() => setMensagemConferenciaSucesso(""), 4000);
-    } catch (err) {
-      console.error("Erro ao salvar conferência de prévia:", err);
-    } finally {
-      setSalvandoConferenciaDrawer(false);
-    }
-  };
+  
 
   // Salvar escala da posição (Item 5: Grupo, fase e data-base)
   const handleSalvarEscala = async () => {
@@ -2833,40 +2829,44 @@ export default function MapaOcupacaoPage() {
                 <option value="CICLO_NAO_CONFIGURADO">Escala em aberto</option>
               </select>
 
-              {/* Prévia Petrobras (Prévia 1, 2 e 3) */}
-              <select
-                id="mapa-filtro-previa"
-                value={filtroPrevia}
-                onChange={(e) => setFiltroPrevia(e.target.value)}
-                className="h-8 px-2 text-xs rounded-md border border-amber-300 bg-amber-50/70 text-amber-950 font-bold focus:border-amber-500 focus:outline-hidden cursor-pointer shadow-2xs"
-                title="Filtrar por Prévia de Conferência Petrobras"
-                aria-label="Prévia Petrobras"
-              >
-                <option value="TODOS">Todas as Prévias</option>
-                <option value="PREVIA_1">Prévia 1</option>
-                <option value="PREVIA_2">Prévia 2</option>
-                <option value="PREVIA_3">Prévia 3</option>
-              </select>
+              {/* Filtro de Período (Semana atual, Competência atual, Intervalo personalizado até 62 dias) */}
+              <div className="inline-flex items-center gap-1.5 flex-wrap">
+                <select
+                  id="mapa-filtro-periodo"
+                  value={tipoPeriodo}
+                  onChange={(e) => handleTrocarTipoPeriodo(e.target.value as TipoPeriodoFiltro)}
+                  className="h-8 px-2 text-xs rounded-md border border-slate-300 bg-white text-slate-800 font-semibold focus:border-blue-500 focus:outline-hidden cursor-pointer shadow-2xs"
+                  aria-label="Filtro de Período"
+                >
+                  <option value="SEMANA_ATUAL">Semana atual</option>
+                  <option value="COMPETENCIA">Competência atual</option>
+                  <option value="INTERVALO_DATAS">Intervalo de datas</option>
+                </select>
 
-              {/* Período */}
-              <div className="inline-flex items-center gap-1.5">
-                <input
-                  id="mapa-data-inicio"
-                  type="date"
-                  value={dataInicioFiltro}
-                  onChange={(e) => setDataInicioFiltro(e.target.value)}
-                  className={campo}
-                  aria-label="Data início"
-                />
-                <span className="text-xs text-slate-400">até</span>
-                <input
-                  id="mapa-data-fim"
-                  type="date"
-                  value={dataFimFiltro}
-                  onChange={(e) => setDataFimFiltro(e.target.value)}
-                  className={campo}
-                  aria-label="Data fim"
-                />
+                <div className="inline-flex items-center gap-1.5">
+                  <input
+                    id="mapa-data-inicio"
+                    type="date"
+                    value={dataInicioFiltro}
+                    onChange={(e) => handleDataInicioChange(e.target.value)}
+                    className={campo}
+                    aria-label="Data início"
+                  />
+                  <span className="text-xs text-slate-400">até</span>
+                  <input
+                    id="mapa-data-fim"
+                    type="date"
+                    value={dataFimFiltro}
+                    onChange={(e) => handleDataFimChange(e.target.value)}
+                    className={campo}
+                    aria-label="Data fim"
+                  />
+                </div>
+                {alertaLimiteDias && (
+                  <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    {alertaLimiteDias}
+                  </span>
+                )}
               </div>
 
               {/* Mais filtros */}
@@ -4056,93 +4056,53 @@ export default function MapaOcupacaoPage() {
                     </div>
                   )}
 
-                  {/* SEÇÃO: CONFERÊNCIA PETROBRAS - PRÉVIAS 1, 2 E 3 (ITEM 11.3) */}
-                  {/* Exclusivo para postos com Cobertura ou Descoberta */}
-                  {(drawerInspecao.ocupacao.status === "COBERTO" || drawerInspecao.ocupacao.status === "DESCOBERTO") && (
-                    <div className="p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-slate-800 space-y-2.5">
-                      <div className="flex items-center justify-between border-b border-amber-200/80 pb-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-amber-500" />
-                          <span className="font-bold text-amber-950 uppercase text-[10px] tracking-wide">
-                            Conferência Petrobras (Item 11.3)
-                          </span>
-                        </div>
-                        {/* Seletor compacto de Prévia (1, 2 e 3) */}
-                        <div className="flex items-center gap-1 bg-white p-0.5 rounded border border-amber-200">
-                          {(["PREVIA_1", "PREVIA_2", "PREVIA_3"] as const).map((pr) => (
-                            <button
-                              key={pr}
-                              type="button"
-                              onClick={() => setPreviaConferenciaDrawer(pr)}
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                                previaConferenciaDrawer === pr
-                                  ? "bg-amber-600 text-white shadow-2xs"
-                                  : "text-slate-600 hover:text-slate-900 hover:bg-amber-50"
-                              }`}
-                            >
-                              {pr === "PREVIA_1" ? "Prévia 1" : pr === "PREVIA_2" ? "Prévia 2" : "Prévia 3"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                  {/* LEITURA DE CONFERÊNCIA PETROBRAS JÁ REGISTRADA (Somente leitura no Mapa) */}
+                  {(() => {
+                    const cob = (coberturas || []).find((c) =>
+                      isCoberturaAtivaParaPosicao(c, drawerInspecao.dataStr, drawerInspecao.posto, drawerInspecao.vaga)
+                    );
+                    const titularVig = obterAlocacaoVigenteVaga(drawerInspecao.vaga.id, alocacoes, drawerInspecao.dataStr);
+                    const chapaTit = titularVig?.matricula || (drawerInspecao.vaga as any).chapaTitular;
+                    const oco = (ocorrencias || []).find((o) =>
+                      o.matricula === chapaTit && o.status !== "CANCELADA" && o.dataInicio <= drawerInspecao.dataStr && o.dataFim >= drawerInspecao.dataStr
+                    );
 
-                      {mensagemConferenciaSucesso && (
-                        <div className="p-1.5 bg-emerald-100 border border-emerald-300 text-emerald-900 rounded text-xs font-semibold">
-                          {mensagemConferenciaSucesso}
-                        </div>
-                      )}
+                    const previaAtiva = cob?.previaConferencia || oco?.previaConferencia;
+                    if (!previaAtiva) return null;
 
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold text-slate-700 uppercase shrink-0">Situação:</span>
-                          <div className="inline-flex rounded border border-slate-200 p-0.5 bg-white">
-                            <button
-                              type="button"
-                              onClick={() => setStatusConferenciaDrawer("COBERTO")}
-                              className={`py-0.5 px-2 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                                statusConferenciaDrawer === "COBERTO"
-                                  ? "bg-emerald-600 text-white"
-                                  : "text-slate-600 hover:text-slate-900"
-                              }`}
-                            >
-                              ✓ Coberto
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setStatusConferenciaDrawer("DESCOBERTO")}
-                              className={`py-0.5 px-2 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                                statusConferenciaDrawer === "DESCOBERTO"
-                                  ? "bg-rose-600 text-white"
-                                  : "text-slate-600 hover:text-slate-900"
-                              }`}
-                            >
-                              ✕ Descoberto
-                            </button>
+                    const rotulo = rotuloPrevia(previaAtiva);
+                    const statusPosto = (cob?.statusConferenciaPosto || oco?.statusConferenciaPosto) === "DESCOBERTO" ? "Descoberto" : "Coberto";
+                    const comentario = cob?.comentarioConferencia || oco?.comentarioConferencia;
+                    const ehCob = Boolean(cob?.previaConferencia);
+                    const linkDestino = ehCob
+                      ? `/coberturas?posto=${drawerInspecao.posto.codigoPosto || drawerInspecao.posto.idPosto}&data=${drawerInspecao.dataStr}`
+                      : `/ocorrencias?chapa=${chapaTit}`;
+                    const nomeTela = ehCob ? "Coberturas" : "Ocorrências";
+
+                    return (
+                      <div className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200/80 text-xs flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                          <div className="min-w-0">
+                            <span className="font-bold text-amber-950 text-xs">
+                              Conferido na {rotulo} — {statusPosto}
+                            </span>
+                            {comentario && (
+                              <p className="text-[11px] text-slate-600 truncate mt-0.5" title={comentario}>
+                                &ldquo;{comentario}&rdquo;
+                              </p>
+                            )}
                           </div>
                         </div>
-
-                        {podeEditarOperacao && (
-                          <button
-                            type="button"
-                            disabled={salvandoConferenciaDrawer}
-                            onClick={handleSalvarConferenciaDrawer}
-                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded text-[11px] font-bold shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50 self-end sm:self-auto"
-                          >
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>{salvandoConferenciaDrawer ? "Salvando..." : "Salvar Parecer"}</span>
-                          </button>
-                        )}
+                        <Link
+                          href={linkDestino}
+                          className="text-[11px] font-bold text-amber-900 hover:text-amber-950 underline shrink-0 whitespace-nowrap cursor-pointer"
+                        >
+                          Ver em {nomeTela} →
+                        </Link>
                       </div>
-
-                      <textarea
-                        rows={2}
-                        value={comentarioConferenciaDrawer}
-                        onChange={(e) => setComentarioConferenciaDrawer(e.target.value)}
-                        placeholder="Parecer da fiscalização Petrobras ou justificativa Premier para esta prévia..."
-                        className="w-full bg-white border border-amber-200/90 rounded p-2 text-xs text-slate-800 focus:ring-1 focus:ring-amber-500 outline-none leading-snug"
-                      />
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Se houver apontamento manual ativo neste dia */}
                   {(() => {
