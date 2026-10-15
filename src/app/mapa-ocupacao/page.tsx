@@ -74,7 +74,7 @@ import {
   ProfissionalOperacional,
   rotuloPrevia,
 } from "@/lib/dados/estado-operacional";
-import { calcularPeriodoCompetencia } from "@/lib/servicos/periodo-competencia";
+import { calcularPeriodoCompetencia, obterCicloCompetenciaAtual } from "@/lib/servicos/periodo-competencia";
 import { obterItemPPU } from "@/lib/dados/painel-calculo";
 import {
   PENDENCIAS_ESCALA_REV04,
@@ -519,7 +519,7 @@ export default function MapaOcupacaoPage() {
   const [abaVisao, setAbaVisao] = useState<"GRADE" | "PPU" | "PENDENCIAS">("GRADE");
 
   // Filtros
-  const [competencia, setCompetencia] = useState<string>("2026-09");
+  const [competencia, setCompetencia] = useState<string>(() => obterCicloCompetenciaAtual().competencia);
   const [filtroBase, setFiltroBase] = useState<string>("TODAS");
   const [filtroStatusAgregado, setFiltroStatusAgregado] = useState<string>("TODOS");
   const [mostrarFichaCadastral, setMostrarFichaCadastral] = useState<boolean>(false);
@@ -1381,9 +1381,10 @@ export default function MapaOcupacaoPage() {
       setDataInicioFiltro(sem.inicio);
       setDataFimFiltro(sem.fim);
     } else if (tipo === "COMPETENCIA") {
-      const periodo = calcularPeriodoCompetencia(competencia);
-      setDataInicioFiltro(periodo.dataInicio);
-      setDataFimFiltro(periodo.dataFim);
+      const ciclo = obterCicloCompetenciaAtual();
+      setDataInicioFiltro(ciclo.inicio);
+      setDataFimFiltro(ciclo.fim);
+      setCompetencia(ciclo.competencia);
     }
   };
 

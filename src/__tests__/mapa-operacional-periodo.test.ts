@@ -6,8 +6,31 @@ import {
   calcularStatusVagaDia,
   rotuloPrevia,
 } from "../lib/dados/estado-operacional";
+import { obterCicloCompetenciaAtual } from "../lib/servicos/periodo-competencia";
 
 describe("Critérios de Aceite — Mapa Operacional & Prévia Desacoplada", () => {
+  describe("Etapa 2: Opção 'Competência atual' baseada na data de hoje", () => {
+    it("hoje dia 10 ou depois (ex.: 15/10/2026) -> ciclo 10/10/2026 a 09/11/2026 (Competência 2026-11)", () => {
+      // 15 de Outubro de 2026 (mês 9 no Date de JS)
+      const dataHojeExemplo1 = new Date(2026, 9, 15, 12, 0, 0);
+      const ciclo = obterCicloCompetenciaAtual(dataHojeExemplo1);
+
+      expect(ciclo.inicio).toBe("2026-10-10");
+      expect(ciclo.fim).toBe("2026-11-09");
+      expect(ciclo.competencia).toBe("2026-11");
+    });
+
+    it("hoje antes do dia 10 (ex.: 05/10/2026) -> ciclo 10/09/2026 a 09/10/2026 (Competência 2026-10)", () => {
+      // 05 de Outubro de 2026 (mês 9 no Date de JS)
+      const dataHojeExemplo2 = new Date(2026, 9, 5, 12, 0, 0);
+      const ciclo = obterCicloCompetenciaAtual(dataHojeExemplo2);
+
+      expect(ciclo.inicio).toBe("2026-09-10");
+      expect(ciclo.fim).toBe("2026-10-09");
+      expect(ciclo.competencia).toBe("2026-10");
+    });
+  });
+
   it("Critério 1 & 3: gera intervalo que cruza a virada da competência (05/09 a 15/09) com todos os 11 dias", () => {
     const ini = "2026-09-05";
     const fim = "2026-09-15";

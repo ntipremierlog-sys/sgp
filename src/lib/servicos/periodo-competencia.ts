@@ -66,3 +66,40 @@ export function calcularPeriodoCompetencia(competencia: string): PeriodoCompeten
 
   return { competencia: `${ano}-${pad2(mes)}`, dataInicio, dataFim, textoFormatado, datas };
 }
+
+/**
+ * Retorna o ciclo da competência atual que contém a data de referência (padrão: hoje):
+ * - Se dia >= 10: do dia 10 do mês atual ao dia 09 do mês seguinte (ex.: 15/10/2026 -> 10/10/2026 a 09/11/2026).
+ * - Se dia < 10: do dia 10 do mês anterior ao dia 09 do mês atual (ex.: 05/10/2026 -> 10/09/2026 a 09/10/2026).
+ */
+export function obterCicloCompetenciaAtual(dataReferencia: Date = new Date()): { inicio: string; fim: string; competencia: string } {
+  const ano = dataReferencia.getFullYear();
+  const mes = dataReferencia.getMonth() + 1; // 1 a 12
+  const dia = dataReferencia.getDate();
+
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+
+  if (dia >= 10) {
+    let anoFim = ano;
+    let mesFim = mes + 1;
+    if (mesFim > 12) {
+      mesFim = 1;
+      anoFim += 1;
+    }
+    const inicio = `${ano}-${pad2(mes)}-10`;
+    const fim = `${anoFim}-${pad2(mesFim)}-09`;
+    const comp = `${anoFim}-${pad2(mesFim)}`;
+    return { inicio, fim, competencia: comp };
+  } else {
+    let anoInicio = ano;
+    let mesInicio = mes - 1;
+    if (mesInicio === 0) {
+      mesInicio = 12;
+      anoInicio = ano - 1;
+    }
+    const inicio = `${anoInicio}-${pad2(mesInicio)}-10`;
+    const fim = `${ano}-${pad2(mes)}-09`;
+    const comp = `${ano}-${pad2(mes)}`;
+    return { inicio, fim, competencia: comp };
+  }
+}
