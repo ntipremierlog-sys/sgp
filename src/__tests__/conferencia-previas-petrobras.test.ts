@@ -177,7 +177,7 @@ describe('Conferência de Prévias Petrobras (Item 11.3 do Contrato)', () => {
       expect(depois.coberturas.length).toBe(0);
       expect(depois.ocorrencias.length).toBe(0);
       expect(depois.postos.length).toBeGreaterThan(0);
-      expect(depois.vagas.length).toBeGreaterThan(0);
+      expect((depois.vagas || []).length).toBeGreaterThan(0);
     });
   });
 });

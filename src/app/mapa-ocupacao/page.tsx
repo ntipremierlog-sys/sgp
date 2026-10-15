@@ -503,6 +503,7 @@ export default function MapaOcupacaoPage() {
   const [comentarioConferenciaDrawer, setComentarioConferenciaDrawer] = useState<string>("");
   const [salvandoConferenciaDrawer, setSalvandoConferenciaDrawer] = useState(false);
   const [mensagemConferenciaSucesso, setMensagemConferenciaSucesso] = useState("");
+  const [mostrarFichaCadastral, setMostrarFichaCadastral] = useState<boolean>(false);
   const [busca, setBusca] = useState<string>("");
 
   // Filtros RM / Cadastros Importados
@@ -3667,44 +3668,56 @@ export default function MapaOcupacaoPage() {
                     </div>
 
                     {/* Ficha LGPD conforme Perfil */}
+                    {/* Ficha LGPD conforme Perfil (colapsável para manter tela limpa) */}
                     {titularProf && (
-                      <div className="bg-white rounded border border-slate-200 p-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] mt-2">
-                        <div>
-                          <span className="text-[10px] text-slate-400 block uppercase font-medium">Função RM</span>
-                          <span className="font-semibold text-slate-800 truncate block" title={titularProf.funcao}>{titularProf.funcao}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block uppercase font-medium">Situação</span>
-                          <span className="font-semibold text-slate-800">{titularProf.situacaoDescricao || titularProf.situacao}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block uppercase font-medium">Sexo / Idade</span>
-                          <span className="font-semibold text-slate-800">
-                            {titularProf.sexo || "—"} • {titularProf.dataNascimento ? `${calcularIdade(titularProf.dataNascimento)} anos` : "—"}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block uppercase font-medium">CPF</span>
-                          <span className="font-mono font-semibold text-slate-800">
-                            {formatarCpfPorPerfil(titularProf.cpfLimpo || titularProf.cpfMascarado, perfilAtivo)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block uppercase font-medium">Data de Nascimento</span>
-                          <span className="font-mono font-semibold text-slate-800">
-                            {formatarDataNascimentoPorPerfil(titularProf.dataNascimento, perfilAtivo)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block uppercase font-medium">Salário</span>
-                          {podeVisualizarSalario(perfilAtivo) ? (
-                            <span className="font-mono font-bold text-emerald-700">
-                              {formatarSalarioPorPerfil(titularProf.dadosRestritos?.salario, perfilAtivo)}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 italic">Restrito (LGPD)</span>
-                          )}
-                        </div>
+                      <div className="mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setMostrarFichaCadastral((prev) => !prev)}
+                          className="text-[11px] font-semibold text-blue-700 hover:text-blue-900 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span>{mostrarFichaCadastral ? "▲ Ocultar dados cadastrais" : "▼ Ver dados cadastrais do titular (função, CPF, nascimento...)"}</span>
+                        </button>
+                        {mostrarFichaCadastral && (
+                          <div className="bg-white rounded border border-slate-200 p-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] mt-2 animate-in fade-in-50 duration-150">
+                            <div>
+                              <span className="text-[10px] text-slate-400 block uppercase font-medium">Função RM</span>
+                              <span className="font-semibold text-slate-800 truncate block" title={titularProf.funcao}>{titularProf.funcao}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block uppercase font-medium">Situação</span>
+                              <span className="font-semibold text-slate-800">{titularProf.situacaoDescricao || titularProf.situacao}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block uppercase font-medium">Sexo / Idade</span>
+                              <span className="font-semibold text-slate-800">
+                                {titularProf.sexo || "—"} • {titularProf.dataNascimento ? `${calcularIdade(titularProf.dataNascimento)} anos` : "—"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block uppercase font-medium">CPF</span>
+                              <span className="font-mono font-semibold text-slate-800">
+                                {formatarCpfPorPerfil(titularProf.cpfLimpo || titularProf.cpfMascarado, perfilAtivo)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block uppercase font-medium">Data de Nascimento</span>
+                              <span className="font-mono font-semibold text-slate-800">
+                                {formatarDataNascimentoPorPerfil(titularProf.dataNascimento, perfilAtivo)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block uppercase font-medium">Salário</span>
+                              {podeVisualizarSalario(perfilAtivo) ? (
+                                <span className="font-mono font-bold text-emerald-700">
+                                  {formatarSalarioPorPerfil(titularProf.dadosRestritos?.salario, perfilAtivo)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 italic">Restrito (LGPD)</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3928,18 +3941,21 @@ export default function MapaOcupacaoPage() {
                     </div>
                   )}
 
-                  {/* Se PRESENTE (P) */}
+                  {/* Se PRESENTE (P) - Resumo compacto em linha única */}
                   {drawerInspecao.ocupacao.status === "PRESENTE" && (
-                    <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs space-y-1">
-                      <span className="font-bold block text-emerald-800 uppercase text-[10px]">Titular Presente</span>
-                      <div>
-                        Ocupante: <strong>{drawerInspecao.ocupacao.ocupanteNome}</strong> ({drawerInspecao.ocupacao.ocupanteMatricula})
+                    <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200 text-emerald-950 text-xs flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>
+                          <strong>{drawerInspecao.ocupacao.ocupanteNome}</strong>
+                          {drawerInspecao.ocupacao.ocupanteMatricula && (
+                            <span className="text-emerald-700 font-mono text-[11px] ml-1">({drawerInspecao.ocupacao.ocupanteMatricula})</span>
+                          )}
+                        </span>
                       </div>
-                      {drawerInspecao.ocupacao.batidas && (
-                        <div className="text-[11px] text-emerald-800 mt-1">
-                          Entrada: {drawerInspecao.ocupacao.batidas.entrada} • Saída: {drawerInspecao.ocupacao.batidas.saida} • Horas apuradas: {drawerInspecao.ocupacao.batidas.horas}h
-                        </div>
-                      )}
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
+                        Jornada em cumprimento
+                      </span>
                     </div>
                   )}
 
@@ -4057,111 +4073,92 @@ export default function MapaOcupacaoPage() {
                   )}
 
                   {/* SEÇÃO: CONFERÊNCIA PETROBRAS - PRÉVIAS 1, 2 E 3 (ITEM 11.3) */}
-                  <div className="p-3.5 rounded-xl bg-gradient-to-br from-amber-50/90 to-amber-100/40 border border-amber-300 text-slate-800 space-y-3 shadow-2xs">
-                    <div className="flex items-center justify-between border-b border-amber-200/80 pb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                        <span className="font-bold text-amber-950 uppercase text-[11px] tracking-wide">
-                          Conferência Petrobras — Prévias (Item 11.3)
-                        </span>
+                  {/* Exclusivo para postos com Cobertura ou Descoberta */}
+                  {(drawerInspecao.ocupacao.status === "COBERTO" || drawerInspecao.ocupacao.status === "DESCOBERTO") && (
+                    <div className="p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-slate-800 space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-amber-200/80 pb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-amber-500" />
+                          <span className="font-bold text-amber-950 uppercase text-[10px] tracking-wide">
+                            Conferência Petrobras (Item 11.3)
+                          </span>
+                        </div>
+                        {/* Seletor compacto de Prévia (1, 2 e 3) */}
+                        <div className="flex items-center gap-1 bg-white p-0.5 rounded border border-amber-200">
+                          {(["PREVIA_1", "PREVIA_2", "PREVIA_3"] as const).map((pr) => (
+                            <button
+                              key={pr}
+                              type="button"
+                              onClick={() => setPreviaConferenciaDrawer(pr)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                                previaConferenciaDrawer === pr
+                                  ? "bg-amber-600 text-white shadow-2xs"
+                                  : "text-slate-600 hover:text-slate-900 hover:bg-amber-50"
+                              }`}
+                            >
+                              {pr === "PREVIA_1" ? "Prévia 1" : pr === "PREVIA_2" ? "Prévia 2" : "Prévia 3"}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <span className="text-[10px] font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded border border-amber-300">
-                        {previaConferenciaDrawer === "PREVIA_1" ? "Prévia 1" : previaConferenciaDrawer === "PREVIA_2" ? "Prévia 2" : "Prévia 3"}
-                      </span>
-                    </div>
 
-                    <p className="text-[11px] text-amber-900 leading-snug">
-                      Auditoria de fechamento: confira se o posto foi devidamente coberto ou se permaneceu descoberto nesta data.
-                    </p>
+                      {mensagemConferenciaSucesso && (
+                        <div className="p-1.5 bg-emerald-100 border border-emerald-300 text-emerald-900 rounded text-xs font-semibold">
+                          {mensagemConferenciaSucesso}
+                        </div>
+                      )}
 
-                    {mensagemConferenciaSucesso && (
-                      <div className="p-2 bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-lg text-xs font-semibold">
-                        {mensagemConferenciaSucesso}
-                      </div>
-                    )}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-700 uppercase shrink-0">Situação:</span>
+                          <div className="inline-flex rounded border border-slate-200 p-0.5 bg-white">
+                            <button
+                              type="button"
+                              onClick={() => setStatusConferenciaDrawer("COBERTO")}
+                              className={`py-0.5 px-2 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                                statusConferenciaDrawer === "COBERTO"
+                                  ? "bg-emerald-600 text-white"
+                                  : "text-slate-600 hover:text-slate-900"
+                              }`}
+                            >
+                              ✓ Coberto
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setStatusConferenciaDrawer("DESCOBERTO")}
+                              className={`py-0.5 px-2 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                                statusConferenciaDrawer === "DESCOBERTO"
+                                  ? "bg-rose-600 text-white"
+                                  : "text-slate-600 hover:text-slate-900"
+                              }`}
+                            >
+                              ✕ Descoberto
+                            </button>
+                          </div>
+                        </div>
 
-                    {/* Seleção de Prévia (1, 2 e 3) */}
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-slate-700 uppercase block">
-                        1. Rodada de Conferência (Prévia)
-                      </span>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {(["PREVIA_1", "PREVIA_2", "PREVIA_3"] as const).map((pr) => (
+                        {podeEditarOperacao && (
                           <button
-                            key={pr}
                             type="button"
-                            onClick={() => setPreviaConferenciaDrawer(pr)}
-                            className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                              previaConferenciaDrawer === pr
-                                ? "bg-amber-600 text-white border-amber-600 shadow-xs"
-                                : "bg-white text-slate-700 border-slate-300 hover:bg-amber-50"
-                            }`}
+                            disabled={salvandoConferenciaDrawer}
+                            onClick={handleSalvarConferenciaDrawer}
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded text-[11px] font-bold shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50 self-end sm:self-auto"
                           >
-                            {pr === "PREVIA_1" ? "Prévia 1" : pr === "PREVIA_2" ? "Prévia 2" : "Prévia 3"}
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>{salvandoConferenciaDrawer ? "Salvando..." : "Salvar Parecer"}</span>
                           </button>
-                        ))}
+                        )}
                       </div>
-                    </div>
 
-                    {/* Situação Apurada na Prévia: Coberto ou Descoberto */}
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-slate-700 uppercase block">
-                        2. Verificação de Cobertura do Posto
-                      </span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setStatusConferenciaDrawer("COBERTO")}
-                          className={`py-1.5 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                            statusConferenciaDrawer === "COBERTO"
-                              ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                              : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                          }`}
-                        >
-                          <span>✓ Posto Coberto</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setStatusConferenciaDrawer("DESCOBERTO")}
-                          className={`py-1.5 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                            statusConferenciaDrawer === "DESCOBERTO"
-                              ? "bg-rose-600 text-white border-rose-600 shadow-xs"
-                              : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                          }`}
-                        >
-                          <span>✕ Posto Descoberto</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Comentário / Parecer */}
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-700 uppercase block">
-                        3. Comentário / Parecer de Conferência Petrobras
-                      </label>
                       <textarea
                         rows={2}
                         value={comentarioConferenciaDrawer}
                         onChange={(e) => setComentarioConferenciaDrawer(e.target.value)}
-                        placeholder="Registre a conferência da fiscalização Petrobras ou a justificativa da Premier para a prévia selecionada..."
-                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none leading-relaxed"
+                        placeholder="Parecer da fiscalização Petrobras ou justificativa Premier para esta prévia..."
+                        className="w-full bg-white border border-amber-200/90 rounded p-2 text-xs text-slate-800 focus:ring-1 focus:ring-amber-500 outline-none leading-snug"
                       />
                     </div>
-
-                    {podeEditarOperacao && (
-                      <div className="flex justify-end pt-1">
-                        <button
-                          type="button"
-                          disabled={salvandoConferenciaDrawer}
-                          onClick={handleSalvarConferenciaDrawer}
-                          className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-lg text-xs font-bold shadow-xs hover:shadow transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{salvandoConferenciaDrawer ? "Salvando..." : "Salvar Parecer da Prévia"}</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  )}
 
                   {/* Se houver apontamento manual ativo neste dia */}
                   {(() => {
