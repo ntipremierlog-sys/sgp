@@ -52,6 +52,9 @@ import {
   obterItemPpuDoPosto,
   isCoberturaAtivaParaPosicao,
   excluirCobertura,
+  atualizarCobertura,
+  atualizarOcorrencia,
+  registrarLog,
   obterProgressoProgramacaoEscalas,
   registrarLogAuditoria,
   ApuracaoPostoCiclo,
@@ -494,6 +497,12 @@ export default function MapaOcupacaoPage() {
   const [competencia, setCompetencia] = useState<string>("2026-09");
   const [filtroBase, setFiltroBase] = useState<string>("TODAS");
   const [filtroStatusAgregado, setFiltroStatusAgregado] = useState<string>("TODOS");
+  const [filtroPrevia, setFiltroPrevia] = useState<string>("TODAS");
+  const [previaConferenciaDrawer, setPreviaConferenciaDrawer] = useState<"PREVIA_1" | "PREVIA_2" | "PREVIA_3">("PREVIA_1");
+  const [statusConferenciaDrawer, setStatusConferenciaDrawer] = useState<"COBERTO" | "DESCOBERTO">("COBERTO");
+  const [comentarioConferenciaDrawer, setComentarioConferenciaDrawer] = useState<string>("");
+  const [salvandoConferenciaDrawer, setSalvandoConferenciaDrawer] = useState(false);
+  const [mensagemConferenciaSucesso, setMensagemConferenciaSucesso] = useState("");
   const [busca, setBusca] = useState<string>("");
 
   // Filtros RM / Cadastros Importados
@@ -888,6 +897,19 @@ export default function MapaOcupacaoPage() {
         } else if (statusAgregado !== filtroStatusAgregado) {
           return false;
         }
+      }
+
+      if (filtroPrevia !== "TODAS") {
+        const idChaveCod = p.idPosto || p.id;
+        const temCobPrevia = coberturas.some(
+          (c) => (c.postoCodigo === idChaveCod || c.idPosto === idChaveCod) && c.previaConferencia === filtroPrevia
+        );
+        const vgsPosto = vagasPorPosto.get(idChaveCod) || [];
+        const chapasPosto = new Set(vgsPosto.map((v) => (v as any).chapaTitular).filter(Boolean));
+        const temOcoPrevia = ocorrencias.some(
+          (o) => (o.postoCodigo === idChaveCod || chapasPosto.has(o.matricula)) && o.previaConferencia === filtroPrevia
+        );
+        if (!temCobPrevia && !temOcoPrevia) return false;
       }
 
       // Filtros RM (Cadastros Importados)
@@ -1390,6 +1412,24 @@ export default function MapaOcupacaoPage() {
       postoOcupacao: postoApurado,
     });
 
+    const cobExistente = (coberturas || []).find((c) =>
+      isCoberturaAtivaParaPosicao(c, dataStr, posto, vaga)
+    );
+    const titularVig = obterAlocacaoVigenteVaga(vaga.id, alocacoes, dataStr);
+    const chapaTit = titularVig?.matricula || (vaga as any).chapaTitular;
+    const ocoExistente = (ocorrencias || []).find((o) =>
+      o.matricula === chapaTit && o.dataInicio <= dataStr && o.dataFim >= dataStr
+    );
+
+    setPreviaConferenciaDrawer(cobExistente?.previaConferencia || ocoExistente?.previaConferencia || "PREVIA_1");
+    setStatusConferenciaDrawer(
+      cobExistente?.statusConferenciaPosto ||
+      ocoExistente?.statusConferenciaPosto ||
+      (apuracao.status === "COBERTO" ? "COBERTO" : "DESCOBERTO")
+    );
+    setComentarioConferenciaDrawer(cobExistente?.comentarioConferencia || ocoExistente?.comentarioConferencia || "");
+    setMensagemConferenciaSucesso("");
+
     // Inicializa valores da edição de escala
     setFormGrupo(vaga.grupoRevezamento || vaga.grupo_revezamento || "");
     setFormFase(vaga.faseCiclo || vaga.fase_ciclo || "");
@@ -1542,6 +1582,81 @@ export default function MapaOcupacaoPage() {
 
     setFormDataInicioCob(dataStr);
     setFormDataFimCob(dataStr);
+
+    const cobExistente = (coberturas || []).find((c) =>
+      isCoberturaAtivaParaPosicao(c, dataStr, drawerInspecao.posto, drawerInspecao.vaga)
+    );
+    const titularVig = obterAlocacaoVigenteVaga(drawerInspecao.vaga.id, alocacoes, dataStr);
+    const chapaTit = titularVig?.matricula || (drawerInspecao.vaga as any).chapaTitular;
+    const ocoExistente = (ocorrencias || []).find((o) =>
+      o.matricula === chapaTit && o.dataInicio <= dataStr && o.dataFim >= dataStr
+    );
+
+    setPreviaConferenciaDrawer(cobExistente?.previaConferencia || ocoExistente?.previaConferencia || "PREVIA_1");
+    setStatusConferenciaDrawer(
+      cobExistente?.statusConferenciaPosto ||
+      ocoExistente?.statusConferenciaPosto ||
+      (apuracao.status === "COBERTO" ? "COBERTO" : "DESCOBERTO")
+    );
+    setComentarioConferenciaDrawer(cobExistente?.comentarioConferencia || ocoExistente?.comentarioConferencia || "");
+    setMensagemConferenciaSucesso("");
+  };
+
+  // Salvar parecer de conferência da Prévia Petrobras (Item 11.3)
+  const handleSalvarConferenciaDrawer = async () => {
+    if (!drawerInspecao) return;
+    setSalvandoConferenciaDrawer(true);
+    try {
+      const cobAtiva = (coberturas || []).find((c) =>
+        isCoberturaAtivaParaPosicao(c, drawerInspecao.dataStr, drawerInspecao.posto, drawerInspecao.vaga)
+      );
+
+      let alterado = false;
+      if (cobAtiva) {
+        atualizarCobertura(cobAtiva.id, {
+          previaConferencia: previaConferenciaDrawer,
+          statusConferenciaPosto: statusConferenciaDrawer,
+          comentarioConferencia: comentarioConferenciaDrawer,
+        });
+        alterado = true;
+      }
+
+      const titularVigente = obterAlocacaoVigenteVaga(drawerInspecao.vaga.id, alocacoes, drawerInspecao.dataStr);
+      const chapaTitular = titularVigente?.matricula || (drawerInspecao.vaga as any).chapaTitular;
+      const ocoAtiva = (ocorrencias || []).find((o) =>
+        o.matricula === chapaTitular &&
+        o.dataInicio <= drawerInspecao.dataStr &&
+        o.dataFim >= drawerInspecao.dataStr
+      );
+
+      if (ocoAtiva) {
+        atualizarOcorrencia(ocoAtiva.id, {
+          previaConferencia: previaConferenciaDrawer,
+          statusConferenciaPosto: statusConferenciaDrawer,
+          comentarioConferencia: comentarioConferenciaDrawer,
+        });
+        alterado = true;
+      }
+
+      const codigoPos = obterCodigoVisualPosicao(drawerInspecao.vaga, drawerInspecao.posto);
+      const nomePrevia = previaConferenciaDrawer === "PREVIA_1" ? "Prévia 1" : previaConferenciaDrawer === "PREVIA_2" ? "Prévia 2" : "Prévia 3";
+
+      if (!alterado) {
+        registrarLog(
+          "CONFERENCIA_PREVIA_PETROBRAS",
+          `Posição ${codigoPos} (${drawerInspecao.dataStr})`,
+          `Conferência Petrobras [${nomePrevia}] - Posto ${statusConferenciaDrawer}: ${comentarioConferenciaDrawer || "Sem comentários adicionais"}`
+        );
+      }
+
+      setMensagemConferenciaSucesso(`Parecer da ${nomePrevia} salvo com sucesso!`);
+      await carregarDados();
+      setTimeout(() => setMensagemConferenciaSucesso(""), 4000);
+    } catch (err) {
+      console.error("Erro ao salvar conferência de prévia:", err);
+    } finally {
+      setSalvandoConferenciaDrawer(false);
+    }
   };
 
   // Salvar escala da posição (Item 5: Grupo, fase e data-base)
@@ -2715,6 +2830,21 @@ export default function MapaOcupacaoPage() {
                 <option value="DESCOBERTO">Descoberto</option>
                 <option value="SEM_DADO">Com sem dado</option>
                 <option value="CICLO_NAO_CONFIGURADO">Escala em aberto</option>
+              </select>
+
+              {/* Prévia Petrobras (Prévia 1, 2 e 3) */}
+              <select
+                id="mapa-filtro-previa"
+                value={filtroPrevia}
+                onChange={(e) => setFiltroPrevia(e.target.value)}
+                className="h-8 px-2 text-xs rounded-md border border-amber-300 bg-amber-50/70 text-amber-950 font-bold focus:border-amber-500 focus:outline-hidden cursor-pointer shadow-2xs"
+                title="Filtrar por Prévia de Conferência Petrobras"
+                aria-label="Prévia Petrobras"
+              >
+                <option value="TODOS">Todas as Prévias</option>
+                <option value="PREVIA_1">Prévia 1</option>
+                <option value="PREVIA_2">Prévia 2</option>
+                <option value="PREVIA_3">Prévia 3</option>
               </select>
 
               {/* Período */}
@@ -3925,6 +4055,113 @@ export default function MapaOcupacaoPage() {
                       <p className="text-[11px] text-slate-600 mt-0.5">{drawerInspecao.ocupacao.motivoPublico}</p>
                     </div>
                   )}
+
+                  {/* SEÇÃO: CONFERÊNCIA PETROBRAS - PRÉVIAS 1, 2 E 3 (ITEM 11.3) */}
+                  <div className="p-3.5 rounded-xl bg-gradient-to-br from-amber-50/90 to-amber-100/40 border border-amber-300 text-slate-800 space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between border-b border-amber-200/80 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        <span className="font-bold text-amber-950 uppercase text-[11px] tracking-wide">
+                          Conferência Petrobras — Prévias (Item 11.3)
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded border border-amber-300">
+                        {previaConferenciaDrawer === "PREVIA_1" ? "Prévia 1" : previaConferenciaDrawer === "PREVIA_2" ? "Prévia 2" : "Prévia 3"}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-amber-900 leading-snug">
+                      Auditoria de fechamento: confira se o posto foi devidamente coberto ou se permaneceu descoberto nesta data.
+                    </p>
+
+                    {mensagemConferenciaSucesso && (
+                      <div className="p-2 bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-lg text-xs font-semibold">
+                        {mensagemConferenciaSucesso}
+                      </div>
+                    )}
+
+                    {/* Seleção de Prévia (1, 2 e 3) */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-700 uppercase block">
+                        1. Rodada de Conferência (Prévia)
+                      </span>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {(["PREVIA_1", "PREVIA_2", "PREVIA_3"] as const).map((pr) => (
+                          <button
+                            key={pr}
+                            type="button"
+                            onClick={() => setPreviaConferenciaDrawer(pr)}
+                            className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                              previaConferenciaDrawer === pr
+                                ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                                : "bg-white text-slate-700 border-slate-300 hover:bg-amber-50"
+                            }`}
+                          >
+                            {pr === "PREVIA_1" ? "Prévia 1" : pr === "PREVIA_2" ? "Prévia 2" : "Prévia 3"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Situação Apurada na Prévia: Coberto ou Descoberto */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-slate-700 uppercase block">
+                        2. Verificação de Cobertura do Posto
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStatusConferenciaDrawer("COBERTO")}
+                          className={`py-1.5 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                            statusConferenciaDrawer === "COBERTO"
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                              : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span>✓ Posto Coberto</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStatusConferenciaDrawer("DESCOBERTO")}
+                          className={`py-1.5 px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                            statusConferenciaDrawer === "DESCOBERTO"
+                              ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                              : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span>✕ Posto Descoberto</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Comentário / Parecer */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-700 uppercase block">
+                        3. Comentário / Parecer de Conferência Petrobras
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={comentarioConferenciaDrawer}
+                        onChange={(e) => setComentarioConferenciaDrawer(e.target.value)}
+                        placeholder="Registre a conferência da fiscalização Petrobras ou a justificativa da Premier para a prévia selecionada..."
+                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none leading-relaxed"
+                      />
+                    </div>
+
+                    {podeEditarOperacao && (
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          disabled={salvandoConferenciaDrawer}
+                          onClick={handleSalvarConferenciaDrawer}
+                          className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-lg text-xs font-bold shadow-xs hover:shadow transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>{salvandoConferenciaDrawer ? "Salvando..." : "Salvar Parecer da Prévia"}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Se houver apontamento manual ativo neste dia */}
                   {(() => {

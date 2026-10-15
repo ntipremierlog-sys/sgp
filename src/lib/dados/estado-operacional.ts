@@ -256,6 +256,32 @@ export interface OcorrenciaOperacional {
   substituicao_aprovada?: boolean | null;
   /** Chapa RM do substituto designado. */
   substituto_chapa?: string | null;
+
+  // Conferência Petrobras - Prévias 1, 2 e 3 (Fechamento e Medição de Postos Cobertos / Descobertos)
+  previaConferencia?: PreviaConferencia | null;
+  statusConferenciaPosto?: StatusConferenciaPosto | null;
+  comentarioConferencia?: string;
+  historicoConferencias?: ConferenciaPreviaItem[];
+}
+
+export type PreviaConferencia = "PREVIA_1" | "PREVIA_2" | "PREVIA_3";
+export type StatusConferenciaPosto = "COBERTO" | "DESCOBERTO";
+
+export interface ConferenciaPreviaItem {
+  id?: string;
+  previa: PreviaConferencia;
+  statusPosto: StatusConferenciaPosto;
+  comentario: string;
+  dataHora?: string;
+  autor?: string;
+}
+
+export function rotuloPrevia(previa?: PreviaConferencia | string | null): string {
+  if (!previa) return "Sem prévia";
+  if (previa === "PREVIA_1" || previa === "1") return "Prévia 1";
+  if (previa === "PREVIA_2" || previa === "2") return "Prévia 2";
+  if (previa === "PREVIA_3" || previa === "3") return "Prévia 3";
+  return String(previa);
 }
 
 export interface CoberturaOperacional {
@@ -285,6 +311,12 @@ export interface CoberturaOperacional {
   alertaInterjornada?: boolean;
   horasDescansoApuradas?: number;
   detalhesInterjornada?: string;
+
+  // Conferência Petrobras - Prévias 1, 2 e 3 (Fechamento e Medição de Postos Cobertos / Descobertos)
+  previaConferencia?: PreviaConferencia | null;
+  statusConferenciaPosto?: StatusConferenciaPosto | null;
+  comentarioConferencia?: string;
+  historicoConferencias?: ConferenciaPreviaItem[];
 }
 
 export interface ApontamentoOperacional {

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import {
   UserCheck2,
+  MessageSquare,
   Plus,
   Download,
   ChevronLeft,
@@ -61,6 +62,9 @@ export interface CoberturaLinha {
   status: "CONFIRMADA" | "PLANEJADA" | "CANCELADA";
   tipoCobertura: string;
   alertaInterjornada?: boolean;
+  previaConferencia?: "PREVIA_1" | "PREVIA_2" | "PREVIA_3" | null;
+  statusConferenciaPosto?: "COBERTO" | "DESCOBERTO" | null;
+  comentarioConferencia?: string;
 }
 
 function normalizarItemPpu(codigo?: string): string {
@@ -148,6 +152,11 @@ export default function PaginaGestaoCoberturas() {
   const [itemPpuFiltro, setItemPpuFiltro] = useState("TODOS");
   const [motivoFiltro, setMotivoFiltro] = useState("TODOS");
   const [statusFiltro, setStatusFiltro] = useState("TODOS");
+  const [previaFiltro, setPreviaFiltro] = useState("TODOS");
+  const [formPrevia, setFormPrevia] = useState<string>("");
+  const [formStatusPostoPrevia, setFormStatusPostoPrevia] = useState<"COBERTO" | "DESCOBERTO">("COBERTO");
+  const [formComentarioConferencia, setFormComentarioConferencia] = useState("");
+  const [comentarioModal, setComentarioModal] = useState<{ posto: string; substituto: string; previa: string; statusPosto: string; comentario: string } | null>(null);
 
   // Estado da Paginação no Servidor (25 por página)
   const [paginaAtual, setPaginaAtual] = useState(1);
@@ -188,6 +197,7 @@ export default function PaginaGestaoCoberturas() {
         itemPpu: itemPpuFiltro,
         motivo: motivoFiltro,
         status: statusFiltro,
+        previa: previaFiltro,
         page: String(paginaAtual),
       });
 
@@ -216,7 +226,7 @@ export default function PaginaGestaoCoberturas() {
     } finally {
       setCarregando(false);
     }
-  }, [competencia, imovelFiltro, itemPpuFiltro, motivoFiltro, statusFiltro, paginaAtual]);
+  }, [competencia, imovelFiltro, itemPpuFiltro, motivoFiltro, statusFiltro, previaFiltro, paginaAtual]);
 
   // Fallback caso execução local sem rede
   const carregarCoberturasLocal = () => {
@@ -257,6 +267,9 @@ export default function PaginaGestaoCoberturas() {
           status: (c.status || "CONFIRMADA") as any,
           tipoCobertura: c.tipoCobertura || "SUBSTITUICAO_INTERNA",
           alertaInterjornada: c.alertaInterjornada,
+          previaConferencia: c.previaConferencia || null,
+          statusConferenciaPosto: c.statusConferenciaPosto || null,
+          comentarioConferencia: c.comentarioConferencia || "",
         };
       });
 
@@ -265,6 +278,7 @@ export default function PaginaGestaoCoberturas() {
       if (itemPpuFiltro !== "TODOS" && normalizarItemPpu(item.itemPpu) !== normalizarItemPpu(itemPpuFiltro)) return false;
       if (motivoFiltro !== "TODOS" && item.motivoCategoria !== motivoFiltro) return false;
       if (statusFiltro !== "TODOS" && item.status !== statusFiltro) return false;
+      if (previaFiltro !== "TODOS" && item.previaConferencia !== previaFiltro) return false;
       return true;
     });
 
@@ -352,6 +366,9 @@ export default function PaginaGestaoCoberturas() {
     setFormJustificativa("");
     setFormItemPpu("1.1");
     setCienciaInterjornada(false);
+    setFormPrevia("");
+    setFormStatusPostoPrevia("COBERTO");
+    setFormComentarioConferencia("");
     setModalAberto(true);
   };
 
@@ -391,6 +408,9 @@ export default function PaginaGestaoCoberturas() {
     setFormJustificativa(cob?.justificativa || cobLinha.motivoCategoria);
     setFormItemPpu(cobLinha.itemPpu || "1.1");
     setCienciaInterjornada(cob?.alertaInterjornada || false);
+    setFormPrevia(cob?.previaConferencia || cobLinha.previaConferencia || "");
+    setFormStatusPostoPrevia((cob?.statusConferenciaPosto || cobLinha.statusConferenciaPosto || "COBERTO") as "COBERTO" | "DESCOBERTO");
+    setFormComentarioConferencia(cob?.comentarioConferencia || cobLinha.comentarioConferencia || "");
     setModalAberto(true);
   };
 
@@ -417,6 +437,9 @@ export default function PaginaGestaoCoberturas() {
           dataFim: formDataFim,
           tipoCobertura: formTipo,
           justificativa: formJustificativa,
+          previaConferencia: (formPrevia as any) || null,
+          statusConferenciaPosto: formStatusPostoPrevia,
+          comentarioConferencia: formComentarioConferencia,
         });
         setMensagemSucesso("Cobertura atualizada com sucesso!");
       } else {
@@ -434,6 +457,9 @@ export default function PaginaGestaoCoberturas() {
           tipoCobertura: formTipo,
           status: "CONFIRMADA",
           justificativa: formJustificativa || "Cobertura de posto",
+          previaConferencia: (formPrevia as any) || null,
+          statusConferenciaPosto: formStatusPostoPrevia,
+          comentarioConferencia: formComentarioConferencia,
         });
         setMensagemSucesso("Cobertura registrada com sucesso!");
       }
@@ -581,6 +607,22 @@ export default function PaginaGestaoCoberturas() {
             </select>
           </div>
 
+          {/* Prévia Petrobras (Prévia 1, 2 e 3) */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Prévia:</span>
+            <select
+              value={previaFiltro}
+              onChange={(e) => handleAlterarFiltro(setPreviaFiltro, e.target.value)}
+              className="text-xs bg-amber-50/70 border border-amber-300 rounded-lg px-2.5 py-1.5 font-bold text-amber-950 outline-none focus:border-amber-500 cursor-pointer shadow-2xs"
+              title="Filtrar por rodada de conferência Petrobras"
+            >
+              <option value="TODOS">Todas as Prévias</option>
+              <option value="PREVIA_1">Prévia 1</option>
+              <option value="PREVIA_2">Prévia 2</option>
+              <option value="PREVIA_3">Prévia 3</option>
+            </select>
+          </div>
+
           {/* Botão Limpar Filtros */}
           {temFiltroAtivo && (
             <button
@@ -607,14 +649,15 @@ export default function PaginaGestaoCoberturas() {
               <th className="py-1.5 px-3 w-[20%]">Cobertura</th>
               <th className="py-1.5 px-2.5 w-[11%]">Período</th>
               <th className="py-1.5 px-2 text-center w-[5%]">Diárias</th>
-              <th className="py-1.5 px-2.5 w-[10%]">Motivo</th>
-              <th className="py-1.5 px-2.5 w-[12%]">Status</th>
+              <th className="py-1.5 px-2.5 w-[9%]">Motivo</th>
+              <th className="py-1.5 px-2.5 w-[14%]">Conferência (Prévia)</th>
+              <th className="py-1.5 px-2.5 w-[10%]">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
             {carregando ? (
               <tr>
-                <td colSpan={9} className="py-10 text-center text-slate-400">
+                <td colSpan={10} className="py-10 text-center text-slate-400">
                   <div className="inline-flex items-center gap-2">
                     <span className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     <span>Carregando coberturas do servidor...</span>
@@ -623,7 +666,7 @@ export default function PaginaGestaoCoberturas() {
               </tr>
             ) : coberturas.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-10 text-center text-slate-400">
+                <td colSpan={10} className="py-10 text-center text-slate-400">
                   <UserCheck2 className="w-8 h-8 mx-auto mb-1.5 text-slate-300" />
                   <p className="font-semibold text-slate-700">Nenhuma cobertura encontrada</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
@@ -694,6 +737,47 @@ export default function PaginaGestaoCoberturas() {
                     title={`Categoria Oficial: ${cob.motivoCategoria} (Conforme LGPD Contratual)`}
                   >
                     {cob.motivoCategoria}
+                  </td>
+
+                  {/* 8.1 Conferência Petrobras (Prévias 1, 2 ou 3) */}
+                  <td className="py-1.5 px-2.5 whitespace-nowrap text-xs">
+                    {cob.previaConferencia ? (
+                      <div className="flex flex-col gap-0.5 items-start">
+                        <div className="flex items-center gap-1">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                            {cob.previaConferencia === "PREVIA_1" ? "Prévia 1" : cob.previaConferencia === "PREVIA_2" ? "Prévia 2" : "Prévia 3"}
+                          </span>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            cob.statusConferenciaPosto === "DESCOBERTO" ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"
+                          }`}>
+                            {cob.statusConferenciaPosto === "DESCOBERTO" ? "Descoberto" : "Coberto"}
+                          </span>
+                        </div>
+                        {cob.comentarioConferencia ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setComentarioModal({
+                                posto: cob.postoCodigo,
+                                substituto: cob.substitutoNome,
+                                previa: cob.previaConferencia === "PREVIA_1" ? "Prévia 1" : cob.previaConferencia === "PREVIA_2" ? "Prévia 2" : "Prévia 3",
+                                statusPosto: cob.statusConferenciaPosto === "DESCOBERTO" ? "Posto Descoberto" : "Posto Coberto",
+                                comentario: cob.comentarioConferencia || "",
+                              });
+                            }}
+                            className="text-[10px] text-blue-700 hover:text-blue-900 underline font-semibold flex items-center gap-0.5 cursor-pointer mt-0.5"
+                          >
+                            <MessageSquare className="w-2.5 h-2.5" />
+                            <span>Ver parecer</span>
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">Sem comentário</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 text-[11px]">—</span>
+                    )}
                   </td>
 
                   {/* 9. Status (apenas um ponto pequeno colorido ● antes do texto) */}
@@ -892,6 +976,82 @@ export default function PaginaGestaoCoberturas() {
                 />
               </div>
 
+              {/* SEÇÃO: CONFERÊNCIA PETROBRAS - PRÉVIAS 1, 2 E 3 */}
+              <div className="bg-amber-50/80 border border-amber-300/80 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-amber-200/80 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+                      Conferência Petrobras (Prévias de Medição)
+                    </span>
+                  </div>
+                  <span className="text-[10px] bg-amber-200/70 text-amber-900 px-2 py-0.5 rounded font-bold">
+                    Item 11.3 Petrobras
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Rodada de Conferência (Prévia)
+                    </label>
+                    <select
+                      value={formPrevia}
+                      onChange={(e) => setFormPrevia(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 text-xs font-medium focus:ring-2 focus:ring-amber-500 outline-none"
+                    >
+                      <option value="">Sem Prévia Vinculada</option>
+                      <option value="PREVIA_1">Prévia 1 (1ª Conferência)</option>
+                      <option value="PREVIA_2">Prévia 2 (2ª Conferência / Ajustes)</option>
+                      <option value="PREVIA_3">Prévia 3 (Fechamento Definitivo)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Situação do Posto na Prévia
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFormStatusPostoPrevia("COBERTO")}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                          formStatusPostoPrevia === "COBERTO"
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                            : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                        }`}
+                      >
+                        ✓ Posto Coberto
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormStatusPostoPrevia("DESCOBERTO")}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                          formStatusPostoPrevia === "DESCOBERTO"
+                            ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                            : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                        }`}
+                      >
+                        ✕ Posto Descoberto
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                    Comentário / Parecer de Conferência Petrobras
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={formComentarioConferencia}
+                    onChange={(e) => setFormComentarioConferencia(e.target.value)}
+                    placeholder="Descreva a conferência da Petrobras/fiscalização sobre o posto coberto ou descoberto..."
+                    className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                </div>
+              </div>
+
               <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between -mx-4 -mb-4 mt-4">
                 {coberturaEmEdicao && (
                   <button
@@ -927,6 +1087,48 @@ export default function PaginaGestaoCoberturas() {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL DE VISUALIZAÇÃO DO COMENTÁRIO DE PRÉVIA */}
+      {comentarioModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 p-5 space-y-3 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs rounded">
+                  {comentarioModal.previa}
+                </span>
+                <span className="text-sm font-bold text-slate-900">
+                  Parecer de Conferência
+                </span>
+              </div>
+              <button
+                onClick={() => setComentarioModal(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-xs space-y-1.5 text-slate-600">
+              <div><strong>Posto:</strong> <span className="font-mono text-slate-800">{comentarioModal.posto}</span></div>
+              <div><strong>Substituto:</strong> <span className="text-slate-800 font-medium">{comentarioModal.substituto}</span></div>
+              <div><strong>Situação Apurada:</strong> <span className="font-bold text-slate-800">{comentarioModal.statusPosto}</span></div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap">
+              {comentarioModal.comentario || "Nenhum comentário registrado."}
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={() => setComentarioModal(null)}
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}

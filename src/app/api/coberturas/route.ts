@@ -29,6 +29,9 @@ export interface CoberturaItemServidor {
   status: "CONFIRMADA" | "PLANEJADA" | "CANCELADA";
   tipoCobertura: string;
   alertaInterjornada?: boolean;
+  previaConferencia?: string | null;
+  statusConferenciaPosto?: string | null;
+  comentarioConferencia?: string;
 }
 
 /**
@@ -113,6 +116,7 @@ export async function GET(request: NextRequest) {
     const itemPpuFiltro = searchParams.get("itemPpu") || "TODOS";
     const motivoFiltro = searchParams.get("motivo") || "TODOS";
     const statusFiltro = searchParams.get("status") || "TODOS";
+    const previaFiltro = searchParams.get("previa") || "TODOS";
     const busca = (searchParams.get("busca") || "").trim().toLowerCase();
 
     const semPaginacao = searchParams.get("semPaginacao") === "true";
@@ -182,6 +186,9 @@ export async function GET(request: NextRequest) {
           status: (c.status || "CONFIRMADA") as "CONFIRMADA" | "PLANEJADA" | "CANCELADA",
           tipoCobertura: c.tipoCobertura || "SUBSTITUICAO_INTERNA",
           alertaInterjornada: c.alertaInterjornada,
+          previaConferencia: c.previaConferencia || null,
+          statusConferenciaPosto: c.statusConferenciaPosto || null,
+          comentarioConferencia: c.comentarioConferencia || "",
         };
       });
 
@@ -201,6 +208,10 @@ export async function GET(request: NextRequest) {
       }
       // Filtro Status
       if (statusFiltro !== "TODOS" && item.status !== statusFiltro) {
+        return false;
+      }
+      // Filtro Prévia Petrobras (Prévia 1, 2 ou 3)
+      if (previaFiltro !== "TODOS" && item.previaConferencia !== previaFiltro) {
         return false;
       }
       // Filtro Busca Textual
