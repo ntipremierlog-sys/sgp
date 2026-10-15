@@ -439,10 +439,10 @@ model Ocorrencia {
   substitutoChapa       String?         @map("substituto_chapa")
 
   // Auditoria e Soft Delete
-  createdAt           DateTime          @default(now()) @map("created_at")
-  updatedAt           DateTime          @updatedAt @map("updated_at")
-  createdBy           String?           @map("created_by")
-  updatedBy           String?           @map("updated_by")
+  criadoEm           DateTime          @default(now()) @map("criado_em")
+  atualizadoEm           DateTime          @updatedAt @map("atualizado_em")
+  criadoPor           String?           @map("criado_por")
+  atualizadoPor           String?           @map("atualizado_por")
   deletedAt           DateTime?         @map("deleted_at")
 
   profissional        Profissional      @relation(fields: [profissionalId], references: [id])
@@ -492,10 +492,10 @@ model Cobertura {
   itemPpu                   ItemPpu?        @relation(fields: [itemPpuCodigo], references: [codigo])
 
   // Auditoria e Soft Delete
-  createdAt                 DateTime        @default(now()) @map("created_at")
-  updatedAt                 DateTime        @updatedAt @map("updated_at")
-  createdBy                 String?         @map("created_by")
-  updatedBy                 String?         @map("updated_by")
+  criadoEm                 DateTime        @default(now()) @map("criado_em")
+  atualizadoEm                 DateTime        @updatedAt @map("atualizado_em")
+  criadoPor                 String?         @map("criado_por")
+  atualizadoPor                 String?         @map("atualizado_por")
   deletedAt                 DateTime?       @map("deleted_at")
 
   posto                     Posto           @relation(fields: [postoId], references: [id])
@@ -607,9 +607,10 @@ model Apontamento {
   respostaPremier     String?           @map("resposta_premier")
   respondidoPor       String?           @map("respondido_por")
   respondidoEm        DateTime?         @map("respondido_em")
+  atualizadoPor       String?           @map("atualizado_por")
 
-  createdAt           DateTime          @default(now()) @map("created_at")
-  updatedAt           DateTime          @updatedAt @map("updated_at")
+  criadoEm           DateTime          @default(now()) @map("criado_em")
+  atualizadoEm           DateTime          @updatedAt @map("atualizado_em")
 
   posto               Posto?            @relation(fields: [postoId], references: [id])
   ocupacaoPostoDia    OcupacaoPostoDia? @relation(fields: [ocupacaoPostoDiaId], references: [id])
@@ -995,3 +996,54 @@ model LoteCargaRm {
   @@map("lote_carga_rm")
 }
 
+
+// -----------------------------------------------------------------------------
+// CONFERÊNCIA DE PRÉVIA PETROBRAS (Item 11.3 do Contrato)
+// -----------------------------------------------------------------------------
+
+enum TipoRegistroConferencia {
+  COBERTURA
+  OCORRENCIA
+}
+
+enum StatusConferenciaPosto {
+  COBERTO
+  DESCOBERTO
+  PENDENTE
+}
+
+model ConferenciaPrevia {
+  id              String                  @id @default(uuid()) @db.Uuid
+  tipoRegistro    TipoRegistroConferencia @map("tipo_registro")
+  registroId      String                  @map("registro_id") @db.VarChar(255)
+  competencia     String?                 @map("competencia") @db.VarChar(10) // AAAA-MM (mês de término do ciclo)
+  previaNumero    Int                     @map("previa_numero") // 1, 2 ou 3
+  status          StatusConferenciaPosto  @map("status") // COBERTO, DESCOBERTO, PENDENTE
+  comentario      String?                 @map("comentario")
+  registradoPor   String?                 @map("registrado_por")
+  registradoEm    DateTime                @default(now()) @map("registrado_em")
+
+  @@index([registroId, tipoRegistro], name: "idx_conferencia_registro")
+  @@index([competencia, previaNumero], name: "idx_conferencia_competencia_previa")
+  @@index([registradoEm], name: "idx_conferencia_data")
+  @@map("conferencia_previa")
+}
+
+model MarcacaoPonto {
+  id                String    @id @map("id") @db.VarChar(120)
+  loteId            String    @map("lote_id") @db.VarChar(100)
+  arquivoOrigem     String?   @map("arquivo_origem") @db.VarChar(255)
+  colaboradorId     String?   @map("colaborador_id") @db.VarChar(100)
+  chapa             String    @map("chapa") @db.VarChar(20)
+  cpfLimpo          String?   @map("cpf_limpo") @db.VarChar(14)
+  dataHoraUtc       DateTime? @map("data_hora_utc")
+  dataLocal         String    @map("data_local") @db.VarChar(10)
+  horaLocal         String    @map("hora_local") @db.VarChar(10)
+  nsr               String?   @map("nsr") @db.VarChar(50)
+  equipamentoOrigem String?   @map("equipamento_origem") @db.VarChar(255)
+  importadoEm       DateTime? @map("importado_em")
+
+  @@index([chapa, dataLocal], name: "idx_marcacao_chapa_data")
+  @@index([dataLocal], name: "idx_marcacao_data_local")
+  @@map("marcacao_ponto")
+}

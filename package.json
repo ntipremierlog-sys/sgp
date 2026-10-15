@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "db:seed-b1": "node scripts/seed-grupo-b.js"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",

@@ -1,0 +1,226 @@
+[
+  {
+    "id": "ALOC-0012",
+    "chapa": "045858",
+    "nome": "LUCAS VASCONCELLOS DOS SANTOS",
+    "posto": "PST-BOAVENTURA-008",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0020",
+    "chapa": "045127",
+    "nome": "GILMARA CAETANO DE ASSIS",
+    "posto": "PST-CABIUNAS-010",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0023",
+    "chapa": "046451",
+    "nome": "FABIO SIMAO DE HOLANDA",
+    "posto": "PST-CENPES-012",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0026",
+    "chapa": "SEM_CHAPA_ALOC-0026",
+    "nome": "PRISCILLA DE CASTRO MAGALHAES DOS SANTOS",
+    "posto": "PST-CENPES-013",
+    "posicao": "POS-CENPES-013-02",
+    "motivo": "Chapa/Profissional não cadastrado em funcionarios-reais.json (SEM_CHAPA_ALOC-0026)"
+  },
+  {
+    "id": "ALOC-0035",
+    "chapa": "044533",
+    "nome": "AMANDA AMPHILOPHIO DA SILVA",
+    "posto": "PST-EDIBRA-020",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0049",
+    "chapa": "045781",
+    "nome": "GABRIELA ALVARENGA COLMENERO DAIHA",
+    "posto": "PST-EDIBRA-032",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0086",
+    "chapa": "044901",
+    "nome": "GIOVANI ALVES DE ANDRADE",
+    "posto": "PST-EDIHB-069",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0107",
+    "chapa": "036472",
+    "nome": "MARCIA CRISTINA SILVA DOS SANTOS",
+    "posto": "PST-EDIHB-090",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0111",
+    "chapa": "SEM_CHAPA_ALOC-0111",
+    "nome": "CARLOS ALEXANDRE ALVES DA SILVA",
+    "posto": "PST-EDIHB-094",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0127",
+    "chapa": "044232",
+    "nome": "LEANDRO BATISTA DE SOUZA",
+    "posto": "PST-EDIHB-110",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0139",
+    "chapa": "SEM_CHAPA_ALOC-0139",
+    "nome": "ISABELA GONCALVES FERNANDES DE ALBUQUERQUE",
+    "posto": "PST-EDISEN-123",
+    "posicao": "POS-EDISEN-123-01",
+    "motivo": "Chapa/Profissional não cadastrado em funcionarios-reais.json (SEM_CHAPA_ALOC-0139)"
+  },
+  {
+    "id": "ALOC-0189",
+    "chapa": "045147",
+    "nome": "LAIS DE MORAES MADUREIRA RODRIGUES",
+    "posto": "PST-RECAP-177",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0214",
+    "chapa": "SEM_CHAPA_ALOC-0214",
+    "nome": "-",
+    "posto": "PST-REDUC-199",
+    "posicao": "POS-REDUC-199-01",
+    "motivo": "Chapa/Profissional não cadastrado em funcionarios-reais.json (SEM_CHAPA_ALOC-0214)"
+  },
+  {
+    "id": "ALOC-0222",
+    "chapa": "044479",
+    "nome": "WALLACE TAROUQUELA DA ROCHA",
+    "posto": "PST-REDUC-200",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0226",
+    "chapa": "045371",
+    "nome": "MARCIO MARQUES DE ANDRADE",
+    "posto": "PST-REFAP-204",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0228",
+    "chapa": "045371",
+    "nome": "MARCIO MARQUES DE ANDRADE",
+    "posto": "PST-REFAP-205",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0238",
+    "chapa": "045328",
+    "nome": "LAVINIA CATALUNHA FERREIRA",
+    "posto": "PST-REGAP-209",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0247",
+    "chapa": "045486",
+    "nome": "LUCAS DE LIMA",
+    "posto": "PST-REPAR-213",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0259",
+    "chapa": "044978",
+    "nome": "GUILHERME DUDA DE PAULA",
+    "posto": "PST-REPLAN-217",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0267",
+    "chapa": "042012",
+    "nome": "NADIA NARA DE SOUZA CRUZ",
+    "posto": "PST-REVAP-220",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0271",
+    "chapa": "SEM_CHAPA_ALOC-0271",
+    "nome": "JACQUELINE RAQUEL GONCALVES DA SILVA",
+    "posto": "PST-REVAP-222",
+    "posicao": "POS-REVAP-222-03",
+    "motivo": "Chapa/Profissional não cadastrado em funcionarios-reais.json (SEM_CHAPA_ALOC-0271)"
+  },
+  {
+    "id": "ALOC-0276",
+    "chapa": "045744",
+    "nome": "RAFAELA DE CASSIA DOS SANTOS",
+    "posto": "PST-REVAP-223",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0279",
+    "chapa": "044477",
+    "nome": "JEFFERSON MELO DA SILVA",
+    "posto": "PST-RNEST-226",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0283",
+    "chapa": "044477",
+    "nome": "JEFFERSON MELO DA SILVA",
+    "posto": "PST-RNEST-229",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0302",
+    "chapa": "044311",
+    "nome": "JOSE ARTUR DA NOBREGA ALVES",
+    "posto": "PST-RPBC-245",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0306",
+    "chapa": "SEM_CHAPA_ALOC-0306",
+    "nome": "VIVIANE TEMOTEO ASSUMPCAO DE OLIVEIRA",
+    "posto": "PST-RPBC-248",
+    "posicao": "POS-RPBC-248-02",
+    "motivo": "Chapa/Profissional não cadastrado em funcionarios-reais.json (SEM_CHAPA_ALOC-0306)"
+  },
+  {
+    "id": "ALOC-0315",
+    "chapa": "044311",
+    "nome": "JOSE ARTUR DA NOBREGA ALVES",
+    "posto": "PST-RPBC-251",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  },
+  {
+    "id": "ALOC-0316",
+    "chapa": "036036",
+    "nome": "JULIANA CARDOSO DA SILVA SANTOS",
+    "posto": "PST-RPBC-251",
+    "posicao": null,
+    "motivo": "Colaborador Ferista sem posição fixa permanente (alocado e registrado na tabela ferista_posto)"
+  }
+]
