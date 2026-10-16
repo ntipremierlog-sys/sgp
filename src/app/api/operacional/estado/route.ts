@@ -13,6 +13,7 @@ import {
   obterImoveis,
 } from "@/lib/repositorio";
 import { competenciaDaData } from "@/lib/servicos/periodo-competencia";
+import { vincularTitularesPosicoes } from "@/lib/repositorio/vinculo-titular";
 
 export const dynamic = "force-dynamic";
 
@@ -171,21 +172,32 @@ export async function GET(request: NextRequest) {
     });
 
     // 4. Alocações
-    const alocacoes = alocacoesDb.map((aloc) => {
-      return {
+    // Vínculo posição → titular (fonte única, igual à Conferência): vagaId = posicao_id_sgp.
+    const alocacoes = vincularTitularesPosicoes(
+      posicoesDb.map((pos) => ({
+        posicaoIdSgp: pos.posicaoIdSgp,
+        postoId: pos.postoId,
+        postoIdSgp: pos.posto.postoIdSgp,
+        codigoPosto: pos.posto.codigoPosto,
+        sufixo: pos.sufixo,
+        chapaTitular: pos.chapaTitular,
+        nomeTitular: pos.nomeTitular,
+        horarioRm: pos.horarioRm,
+      })),
+      alocacoesDb.map((aloc) => ({
         id: aloc.id,
-        vagaId: aloc.posto.postoIdSgp ? `${aloc.posto.postoIdSgp}-01` : aloc.id,
-        posicaoIdSGP: aloc.posto.postoIdSgp ? `${aloc.posto.postoIdSgp}-01` : undefined,
-        postoIdSGP: aloc.posto.postoIdSgp || aloc.posto.codigoPosto,
+        postoId: aloc.postoId,
+        postoIdSgp: aloc.posto.postoIdSgp,
+        codigoPosto: aloc.posto.codigoPosto,
         matricula: aloc.profissional.matricula,
         nome: aloc.profissional.nome,
-        tipoAlocacao: aloc.tipo === "SUBSTITUTO_FIXO" ? "SUBSTITUTO" : "TITULAR/REGULAR",
-        dataInicio: aloc.dataInicio.toISOString().slice(0, 10),
-        dataFim: aloc.dataFim ? aloc.dataFim.toISOString().slice(0, 10) : null,
-        motivo: aloc.motivoMovimentacao || undefined,
-        observacoes: aloc.documentoReferencia || undefined,
-      };
-    });
+        tipo: aloc.tipo,
+        dataInicio: aloc.dataInicio,
+        dataFim: aloc.dataFim,
+        motivoMovimentacao: aloc.motivoMovimentacao,
+        documentoReferencia: aloc.documentoReferencia,
+      }))
+    ).alocacoes;
 
     // 5. Ocorrências (com pareceres vigentes acoplados e LGPD)
     const ocorrencias = ocorrenciasDb.map((oc) => {

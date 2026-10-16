@@ -37,7 +37,7 @@ import {
   PendenciaPontoItem,
 } from "./ponto-tipos";
 export type { MarcacaoPontoOriginal } from "./ponto-tipos";
-import { calcularPeriodoCompetencia, competenciaDoInicioCiclo } from "@/lib/servicos/periodo-competencia";
+import { calcularPeriodoCompetencia, competenciaDoInicioCiclo, obterCicloCompetenciaAtual } from "@/lib/servicos/periodo-competencia";
 import { FERIADOS_NACIONAIS } from "./feriados-nacionais";
 
 import {
@@ -3055,11 +3055,24 @@ export function adicionarProfissional(
 // -----------------------------------------------------------------------------
 
 /**
+ * Competência ("YYYY-MM") de uma data pela convenção de CICLO do sistema (dia 10 a 09, com o
+ * nome do mês de término), via obterCicloCompetenciaAtual. Ex.: 05/08 → 2026-08; 20/08 → 2026-09.
+ * Valor já no formato "YYYY-MM" é tratado como competência.
+ */
+function competenciaPeloCiclo(valor?: string): string {
+  const v = (valor || "").trim();
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return obterCicloCompetenciaAtual(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).competencia;
+  return /^\d{4}-\d{2}$/.test(v) ? v : "";
+}
+
+/**
  * Retorna a primeira competência CONGELADA ("YYYY-MM") abrangida pelo período, ou null.
+ * As datas são convertidas em competência pelo ciclo (10 a 09), não pelo mês do calendário.
  */
 export function obterCompetenciaCongeladaNoPeriodo(dataInicio?: string, dataFim?: string): string | null {
-  const ini = (dataInicio || "").slice(0, 7);
-  const fim = ((dataFim || dataInicio) || "").slice(0, 7);
+  const ini = competenciaPeloCiclo(dataInicio);
+  const fim = competenciaPeloCiclo(dataFim || dataInicio);
   if (!/^\d{4}-\d{2}$/.test(ini)) return null;
   const fimValido = /^\d{4}-\d{2}$/.test(fim) && fim >= ini ? fim : ini;
   let [ano, mes] = ini.split("-").map(Number);

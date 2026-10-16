@@ -16,6 +16,7 @@ import { calcularStatusVagaDia, isCompetenciaCongelada } from "@/lib/dados/estad
 import { somarDias, diasEntre, type Previa } from "@/lib/servicos/previas";
 import { obterPreviasDaCompetencia } from "./previas";
 import { PeriodoCongeladoError } from "./validacoes";
+import { vincularTitularesPosicoes } from "./vinculo-titular";
 
 /**
  * Bloqueio por competência congelada usando a competência DA PRÉVIA
@@ -150,7 +151,7 @@ export async function apurarConferenciaPrevia(previa: Previa, filtros: FiltrosAp
     wherePosto.OR = [{ postoIdSgp: { in: filtros.postoIds } }, { codigoPosto: { in: filtros.postoIds } }];
   }
 
-  const [imoveisDb, postosDb, ocorrenciasDb, coberturasDb, marcacoesDb, maxPonto, tiposDb] = await Promise.all([
+  const [imoveisDb, postosDb, ocorrenciasDb, coberturasDb, marcacoesDb, maxPonto, tiposDb, alocacoesDb] = await Promise.all([
     prisma.imovel.findMany({ select: { nome: true }, orderBy: { nome: "asc" } }),
     prisma.posto.findMany({
       where: wherePosto,
@@ -191,6 +192,20 @@ export async function apurarConferenciaPrevia(previa: Previa, filtros: FiltrosAp
     }),
     prisma.marcacaoPonto.aggregate({ _max: { dataLocal: true } }),
     prisma.tipoOcorrencia.findMany({ select: { codigo: true, rotuloPublico: true } }),
+    prisma.alocacao.findMany({
+      where: { deletedAt: null, posto: wherePosto },
+      select: {
+        id: true,
+        postoId: true,
+        tipo: true,
+        dataInicio: true,
+        dataFim: true,
+        motivoMovimentacao: true,
+        documentoReferencia: true,
+        posto: { select: { postoIdSgp: true, codigoPosto: true } },
+        profissional: { select: { matricula: true, nome: true } },
+      },
+    }),
   ]);
 
   const rotuloTipo = new Map(tiposDb.map((t) => [t.codigo, t.rotuloPublico]));
@@ -230,25 +245,34 @@ export async function apurarConferenciaPrevia(previa: Previa, filtros: FiltrosAp
   for (const m of marcacoesDb) marcacoesSet.add(`${String(m.chapa).padStart(6, "0")}_${m.dataLocal}`);
   const dataMaxPonto = maxPonto._max.dataLocal || "";
 
-  // Titular da posição (chapa_titular da posição) como ocupante vigente.
-  const alocacoes: any[] = [];
-  for (const p of postosDb) {
-    for (const pos of p.posicoes) {
-      if (!pos.chapaTitular) continue;
-      alocacoes.push({
-        id: `tit-${pos.posicaoIdSgp}`,
-        vagaId: pos.posicaoIdSgp,
-        posicaoIdSGP: pos.posicaoIdSgp,
-        matricula: pos.chapaTitular,
-        identificadorPetrobras: pos.chapaTitular,
-        nome: pos.nomeTitular || "Titular",
-        dataInicio: "2000-01-01",
-        dataFim: null,
-        horarioEscalaRm: pos.horarioRm || undefined,
-        motivo: "titular",
-      });
-    }
-  }
+  // Ocupante vigente: vínculo posição → titular (fonte única, igual ao Mapa e ao Painel).
+  const alocacoes: any[] = vincularTitularesPosicoes(
+    postosDb.flatMap((p) =>
+      p.posicoes.map((pos) => ({
+        posicaoIdSgp: pos.posicaoIdSgp,
+        postoId: p.id,
+        postoIdSgp: p.postoIdSgp,
+        codigoPosto: p.codigoPosto,
+        sufixo: pos.sufixo,
+        chapaTitular: pos.chapaTitular,
+        nomeTitular: pos.nomeTitular,
+        horarioRm: pos.horarioRm,
+      }))
+    ),
+    alocacoesDb.map((a) => ({
+      id: a.id,
+      postoId: a.postoId,
+      postoIdSgp: a.posto.postoIdSgp,
+      codigoPosto: a.posto.codigoPosto,
+      matricula: a.profissional.matricula,
+      nome: a.profissional.nome,
+      tipo: a.tipo,
+      dataInicio: a.dataInicio,
+      dataFim: a.dataFim,
+      motivoMovimentacao: a.motivoMovimentacao,
+      documentoReferencia: a.documentoReferencia,
+    }))
+  ).alocacoes;
 
   const datas = datasDaPrevia(previa);
   const postos: PostoConferencia[] = [];
