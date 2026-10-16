@@ -6,8 +6,12 @@ import {
   criarOcorrencia,
   atualizarOcorrencia,
   obterPareceresVigentes,
+  obterPreviasDaCompetencia,
+  obterPreviaServidor,
+  chaveParecer,
   PeriodoCongeladoError,
 } from "@/lib/repositorio";
+import { recortarNaPrevia, hojeBrasil, type Previa } from "@/lib/servicos/previas";
 
 export const dynamic = "force-dynamic";
 
@@ -33,26 +37,58 @@ export async function GET(request: NextRequest) {
     const periodoInicio = searchParams.get("periodoInicio") || undefined;
     const periodoFim = searchParams.get("periodoFim") || undefined;
 
+    // Prévia (período de conferência) selecionada: competência + número (1, 2 ou 3).
+    // Sem "previa" na URL: comportamento anterior (usado pelo Relatório de Coberturas).
+    const previaParam = searchParams.get("previa");
+    const competenciaPrevia = searchParams.get("competencia");
+    let previaSelecionada: Previa | null = null;
+    if (previaParam) {
+      const numeroPrevia = Number(previaParam);
+      if (competenciaPrevia && [1, 2, 3].includes(numeroPrevia)) {
+        previaSelecionada =
+          (await obterPreviasDaCompetencia(competenciaPrevia)).find((p) => p.numero === numeroPrevia) || null;
+      }
+      if (!previaSelecionada) previaSelecionada = await obterPreviaServidor(hojeBrasil());
+    }
+
     const [ocorrenciasDb, pareceresDb] = await Promise.all([
       obterOcorrencias({
         imovelNome: imovelFiltro && imovelFiltro !== "TODOS" ? imovelFiltro : undefined,
         matricula,
         postoCodigo,
-        periodoInicio,
-        periodoFim,
+        periodoInicio: previaSelecionada?.dataInicio || periodoInicio,
+        periodoFim: previaSelecionada?.dataFim || periodoFim,
         perfilUsuario: usuario.perfil,
       }),
-      obterPareceresVigentes({ competencia, tipoRegistro: "OCORRENCIA" }),
+      previaSelecionada
+        ? obterPareceresVigentes({
+            competencia: previaSelecionada.competencia,
+            previaNumero: previaSelecionada.numero,
+            tipoRegistro: "OCORRENCIA",
+          })
+        : obterPareceresVigentes({ competencia, tipoRegistro: "OCORRENCIA" }),
     ]);
 
     const mapaPareceres = new Map<string, typeof pareceresDb[0]>();
     for (const p of pareceresDb) {
-      mapaPareceres.set(`${p.registroId}:${p.previaNumero}`, p);
-      mapaPareceres.set(p.registroId, p);
+      mapaPareceres.set(chaveParecer(p.registroId, p.competencia, p.previaNumero), p);
+      if (!previaSelecionada) mapaPareceres.set(p.registroId, p);
     }
 
-    const ocorrenciasMapeadas = ocorrenciasDb.map((oc) => {
-      const parecer = mapaPareceres.get(oc.id);
+    // Dentro de uma prévia: só registros com dias nela, mostrando apenas esses dias,
+    // e somente o parecer dado nessa prévia.
+    const ocorrenciasMapeadas = ocorrenciasDb
+      .map((oc) => {
+        const dtIni = oc.dataInicio.toISOString().slice(0, 10);
+        const dtFim = oc.dataFim.toISOString().slice(0, 10);
+        const recorte = previaSelecionada ? recortarNaPrevia(dtIni, dtFim, previaSelecionada) : null;
+        return { oc, recorte };
+      })
+      .filter(({ recorte }) => !previaSelecionada || recorte !== null)
+      .map(({ oc, recorte }) => {
+      const parecer = previaSelecionada
+        ? mapaPareceres.get(chaveParecer(oc.id, previaSelecionada.competencia, previaSelecionada.numero))
+        : mapaPareceres.get(oc.id);
       return {
         id: oc.id,
         matricula: oc.profissional.matricula,
@@ -69,7 +105,18 @@ export async function GET(request: NextRequest) {
         observacaoPublica: oc.observacaoPublica || oc.tipoOcorrencia.rotuloPublico,
         substituicao_aprovada: oc.substituicaoAprovada,
         substituto_chapa: oc.substitutoChapa,
-        previaConferencia: parecer ? `Prévia ${parecer.previaNumero}` : null,
+        previa: previaSelecionada,
+        recortePrevia: recorte,
+        parecerPrevia: parecer
+          ? {
+              competencia: parecer.competencia,
+              numero: parecer.previaNumero,
+              status: parecer.status,
+              comentario: parecer.comentario || "",
+              registradoPor: parecer.registradoPor,
+              registradoEm: parecer.registradoEm,
+            }
+          : null,
         statusConferenciaPosto: parecer?.status || null,
         comentarioConferencia: parecer?.comentario || "",
         dadoSensivel: oc.dadoSensivel || null,
@@ -79,6 +126,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       sucesso: true,
       perfil: usuario.perfil,
+      previaSelecionada,
       total: ocorrenciasMapeadas.length,
       ocorrencias: ocorrenciasMapeadas,
     });

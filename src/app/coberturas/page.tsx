@@ -41,6 +41,15 @@ import { exportarRelatorioParaXlsx } from "@/lib/servicos/relatorios-oficiais";
 import { validarInterjornadaClt } from "@/lib/servicos/validacao-interjornada";
 import { CampoItemPpu } from "@/components/cobertura/campo-item-ppu";
 import { CATALOGO_ITEM_PPU, obterItemPPU } from "@/lib/dados/painel-calculo";
+import { useSelecaoPrevia, SeletorPrevia } from "@/components/previas/seletor-previa";
+import {
+  recortarNaPrevia,
+  rotuloPreviaComDatas,
+  formatarDdMm,
+  formatarDataBr,
+  type Previa,
+  type RecortePrevia,
+} from "@/lib/servicos/previas";
 
 export type CategoriaMotivoLgpd = "Férias" | "Licença" | "Afastamento" | "Falta" | "Outros";
 
@@ -63,8 +72,20 @@ export interface CoberturaLinha {
   status: "CONFIRMADA" | "PLANEJADA" | "CANCELADA";
   tipoCobertura: string;
   alertaInterjornada?: boolean;
-  previaConferencia?: "PREVIA_1" | "PREVIA_2" | "PREVIA_3" | null;
-  statusConferenciaPosto?: "COBERTO" | "DESCOBERTO" | null;
+  /** Prévia selecionada no filtro (vinda do servidor). */
+  previa?: Previa | null;
+  /** Dias do registro que caem dentro da prévia selecionada. */
+  recortePrevia?: RecortePrevia | null;
+  /** Parecer dado NESTA prévia (não vale para as outras). */
+  parecerPrevia?: {
+    competencia: string | null;
+    numero: number;
+    status: "COBERTO" | "DESCOBERTO" | "PENDENTE";
+    comentario: string;
+    registradoPor?: string;
+    registradoEm?: string;
+  } | null;
+  statusConferenciaPosto?: "COBERTO" | "DESCOBERTO" | "PENDENTE" | null;
   comentarioConferencia?: string;
 }
 
@@ -148,13 +169,18 @@ export default function PaginaGestaoCoberturas() {
   const { sessao: usuario } = useSessaoUsuario();
 
   // Estados dos Filtros Compactos do Topo
-  const [competencia, setCompetencia] = useState("2026-09");
+  // Competência + Prévia (período de conferência). Datas vindas do servidor (obterPrevia).
+  const selecaoPrevia = useSelecaoPrevia();
+  const competencia = selecaoPrevia.competencia;
+  const numeroPrevia = selecaoPrevia.numero;
+  const previaSelecionada = selecaoPrevia.previa;
   const [imovelFiltro, setImovelFiltro] = useState("TODOS");
   const [itemPpuFiltro, setItemPpuFiltro] = useState("TODOS");
   const [motivoFiltro, setMotivoFiltro] = useState("TODOS");
   const [statusFiltro, setStatusFiltro] = useState("TODOS");
-  const [previaFiltro, setPreviaFiltro] = useState("TODOS");
-  const [formPrevia, setFormPrevia] = useState<string>("");
+  const [linhaEmEdicao, setLinhaEmEdicao] = useState<CoberturaLinha | null>(null);
+  const [parecerOriginal, setParecerOriginal] = useState<{ status: string; comentario: string } | null>(null);
+  const [parecerTocado, setParecerTocado] = useState(false);
   const [formStatusPostoPrevia, setFormStatusPostoPrevia] = useState<"COBERTO" | "DESCOBERTO">("COBERTO");
   const [formComentarioConferencia, setFormComentarioConferencia] = useState("");
   const [comentarioModal, setComentarioModal] = useState<{ posto: string; substituto: string; previa: string; statusPosto: string; comentario: string } | null>(null);
@@ -190,6 +216,7 @@ export default function PaginaGestaoCoberturas() {
 
   // 1. Carrega dados do servidor com paginação (25 por página)
   const carregarCoberturasServidor = useCallback(async () => {
+    if (!competencia || !numeroPrevia) return; // aguarda o cadastro de prévias
     setCarregando(true);
     try {
       const params = new URLSearchParams({
@@ -198,7 +225,7 @@ export default function PaginaGestaoCoberturas() {
         itemPpu: itemPpuFiltro,
         motivo: motivoFiltro,
         status: statusFiltro,
-        previa: previaFiltro,
+        previa: String(numeroPrevia),
         page: String(paginaAtual),
       });
 
@@ -227,7 +254,12 @@ export default function PaginaGestaoCoberturas() {
     } finally {
       setCarregando(false);
     }
-  }, [competencia, imovelFiltro, itemPpuFiltro, motivoFiltro, statusFiltro, previaFiltro, paginaAtual]);
+  }, [competencia, numeroPrevia, imovelFiltro, itemPpuFiltro, motivoFiltro, statusFiltro, paginaAtual]);
+
+  // Ao trocar a competência/prévia, volta para a página 1
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [competencia, numeroPrevia]);
 
   // Fallback caso execução local sem rede
   const carregarCoberturasLocal = () => {
@@ -236,10 +268,9 @@ export default function PaginaGestaoCoberturas() {
     setPostos(postosTodos);
     setProfissionais(estado.profissionais || []);
 
-    const [anoComp, mesComp] = competencia.split("-").map(Number);
-    const ultimoDia = new Date(anoComp, mesComp, 0).getDate();
-    const dIniMes = `${competencia}-01`;
-    const dFimMes = `${competencia}-${String(ultimoDia).padStart(2, "0")}`;
+    if (!previaSelecionada) return;
+    const dIniMes = previaSelecionada.dataInicio;
+    const dFimMes = previaSelecionada.dataFim;
 
     const cobLocais: CoberturaLinha[] = (estado.coberturas || [])
       .filter((c) => c.dataInicio <= dFimMes && c.dataFim >= dIniMes)
@@ -248,6 +279,7 @@ export default function PaginaGestaoCoberturas() {
         const imovel = p?.localAtuacao || p?.baseOperacional || p?.unidadeNome || "Base";
         const itemPpuCod = normalizarItemPpu(c.itemPpu || p?.itemPPU || "1.1");
         const itemPpuObj = obterItemPPU(itemPpuCod);
+        const recorte = recortarNaPrevia(c.dataInicio, c.dataFim, previaSelecionada);
 
         return {
           id: c.id,
@@ -262,15 +294,17 @@ export default function PaginaGestaoCoberturas() {
           substitutoMatricula: c.substitutoMatricula?.trim() || "—",
           dataInicio: c.dataInicio,
           dataFim: c.dataFim,
-          periodoFormatado: formatarPeriodoDdMm(c.dataInicio, c.dataFim),
-          diarias: calcularDiarias(c.dataInicio, c.dataFim),
+          periodoFormatado: recorte ? formatarPeriodoDdMm(recorte.inicio, recorte.fim) : formatarPeriodoDdMm(c.dataInicio, c.dataFim),
+          diarias: recorte ? recorte.dias : calcularDiarias(c.dataInicio, c.dataFim),
           motivoCategoria: classificarMotivoLgpd(c.justificativa),
           status: (c.status || "CONFIRMADA") as any,
           tipoCobertura: c.tipoCobertura || "SUBSTITUICAO_INTERNA",
           alertaInterjornada: c.alertaInterjornada,
-          previaConferencia: c.previaConferencia || null,
-          statusConferenciaPosto: c.statusConferenciaPosto || null,
-          comentarioConferencia: c.comentarioConferencia || "",
+          previa: previaSelecionada,
+          recortePrevia: recorte,
+          parecerPrevia: null,
+          statusConferenciaPosto: null,
+          comentarioConferencia: "",
         };
       });
 
@@ -279,7 +313,6 @@ export default function PaginaGestaoCoberturas() {
       if (itemPpuFiltro !== "TODOS" && normalizarItemPpu(item.itemPpu) !== normalizarItemPpu(itemPpuFiltro)) return false;
       if (motivoFiltro !== "TODOS" && item.motivoCategoria !== motivoFiltro) return false;
       if (statusFiltro !== "TODOS" && item.status !== statusFiltro) return false;
-      if (previaFiltro !== "TODOS" && item.previaConferencia !== previaFiltro) return false;
       return true;
     });
 
@@ -372,7 +405,9 @@ export default function PaginaGestaoCoberturas() {
     setFormJustificativa("");
     setFormItemPpu("1.1");
     setCienciaInterjornada(false);
-    setFormPrevia("");
+    setLinhaEmEdicao(null);
+    setParecerOriginal(null);
+    setParecerTocado(false);
     setFormStatusPostoPrevia("COBERTO");
     setFormComentarioConferencia("");
     setModalAberto(true);
@@ -414,10 +449,37 @@ export default function PaginaGestaoCoberturas() {
     setFormJustificativa(cob?.justificativa || cobLinha.motivoCategoria);
     setFormItemPpu(cobLinha.itemPpu || "1.1");
     setCienciaInterjornada(cob?.alertaInterjornada || false);
-    setFormPrevia(cob?.previaConferencia || cobLinha.previaConferencia || "");
-    setFormStatusPostoPrevia((cob?.statusConferenciaPosto || cobLinha.statusConferenciaPosto || "COBERTO") as "COBERTO" | "DESCOBERTO");
-    setFormComentarioConferencia(cob?.comentarioConferencia || cobLinha.comentarioConferencia || "");
+    // Parecer: somente o dado NESTA prévia (competência + número selecionados)
+    const parecer = cobLinha.parecerPrevia || null;
+    setLinhaEmEdicao(cobLinha);
+    setParecerOriginal(parecer ? { status: parecer.status, comentario: parecer.comentario || "" } : null);
+    setParecerTocado(false);
+    setFormStatusPostoPrevia(parecer?.status === "DESCOBERTO" ? "DESCOBERTO" : "COBERTO");
+    setFormComentarioConferencia(parecer?.comentario || "");
     setModalAberto(true);
+  };
+
+  // Parecer por registro E por prévia: grava em conferencia_previa (append-only)
+  const registrarParecerDaPrevia = async (registroId: string) => {
+    if (!parecerTocado || !previaSelecionada || !linhaEmEdicao?.recortePrevia) return;
+    const comentario = formComentarioConferencia.trim();
+    if (parecerOriginal && parecerOriginal.status === formStatusPostoPrevia && parecerOriginal.comentario === comentario) return;
+    const res = await fetch("/api/conferencia-previa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tipoRegistro: "COBERTURA",
+        registroId,
+        competencia: previaSelecionada.competencia,
+        previaNumero: previaSelecionada.numero,
+        status: formStatusPostoPrevia,
+        comentario,
+      }),
+    });
+    const ret = await res.json().catch(() => ({}));
+    if (!res.ok || !ret.sucesso) {
+      throw new Error(ret.erro || "Cobertura salva, mas o parecer da prévia não foi registrado.");
+    }
   };
 
   // Salvar Cobertura (Inclusão / Edição)
@@ -447,15 +509,13 @@ export default function PaginaGestaoCoberturas() {
             dataFim: formDataFim,
             tipoCobertura: formTipo,
             justificativa: formJustificativa,
-            previaConferencia: (formPrevia as any) || null,
-            statusConferenciaPosto: formStatusPostoPrevia,
-            comentarioConferencia: formComentarioConferencia,
           }),
         });
         const ret = await res.json();
         if (!res.ok || !ret.sucesso) {
           throw new Error(ret.erro || "Falha ao atualizar cobertura no servidor Neon.");
         }
+        await registrarParecerDaPrevia(coberturaEmEdicao.id);
         setMensagemSucesso("Cobertura atualizada com sucesso!");
       } else {
         const res = await fetch("/api/coberturas", {
@@ -475,9 +535,6 @@ export default function PaginaGestaoCoberturas() {
             tipoCobertura: formTipo,
             status: "CONFIRMADA",
             justificativa: formJustificativa || "Cobertura de posto",
-            previaConferencia: (formPrevia as any) || null,
-            statusConferenciaPosto: formStatusPostoPrevia,
-            comentarioConferencia: formComentarioConferencia,
           }),
         });
         const ret = await res.json();
@@ -591,17 +648,11 @@ export default function PaginaGestaoCoberturas() {
       {/* Competência (mês/ano), Imóvel, Item PPU, Motivo, Status */}
       <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Competência (mês/ano) */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Mês:</span>
-            <input
-              type="month"
-              value={competencia}
-              onChange={(e) => handleAlterarFiltro(setCompetencia, e.target.value)}
-              className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-semibold text-slate-800 outline-none focus:border-blue-600 cursor-pointer shadow-2xs"
-              title="Filtrar por mês de competência"
-            />
-          </div>
+          {/* Competência + Prévia (período de conferência) */}
+          <SeletorPrevia
+            selecao={selecaoPrevia}
+            classeSelect="text-xs bg-amber-50/70 border border-amber-300 rounded-lg px-2.5 py-1.5 font-bold text-amber-950 outline-none focus:border-amber-500 cursor-pointer shadow-2xs"
+          />
 
           {/* Imóvel */}
           <div className="flex items-center gap-1.5">
@@ -668,22 +719,6 @@ export default function PaginaGestaoCoberturas() {
               <option value="CONFIRMADA">Confirmada</option>
               <option value="PLANEJADA">Planejada</option>
               <option value="CANCELADA">Cancelada</option>
-            </select>
-          </div>
-
-          {/* Prévia Petrobras (Prévia 1, 2 e 3) */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">Prévia:</span>
-            <select
-              value={previaFiltro}
-              onChange={(e) => handleAlterarFiltro(setPreviaFiltro, e.target.value)}
-              className="text-xs bg-amber-50/70 border border-amber-300 rounded-lg px-2.5 py-1.5 font-bold text-amber-950 outline-none focus:border-amber-500 cursor-pointer shadow-2xs"
-              title="Filtrar por rodada de conferência Petrobras"
-            >
-              <option value="TODOS">Todas as Prévias</option>
-              <option value="PREVIA_1">Prévia 1</option>
-              <option value="PREVIA_2">Prévia 2</option>
-              <option value="PREVIA_3">Prévia 3</option>
             </select>
           </div>
 
@@ -785,7 +820,7 @@ export default function PaginaGestaoCoberturas() {
                   {/* 6. Período (formato dd/mm – dd/mm) */}
                   <td
                     className="py-1.5 px-2.5 text-slate-700 whitespace-nowrap"
-                    title={`Vigência: ${cob.dataInicio} até ${cob.dataFim}`}
+                    title={`Dias nesta prévia: ${cob.periodoFormatado} — vigência completa: ${formatarDataBr(cob.dataInicio)} a ${formatarDataBr(cob.dataFim)}`}
                   >
                     {cob.periodoFormatado}
                   </td>
@@ -805,16 +840,16 @@ export default function PaginaGestaoCoberturas() {
 
                   {/* 8.1 Conferência Petrobras (Prévias 1, 2 ou 3) */}
                   <td className="py-1.5 px-2.5 whitespace-nowrap text-xs">
-                    {cob.previaConferencia ? (
+                    {cob.parecerPrevia ? (
                       <div className="flex flex-col gap-0.5 items-start">
                         <div className="flex items-center gap-1">
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                            {cob.previaConferencia === "PREVIA_1" ? "Prévia 1" : cob.previaConferencia === "PREVIA_2" ? "Prévia 2" : "Prévia 3"}
+                            {cob.parecerPrevia.numero}ª prévia
                           </span>
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${
                             cob.statusConferenciaPosto === "DESCOBERTO" ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"
                           }`}>
-                            {cob.statusConferenciaPosto === "DESCOBERTO" ? "Descoberto" : "Coberto"}
+                            {cob.statusConferenciaPosto === "DESCOBERTO" ? "Descoberto" : cob.statusConferenciaPosto === "PENDENTE" ? "Pendente" : "Coberto"}
                           </span>
                         </div>
                         {cob.comentarioConferencia ? (
@@ -825,7 +860,7 @@ export default function PaginaGestaoCoberturas() {
                               setComentarioModal({
                                 posto: cob.postoCodigo,
                                 substituto: cob.substitutoNome,
-                                previa: cob.previaConferencia === "PREVIA_1" ? "Prévia 1" : cob.previaConferencia === "PREVIA_2" ? "Prévia 2" : "Prévia 3",
+                                previa: previaSelecionada ? rotuloPreviaComDatas(previaSelecionada) : `${cob.parecerPrevia?.numero}ª prévia`,
                                 statusPosto: cob.statusConferenciaPosto === "DESCOBERTO" ? "Posto Descoberto" : "Posto Coberto",
                                 comentario: cob.comentarioConferencia || "",
                               });
@@ -1040,7 +1075,8 @@ export default function PaginaGestaoCoberturas() {
                 />
               </div>
 
-              {/* SEÇÃO: CONFERÊNCIA PETROBRAS - PRÉVIAS 1, 2 E 3 */}
+              {/* SEÇÃO: PARECER DA PRÉVIA (a prévia é definida pelas datas; parecer vale só para ela) */}
+              {coberturaEmEdicao && linhaEmEdicao?.recortePrevia && previaSelecionada ? (
               <div className="bg-amber-50/80 border border-amber-300/80 rounded-xl p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between border-b border-amber-200/80 pb-2">
                   <div className="flex items-center gap-2">
@@ -1057,18 +1093,15 @@ export default function PaginaGestaoCoberturas() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      Rodada de Conferência (Prévia)
+                      Prévia em conferência (definida pelas datas)
                     </label>
-                    <select
-                      value={formPrevia}
-                      onChange={(e) => setFormPrevia(e.target.value)}
-                      className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 text-xs font-medium focus:ring-2 focus:ring-amber-500 outline-none"
-                    >
-                      <option value="">Sem Prévia Vinculada</option>
-                      <option value="PREVIA_1">Prévia 1 (1ª Conferência)</option>
-                      <option value="PREVIA_2">Prévia 2 (2ª Conferência / Ajustes)</option>
-                      <option value="PREVIA_3">Prévia 3 (Fechamento Definitivo)</option>
-                    </select>
+                    <div className="w-full border border-amber-200 rounded-lg p-2 bg-white text-slate-800 text-xs font-semibold">
+                      {rotuloPreviaComDatas(previaSelecionada)}
+                      <span className="block text-[10px] font-medium text-slate-500 mt-0.5">
+                        Dias deste registro na prévia: {formatarDdMm(linhaEmEdicao.recortePrevia.inicio)} a{" "}
+                        {formatarDdMm(linhaEmEdicao.recortePrevia.fim)} ({linhaEmEdicao.recortePrevia.dias} dia(s))
+                      </span>
+                    </div>
                   </div>
 
                   <div>
@@ -1078,7 +1111,10 @@ export default function PaginaGestaoCoberturas() {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => setFormStatusPostoPrevia("COBERTO")}
+                        onClick={() => {
+                          setFormStatusPostoPrevia("COBERTO");
+                          setParecerTocado(true);
+                        }}
                         className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                           formStatusPostoPrevia === "COBERTO"
                             ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
@@ -1089,7 +1125,10 @@ export default function PaginaGestaoCoberturas() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFormStatusPostoPrevia("DESCOBERTO")}
+                        onClick={() => {
+                          setFormStatusPostoPrevia("DESCOBERTO");
+                          setParecerTocado(true);
+                        }}
                         className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                           formStatusPostoPrevia === "DESCOBERTO"
                             ? "bg-rose-600 text-white border-rose-600 shadow-xs"
@@ -1109,12 +1148,21 @@ export default function PaginaGestaoCoberturas() {
                   <textarea
                     rows={2}
                     value={formComentarioConferencia}
-                    onChange={(e) => setFormComentarioConferencia(e.target.value)}
+                    onChange={(e) => {
+                      setFormComentarioConferencia(e.target.value);
+                      setParecerTocado(true);
+                    }}
                     placeholder="Descreva a conferência da Petrobras/fiscalização sobre o posto coberto ou descoberto..."
                     className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
                   />
                 </div>
               </div>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] text-slate-600">
+                  A prévia é definida pelas datas do registro. O parecer é dado depois, na prévia em que o
+                  registro tiver dias{previaSelecionada ? ` (selecionada: ${rotuloPreviaComDatas(previaSelecionada)})` : ""}.
+                </div>
+              )}
 
               <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between -mx-4 -mb-4 mt-4">
                 {coberturaEmEdicao && (

@@ -29,6 +29,7 @@ import {
   Camera,
 } from "lucide-react";
 import { AbaPermissoes } from "@/components/admin/aba-permissoes";
+import { AbaPrevias } from "@/components/admin/aba-previas";
 import {
   carregarUsuarios,
   criarUsuario,
@@ -65,7 +66,7 @@ import {
 } from "@/lib/dados/secoes-horarios";
 import AcessoNegadoPage from "../acesso-negado/page";
 
-type AbaAdmin = "USUARIOS" | "PERMISSOES" | "PARAMETROS" | "SECOES" | "LIMPEZA";
+type AbaAdmin = "USUARIOS" | "PERMISSOES" | "PARAMETROS" | "SECOES" | "PREVIAS" | "LIMPEZA";
 
 const BASES_DISPONIVEIS = [
   { id: "TODAS", nome: "Todas as Bases Contratuais" },
@@ -585,6 +586,19 @@ export default function AdminPage() {
           <span>Mapeamento de Seções RM</span>
         </button>
 
+        <button
+          id="aba-admin-previas"
+          onClick={() => setAbaAtiva("PREVIAS")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all shrink-0 cursor-pointer ${
+            abaAtiva === "PREVIAS"
+              ? "border-[#1F4FD1] text-[#1F4FD1] bg-white"
+              : "border-transparent text-[#5B6474] hover:text-[#1A2230]"
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          <span>Prévias</span>
+        </button>
+
         <Link
           href="/admin/importar-funcionarios"
           className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-blue-700 hover:text-blue-900 bg-blue-50/70 hover:bg-blue-100/70 rounded-t-lg transition-all shrink-0 ml-auto"
@@ -1048,6 +1062,11 @@ export default function AdminPage() {
       {/* ABA: LIBERAÇÃO DE MÓDULOS POR PERFIL */}
       {/* ===================================================================== */}
       {abaAtiva === "PERMISSOES" && <AbaPermissoes onNotificar={exibirAlerta} />}
+
+      {/* ===================================================================== */}
+      {/* ABA: PRÉVIAS DA COMPETÊNCIA (ajuste manual = exceção) */}
+      {/* ===================================================================== */}
+      {abaAtiva === "PREVIAS" && <AbaPrevias onNotificar={exibirAlerta} />}
 
       {/* ===================================================================== */}
       {/* MODAIS ESSENCIAIS */}

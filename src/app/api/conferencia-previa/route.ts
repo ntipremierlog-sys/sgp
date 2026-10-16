@@ -20,25 +20,18 @@ export async function GET(request: NextRequest) {
     const registroId = searchParams.get("registroId");
     const competencia = searchParams.get("competencia") || undefined;
     const tipoRegistro = searchParams.get("tipoRegistro") || undefined;
+    const previaNumero = searchParams.get("previa") ? Number(searchParams.get("previa")) : undefined;
 
     if (registroId) {
-      // Se solicitou um registroId específico, retorna o histórico completo dele
-      const historico = await obterHistoricoPareceres(registroId, tipoRegistro);
+      // Histórico do registro (filtrável por competência e prévia)
+      const historico = await obterHistoricoPareceres(registroId, tipoRegistro, competencia, previaNumero);
       const vigente = historico[0] || null;
-      return NextResponse.json({
-        sucesso: true,
-        vigente,
-        historico,
-      });
+      return NextResponse.json({ sucesso: true, vigente, historico });
     }
 
-    // Caso geral: retorna pareceres vigentes da competência
-    const vigentes = await obterPareceresVigentes({ competencia, tipoRegistro });
-    return NextResponse.json({
-      sucesso: true,
-      total: vigentes.length,
-      vigentes,
-    });
+    // Caso geral: pareceres vigentes da competência / prévia
+    const vigentes = await obterPareceresVigentes({ competencia, tipoRegistro, previaNumero });
+    return NextResponse.json({ sucesso: true, total: vigentes.length, vigentes });
   } catch (erro: any) {
     console.error("Erro na API de Conferência Prévia:", erro);
     return NextResponse.json(
@@ -48,6 +41,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * POST /api/conferencia-previa
+ * Body: { tipoRegistro, registroId, competencia, previaNumero, status, comentario }
+ * O parecer vale somente para a prévia (competência + número) informada.
+ */
 export async function POST(request: NextRequest) {
   const usuario = await obterSessaoServidor();
   if (!usuario) {
@@ -56,11 +54,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { tipoRegistro, registroId, dataReferenciaOuInicio, previaNumero, status, comentario } = body;
+    const { tipoRegistro, registroId, competencia, previaNumero, dataReferenciaOuInicio, status, comentario } = body;
 
-    if (!tipoRegistro || !registroId || !previaNumero || !status) {
+    if (!tipoRegistro || !registroId || !status || ((!competencia || !previaNumero) && !dataReferenciaOuInicio)) {
       return NextResponse.json(
-        { sucesso: false, erro: "Campos obrigatórios: tipoRegistro, registroId, previaNumero e status." },
+        { sucesso: false, erro: "Campos obrigatórios: tipoRegistro, registroId, competencia, previaNumero e status." },
         { status: 400 }
       );
     }
@@ -71,18 +69,16 @@ export async function POST(request: NextRequest) {
       {
         tipoRegistro,
         registroId,
-        dataReferenciaOuInicio: dataReferenciaOuInicio || new Date().toISOString().slice(0, 10),
-        previaNumero: Number(previaNumero),
+        competencia: competencia || undefined,
+        previaNumero: previaNumero ? Number(previaNumero) : undefined,
+        dataReferenciaOuInicio: dataReferenciaOuInicio || undefined,
         status,
         comentario,
       },
       usuarioIdentificador
     );
 
-    return NextResponse.json({
-      sucesso: true,
-      parecer: novoParecer,
-    }, { status: 201 });
+    return NextResponse.json({ sucesso: true, parecer: novoParecer }, { status: 201 });
   } catch (erro: any) {
     if (erro instanceof PeriodoCongeladoError) {
       return NextResponse.json(

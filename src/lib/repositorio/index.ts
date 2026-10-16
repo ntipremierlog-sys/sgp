@@ -11,3 +11,4 @@ export * from "./ocorrencias";
 export * from "./conferencia-previa";
 export * from "./apontamentos";
 export * from "./marcacoes";
+export * from "./previas";

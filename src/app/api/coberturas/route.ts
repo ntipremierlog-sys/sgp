@@ -7,8 +7,12 @@ import {
   atualizarCobertura,
   excluirCobertura,
   obterPareceresVigentes,
+  obterPreviasDaCompetencia,
+  obterPreviaServidor,
+  chaveParecer,
   PeriodoCongeladoError,
 } from "@/lib/repositorio";
+import { recortarNaPrevia, hojeBrasil, type Previa } from "@/lib/servicos/previas";
 import { obterItemPPU } from "@/lib/dados/painel-calculo";
 
 export const dynamic = "force-dynamic";
@@ -66,7 +70,19 @@ export async function GET(request: NextRequest) {
     const itemPpuFiltro = searchParams.get("itemPpu") || "TODOS";
     const motivoFiltro = searchParams.get("motivo") || "TODOS";
     const statusFiltro = searchParams.get("status") || "TODOS";
-    const previaFiltro = searchParams.get("previa") || "TODOS";
+    // Prévia (período de conferência) selecionada: competência + número (1, 2 ou 3).
+    // Sem "previa" na URL: comportamento anterior (usado pelo Relatório de Coberturas).
+    const previaParam = searchParams.get("previa");
+    const competenciaPrevia = searchParams.get("competencia");
+    let previaSelecionada: Previa | null = null;
+    if (previaParam) {
+      const numeroPrevia = Number(previaParam);
+      if (competenciaPrevia && [1, 2, 3].includes(numeroPrevia)) {
+        previaSelecionada =
+          (await obterPreviasDaCompetencia(competenciaPrevia)).find((p) => p.numero === numeroPrevia) || null;
+      }
+      if (!previaSelecionada) previaSelecionada = await obterPreviaServidor(hojeBrasil());
+    }
     const busca = (searchParams.get("busca") || "").trim().toLowerCase();
 
     const semPaginacao = searchParams.get("semPaginacao") === "true";
@@ -77,26 +93,43 @@ export async function GET(request: NextRequest) {
     const [coberturasDb, pareceresDb] = await Promise.all([
       obterCoberturas({
         imovelNome: imovelFiltro !== "TODOS" ? imovelFiltro : undefined,
+        ...(previaSelecionada
+          ? { periodoInicio: previaSelecionada.dataInicio, periodoFim: previaSelecionada.dataFim }
+          : {}),
       }),
-      obterPareceresVigentes({ competencia, tipoRegistro: "COBERTURA" }),
+      previaSelecionada
+        ? obterPareceresVigentes({
+            competencia: previaSelecionada.competencia,
+            previaNumero: previaSelecionada.numero,
+            tipoRegistro: "COBERTURA",
+          })
+        : obterPareceresVigentes({ competencia, tipoRegistro: "COBERTURA" }),
     ]);
 
+    // Parecer é por registro E por prévia: dentro de uma prévia só vale o parecer dado nela.
     const mapaPareceres = new Map<string, typeof pareceresDb[0]>();
     for (const p of pareceresDb) {
-      mapaPareceres.set(`${p.registroId}:${p.previaNumero}`, p);
-      mapaPareceres.set(p.registroId, p);
+      mapaPareceres.set(chaveParecer(p.registroId, p.competencia, p.previaNumero), p);
+      if (!previaSelecionada) mapaPareceres.set(p.registroId, p);
     }
 
-    const [anoComp, mesComp] = competencia.split("-").map(Number);
-    const ultimoDiaComp = new Date(anoComp, mesComp, 0).getDate();
-    const inicioMes = `${competencia}-01`;
-    const fimMes = `${competencia}-${String(ultimoDiaComp).padStart(2, "0")}`;
+    let inicioJanela: string;
+    let fimJanela: string;
+    if (previaSelecionada) {
+      inicioJanela = previaSelecionada.dataInicio;
+      fimJanela = previaSelecionada.dataFim;
+    } else {
+      const [anoComp, mesComp] = competencia.split("-").map(Number);
+      const ultimoDiaComp = new Date(anoComp, mesComp, 0).getDate();
+      inicioJanela = `${competencia}-01`;
+      fimJanela = `${competencia}-${String(ultimoDiaComp).padStart(2, "0")}`;
+    }
 
     const listaMapeada = coberturasDb
       .filter((c) => {
         const dtIni = c.dataInicio.toISOString().slice(0, 10);
         const dtFim = c.dataFim.toISOString().slice(0, 10);
-        return dtIni <= fimMes && dtFim >= inicioMes;
+        return dtIni <= fimJanela && dtFim >= inicioJanela;
       })
       .map((c) => {
         const dtIni = c.dataInicio.toISOString().slice(0, 10);
@@ -107,9 +140,15 @@ export async function GET(request: NextRequest) {
         const itemPpuObj = obterItemPPU(itemPpuCod);
         const itemPpuDescricao = itemPpuObj?.descricao || `Item ${itemPpuCod}`;
         const motivoCategoria = classificarMotivoLgpd(c.justificativa);
-        const periodoFormatado = formatarPeriodoDdMm(dtIni, dtFim);
-        const diarias = calcularDiarias(dtIni, dtFim);
-        const parecer = mapaPareceres.get(c.id);
+        // Dentro de uma prévia, mostra só os dias do registro que caem nela.
+        const recorte = previaSelecionada ? recortarNaPrevia(dtIni, dtFim, previaSelecionada) : null;
+        const periodoFormatado = recorte
+          ? formatarPeriodoDdMm(recorte.inicio, recorte.fim)
+          : formatarPeriodoDdMm(dtIni, dtFim);
+        const diarias = recorte ? recorte.dias : calcularDiarias(dtIni, dtFim);
+        const parecer = previaSelecionada
+          ? mapaPareceres.get(chaveParecer(c.id, previaSelecionada.competencia, previaSelecionada.numero))
+          : mapaPareceres.get(c.id);
 
         return {
           id: c.id,
@@ -129,7 +168,18 @@ export async function GET(request: NextRequest) {
           motivoCategoria,
           status: c.status as "CONFIRMADA" | "PLANEJADA" | "CANCELADA",
           tipoCobertura: c.tipoCobertura,
-          previaConferencia: parecer ? `Prévia ${parecer.previaNumero}` : null,
+          previa: previaSelecionada,
+          recortePrevia: recorte,
+          parecerPrevia: parecer
+            ? {
+                competencia: parecer.competencia,
+                numero: parecer.previaNumero,
+                status: parecer.status,
+                comentario: parecer.comentario || "",
+                registradoPor: parecer.registradoPor,
+                registradoEm: parecer.registradoEm,
+              }
+            : null,
           statusConferenciaPosto: parecer?.status || null,
           comentarioConferencia: parecer?.comentario || "",
         };
@@ -140,7 +190,6 @@ export async function GET(request: NextRequest) {
       if (itemPpuFiltro !== "TODOS" && item.itemPpu !== itemPpuFiltro) return false;
       if (motivoFiltro !== "TODOS" && item.motivoCategoria.toLowerCase() !== motivoFiltro.toLowerCase()) return false;
       if (statusFiltro !== "TODOS" && item.status !== statusFiltro) return false;
-      if (previaFiltro !== "TODOS" && item.previaConferencia !== previaFiltro) return false;
       if (busca) {
         const atende =
           item.postoCodigo.toLowerCase().includes(busca) ||
@@ -171,7 +220,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       sucesso: true,
-      competencia,
+      competencia: previaSelecionada?.competencia || competencia,
+      previaSelecionada,
       pagina: paginaAtual,
       pageSize,
       totalPaginas,

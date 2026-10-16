@@ -38,6 +38,26 @@ import { useSessaoUsuario } from "@/lib/auth/use-sessao-usuario";
 import { podeVerDadosPessoaisCompletos } from "@/lib/dados/rm-tipos";
 import { obterPeriodoCompetencia } from "@/lib/servicos/calendario-competencia";
 import { competenciaDaData } from "@/lib/servicos/periodo-competencia";
+import { useSelecaoPrevia, SeletorPrevia } from "@/components/previas/seletor-previa";
+import {
+  rotuloPreviaComDatas,
+  formatarDdMm,
+  formatarDataBr as formatarDataBrPrevia,
+  type RecortePrevia,
+} from "@/lib/servicos/previas";
+
+/** Ocorrência vista dentro de uma prévia: só os dias que caem nela e só o parecer dela. */
+type OcorrenciaLinha = OcorrenciaOperacional & {
+  recortePrevia?: RecortePrevia | null;
+  parecerPrevia?: {
+    competencia: string | null;
+    numero: number;
+    status: "COBERTO" | "DESCOBERTO" | "PENDENTE";
+    comentario: string;
+    registradoPor?: string;
+    registradoEm?: string;
+  } | null;
+};
 
 const NOMES_MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -276,16 +296,20 @@ function formatTipoTexto(tipo: string): { label: string; dotClass: string; avata
 }
 
 export default function OcorrenciasPage() {
-  const [ocorrencias, setOcorrencias] = useState<OcorrenciaOperacional[]>([]);
+  const [ocorrencias, setOcorrencias] = useState<OcorrenciaLinha[]>([]);
   const [profissionais, setProfissionais] = useState<ProfissionalOperacional[]>([]);
   // Perfil REAL da sessão (null enquanto carrega ou se falhar → dados sensíveis ocultos)
   const { perfil: perfilSessao } = useSessaoUsuario();
   const [busca, setBusca] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<"TODOS" | "ATESTADO" | "FALTA" | "ABONO" | "OUTROS">("TODOS");
-  const [filtroCompetencia, setFiltroCompetencia] = useState<string>("TODAS");
+  // Competência + Prévia (período de conferência). Datas vindas do servidor (obterPrevia).
+  const selecaoPrevia = useSelecaoPrevia();
+  const competenciaPrevia = selecaoPrevia.competencia;
+  const numeroPrevia = selecaoPrevia.numero;
+  const previaSelecionada = selecaoPrevia.previa;
   const [filtroStatus, setFiltroStatus] = useState<"TODOS" | "VALIDADA" | "EM_VALIDACAO">("TODOS");
-  const [filtroPrevia, setFiltroPrevia] = useState<string>("TODAS");
-  const [formPrevia, setFormPrevia] = useState<string>("");
+  const [parecerOriginal, setParecerOriginal] = useState<{ status: string; comentario: string } | null>(null);
+  const [parecerTocado, setParecerTocado] = useState(false);
   const [formStatusPostoPrevia, setFormStatusPostoPrevia] = useState<"COBERTO" | "DESCOBERTO">("COBERTO");
   const [formComentarioConferencia, setFormComentarioConferencia] = useState("");
   const [comentarioModal, setComentarioModal] = useState<{ colaborador: string; matricula: string; previa: string; statusPosto: string; comentario: string } | null>(null);
@@ -295,7 +319,7 @@ export default function OcorrenciasPage() {
   const [modalAberto, setModalAberto] = useState(false);
   const [ocorrenciaSelecionada, setOcorrenciaSelecionada] = useState<OcorrenciaOperacional | null>(null);
   const [justificativaAbertaId, setJustificativaAbertaId] = useState<string | null>(null);
-  const [ocorrenciaEmEdicao, setOcorrenciaEmEdicao] = useState<OcorrenciaOperacional | null>(null);
+  const [ocorrenciaEmEdicao, setOcorrenciaEmEdicao] = useState<OcorrenciaLinha | null>(null);
 
   // Formulário nova ocorrência
   const [formMatricula, setFormMatricula] = useState("");
@@ -315,8 +339,10 @@ export default function OcorrenciasPage() {
   const [mensagemSucesso, setMensagemSucesso] = useState("");
 
   const carregarDados = async () => {
+    if (!competenciaPrevia || !numeroPrevia) return; // aguarda o cadastro de prévias
     try {
-      const res = await fetch("/api/ocorrencias");
+      const params = new URLSearchParams({ competencia: competenciaPrevia, previa: String(numeroPrevia) });
+      const res = await fetch(`/api/ocorrencias?${params.toString()}`, { cache: "no-store" });
       if (res.ok) {
         const dados = await res.json();
         if (dados.sucesso && Array.isArray(dados.ocorrencias)) {
@@ -340,7 +366,8 @@ export default function OcorrenciasPage() {
     const handleAtualizacao = () => carregarDados();
     window.addEventListener("sgp-dados-atualizados", handleAtualizacao);
     return () => window.removeEventListener("sgp-dados-atualizados", handleAtualizacao);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [competenciaPrevia, numeroPrevia]);
 
   // Abertura direta pelo link dos alertas do Painel: /ocorrencias?editar=<id>
   const [edicaoViaLinkFeita, setEdicaoViaLinkFeita] = useState(false);
@@ -358,18 +385,6 @@ export default function OcorrenciasPage() {
   // sessão ainda não carregada ou com falha — recebe a visão restrita (fail-closed).
   const ehPerfilPremier = podeVerDadosPessoaisCompletos(perfilSessao);
   const ehPerfilPetrobras = !ehPerfilPremier;
-
-  // Opções de competência derivadas dos próprios registros e do período de apuração (dia 10 a dia 09)
-  const competenciasDisponiveis = useMemo(() => {
-    const set = new Set<string>();
-    ocorrencias.forEach((o) => {
-      const comp = obterCompetenciaDaData(o.dataInicio);
-      if (comp) set.add(comp);
-      if (o.dataInicio && /^\d{4}-\d{2}/.test(o.dataInicio)) set.add(o.dataInicio.slice(0, 7));
-    });
-    set.add("2026-09");
-    return Array.from(set).sort().reverse();
-  }, [ocorrencias]);
 
   // Filtragem dinâmica
   const ocorrenciasFiltradas = useMemo(() => {
@@ -397,22 +412,12 @@ export default function OcorrenciasPage() {
           oc.tipoOcorrencia === "OUTROS";
       }
 
-      if (filtroPrevia !== "TODAS" && oc.previaConferencia !== filtroPrevia) {
-        return false;
-      }
-
+      // Prévia: o servidor já devolve só os registros com dias dentro da prévia selecionada.
       let matchComp = true;
-      if (filtroCompetencia !== "TODAS") {
-        const periodo = obterPeriodoCompetencia(filtroCompetencia);
-        if (periodo && periodo.dataInicio && periodo.dataFim) {
-          const ocIni = oc.dataInicio?.slice(0, 10) || "";
-          const ocFim = (oc.dataFim || oc.dataInicio)?.slice(0, 10) || ocIni;
-          matchComp = ocIni <= periodo.dataFim && ocFim >= periodo.dataInicio;
-        } else {
-          matchComp =
-            oc.dataInicio.startsWith(filtroCompetencia) ||
-            obterCompetenciaDaData(oc.dataInicio) === filtroCompetencia;
-        }
+      if (previaSelecionada) {
+        const ocIni = oc.dataInicio?.slice(0, 10) || "";
+        const ocFim = (oc.dataFim || oc.dataInicio)?.slice(0, 10) || ocIni;
+        matchComp = ocIni <= previaSelecionada.dataFim && ocFim >= previaSelecionada.dataInicio;
       }
 
       const matchStatus =
@@ -420,7 +425,7 @@ export default function OcorrenciasPage() {
 
       return matchBusca && matchTipo && matchComp && matchStatus;
     });
-  }, [ocorrencias, busca, filtroTipo, filtroCompetencia, filtroStatus]);
+  }, [ocorrencias, busca, filtroTipo, previaSelecionada, filtroStatus]);
 
   // Indicadores
   const totalOcorrencias = ocorrencias.length;
@@ -485,12 +490,13 @@ export default function OcorrenciasPage() {
     setFormDataConsulta("");
     setFormSubstAprovada(false);
     setFormSubstitutoChapa("");
-    setFormPrevia("");
+    setParecerOriginal(null);
+    setParecerTocado(false);
     setFormStatusPostoPrevia("COBERTO");
     setFormComentarioConferencia("");
   };
 
-  const abrirEdicaoOcorrencia = (oc: OcorrenciaOperacional) => {
+  const abrirEdicaoOcorrencia = (oc: OcorrenciaLinha) => {
     setOcorrenciaEmEdicao(oc);
     setFormMatricula(oc.matricula);
     setFormBuscaColaborador("");
@@ -505,9 +511,12 @@ export default function OcorrenciasPage() {
     setFormDataConsulta(oc.data_consulta_petrobras || "");
     setFormSubstAprovada(oc.substituicao_aprovada === true);
     setFormSubstitutoChapa(oc.substituto_chapa || "");
-    setFormPrevia(oc.previaConferencia || "");
-    setFormStatusPostoPrevia((oc.statusConferenciaPosto || "COBERTO") as "COBERTO" | "DESCOBERTO");
-    setFormComentarioConferencia(oc.comentarioConferencia || "");
+    // Parecer: somente o dado NESTA prévia (competência + número selecionados)
+    const parecer = oc.parecerPrevia || null;
+    setParecerOriginal(parecer ? { status: parecer.status, comentario: parecer.comentario || "" } : null);
+    setParecerTocado(false);
+    setFormStatusPostoPrevia(parecer?.status === "DESCOBERTO" ? "DESCOBERTO" : "COBERTO");
+    setFormComentarioConferencia(parecer?.comentario || "");
     setOcorrenciaSelecionada(null);
     setModalAberto(true);
   };
@@ -524,6 +533,29 @@ export default function OcorrenciasPage() {
     carregarDados();
     setMensagemSucesso("Ocorrência excluída com sucesso (registrada na auditoria).");
     setTimeout(() => setMensagemSucesso(""), 4000);
+  };
+
+  // Parecer por registro E por prévia: grava em conferencia_previa (append-only)
+  const registrarParecerDaPrevia = async (registroId: string) => {
+    if (!parecerTocado || !previaSelecionada || !ocorrenciaEmEdicao?.recortePrevia) return;
+    const comentario = formComentarioConferencia.trim();
+    if (parecerOriginal && parecerOriginal.status === formStatusPostoPrevia && parecerOriginal.comentario === comentario) return;
+    const res = await fetch("/api/conferencia-previa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tipoRegistro: "OCORRENCIA",
+        registroId,
+        competencia: previaSelecionada.competencia,
+        previaNumero: previaSelecionada.numero,
+        status: formStatusPostoPrevia,
+        comentario,
+      }),
+    });
+    const ret = await res.json().catch(() => ({}));
+    if (!res.ok || !ret.sucesso) {
+      throw new Error(ret.erro || "Ocorrência salva, mas o parecer da prévia não foi registrado.");
+    }
   };
 
   const handleSubmitNovaOcorrencia = async (e: React.FormEvent) => {
@@ -577,9 +609,6 @@ export default function OcorrenciasPage() {
       data_consulta_petrobras: formTipo === "FERIAS" ? formDataConsulta || null : null,
       substituicao_aprovada: formSubstAprovada,
       substituto_chapa: formSubstitutoChapa.trim() || null,
-      previaConferencia: (formPrevia as any) || null,
-      statusConferenciaPosto: formStatusPostoPrevia,
-      comentarioConferencia: formComentarioConferencia,
       dadoSensivel:
         formTipo === "ATESTADO_MEDICO"
           ? {
@@ -604,6 +633,7 @@ export default function OcorrenciasPage() {
         if (!res.ok || !ret.sucesso) {
           throw new Error(ret.erro || "Falha ao atualizar ocorrência no servidor Neon.");
         }
+        await registrarParecerDaPrevia(ocorrenciaEmEdicao.id);
         setMensagemSucesso(`Ocorrência de ${formatarNome(prof.nome)} atualizada com sucesso!`);
       } else {
         const res = await fetch("/api/ocorrencias", {
@@ -798,23 +828,11 @@ export default function OcorrenciasPage() {
             )}
           </div>
 
-          <select
-            value={filtroCompetencia}
-            onChange={(e) => setFiltroCompetencia(e.target.value)}
-            className="border border-slate-200 rounded-xl px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs outline-none hover:border-slate-300 font-medium cursor-pointer transition-colors"
-          >
-            <option value="TODAS">Todas as Competências</option>
-            {competenciasDisponiveis.map((comp) => {
-              const [ano, mes] = comp.split("-");
-              const mesNum = Number(mes);
-              const mesAnt = mesNum === 1 ? 12 : mesNum - 1;
-              return (
-                <option key={comp} value={comp}>
-                  Competência {mes}/{ano} (10/{String(mesAnt).padStart(2, "0")} a 09/{mes})
-                </option>
-              );
-            })}
-          </select>
+          {/* Competência + Prévia (período de conferência) */}
+          <SeletorPrevia
+            selecao={selecaoPrevia}
+            classeSelect="border border-amber-300 rounded-xl px-2.5 py-1.5 bg-amber-50/70 hover:bg-amber-100 text-amber-950 text-xs outline-none hover:border-amber-400 font-bold cursor-pointer transition-colors shadow-2xs"
+          />
 
           <select
             value={filtroStatus}
@@ -825,21 +843,6 @@ export default function OcorrenciasPage() {
             <option value="VALIDADA">Homologada</option>
             <option value="EM_VALIDACAO">Em Validação</option>
           </select>
-
-          {/* Filtro Prévia Petrobras (Prévia 1, 2 e 3) */}
-          <div className="flex items-center gap-1">
-            <select
-              value={filtroPrevia}
-              onChange={(e) => setFiltroPrevia(e.target.value)}
-              className="border border-amber-300 rounded-xl px-2.5 py-1.5 bg-amber-50/70 hover:bg-amber-100 text-amber-950 text-xs outline-none hover:border-amber-400 font-bold cursor-pointer transition-colors shadow-2xs"
-              title="Filtrar por rodada de conferência Petrobras"
-            >
-              <option value="TODAS">Todas as Prévias</option>
-              <option value="PREVIA_1">Prévia 1</option>
-              <option value="PREVIA_2">Prévia 2</option>
-              <option value="PREVIA_3">Prévia 3</option>
-            </select>
-          </div>
 
           {/* Alternador de Visualização */}
           <div className="flex items-center border border-slate-200/60 rounded-xl p-1 bg-slate-100/90">
@@ -935,9 +938,18 @@ export default function OcorrenciasPage() {
 
                       {/* Período */}
                       <td className="px-3.5 py-3 font-mono text-slate-800 text-xs">
-                        <div className="font-medium">{formatarPeriodo(oc.dataInicio, oc.dataFim)}</div>
+                        <div
+                          className="font-medium"
+                          title={`Vigência completa: ${formatarDataBrPrevia(oc.dataInicio)} a ${formatarDataBrPrevia(oc.dataFim || oc.dataInicio)}`}
+                        >
+                          {oc.recortePrevia
+                            ? formatarPeriodo(oc.recortePrevia.inicio, oc.recortePrevia.fim)
+                            : formatarPeriodo(oc.dataInicio, oc.dataFim)}
+                        </div>
                         <div className="text-[11px] font-medium text-slate-500 font-sans mt-0.5">
-                          {oc.diasAfetados} {oc.diasAfetados === 1 ? "dia" : "dias"}
+                          {oc.recortePrevia
+                            ? `${oc.recortePrevia.dias} ${oc.recortePrevia.dias === 1 ? "dia" : "dias"} nesta prévia`
+                            : `${oc.diasAfetados} ${oc.diasAfetados === 1 ? "dia" : "dias"}`}
                         </div>
                       </td>
 
@@ -1041,16 +1053,16 @@ export default function OcorrenciasPage() {
 
                       {/* Conferência Petrobras - Prévias 1, 2 e 3 */}
                       <td className="px-3.5 py-3 whitespace-nowrap text-xs">
-                        {oc.previaConferencia ? (
+                        {oc.parecerPrevia ? (
                           <div className="flex flex-col gap-0.5 items-start">
                             <div className="flex items-center gap-1">
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                                {oc.previaConferencia === "PREVIA_1" ? "Prévia 1" : oc.previaConferencia === "PREVIA_2" ? "Prévia 2" : "Prévia 3"}
+                                {oc.parecerPrevia.numero}ª prévia
                               </span>
                               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${
                                 oc.statusConferenciaPosto === "DESCOBERTO" ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"
                               }`}>
-                                {oc.statusConferenciaPosto === "DESCOBERTO" ? "Descoberto" : "Coberto"}
+                                {oc.statusConferenciaPosto === "DESCOBERTO" ? "Descoberto" : oc.parecerPrevia.status === "PENDENTE" ? "Pendente" : "Coberto"}
                               </span>
                             </div>
                             {oc.comentarioConferencia ? (
@@ -1061,7 +1073,7 @@ export default function OcorrenciasPage() {
                                   setComentarioModal({
                                     colaborador: oc.profissionalNome,
                                     matricula: oc.matricula,
-                                    previa: oc.previaConferencia === "PREVIA_1" ? "Prévia 1" : oc.previaConferencia === "PREVIA_2" ? "Prévia 2" : "Prévia 3",
+                                    previa: previaSelecionada ? rotuloPreviaComDatas(previaSelecionada) : `${oc.parecerPrevia?.numero}ª prévia`,
                                     statusPosto: oc.statusConferenciaPosto === "DESCOBERTO" ? "Posto Descoberto" : "Posto Coberto",
                                     comentario: oc.comentarioConferencia || "",
                                   });
@@ -1185,10 +1197,16 @@ export default function OcorrenciasPage() {
 
                   <div className="flex items-center gap-2 text-xs text-slate-600 font-mono bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
                     <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>{formatarPeriodo(oc.dataInicio, oc.dataFim)}</span>
+                    <span>
+                      {oc.recortePrevia
+                        ? formatarPeriodo(oc.recortePrevia.inicio, oc.recortePrevia.fim)
+                        : formatarPeriodo(oc.dataInicio, oc.dataFim)}
+                    </span>
                     <span className="text-slate-300">•</span>
                     <span className="font-sans text-[11px] text-slate-600 font-semibold">
-                      {oc.diasAfetados} {oc.diasAfetados === 1 ? "dia" : "dias"}
+                      {oc.recortePrevia
+                        ? `${oc.recortePrevia.dias} ${oc.recortePrevia.dias === 1 ? "dia" : "dias"} nesta prévia`
+                        : `${oc.diasAfetados} ${oc.diasAfetados === 1 ? "dia" : "dias"}`}
                     </span>
                   </div>
 
@@ -1787,7 +1805,8 @@ export default function OcorrenciasPage() {
                 </div>
               )}
 
-              {/* SEÇÃO: CONFERÊNCIA PETROBRAS - PRÉVIAS 1, 2 E 3 */}
+              {/* SEÇÃO: PARECER DA PRÉVIA (a prévia é definida pelas datas; parecer vale só para ela) */}
+              {ocorrenciaEmEdicao && ocorrenciaEmEdicao.recortePrevia && previaSelecionada ? (
               <div className="bg-amber-50/80 border border-amber-300/80 rounded-xl p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between border-b border-amber-200/80 pb-2">
                   <div className="flex items-center gap-2">
@@ -1804,18 +1823,15 @@ export default function OcorrenciasPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      Rodada de Conferência (Prévia)
+                      Prévia em conferência (definida pelas datas)
                     </label>
-                    <select
-                      value={formPrevia}
-                      onChange={(e) => setFormPrevia(e.target.value)}
-                      className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 text-xs font-medium focus:ring-2 focus:ring-amber-500 outline-none"
-                    >
-                      <option value="">Sem Prévia Vinculada</option>
-                      <option value="PREVIA_1">Prévia 1 (1ª Conferência)</option>
-                      <option value="PREVIA_2">Prévia 2 (2ª Conferência / Ajustes)</option>
-                      <option value="PREVIA_3">Prévia 3 (Fechamento Definitivo)</option>
-                    </select>
+                    <div className="w-full border border-amber-200 rounded-lg p-2 bg-white text-slate-800 text-xs font-semibold">
+                      {rotuloPreviaComDatas(previaSelecionada)}
+                      <span className="block text-[10px] font-medium text-slate-500 mt-0.5">
+                        Dias deste registro na prévia: {formatarDdMm(ocorrenciaEmEdicao.recortePrevia.inicio)} a{" "}
+                        {formatarDdMm(ocorrenciaEmEdicao.recortePrevia.fim)} ({ocorrenciaEmEdicao.recortePrevia.dias} dia(s))
+                      </span>
+                    </div>
                   </div>
 
                   <div>
@@ -1825,7 +1841,10 @@ export default function OcorrenciasPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => setFormStatusPostoPrevia("COBERTO")}
+                        onClick={() => {
+                          setFormStatusPostoPrevia("COBERTO");
+                          setParecerTocado(true);
+                        }}
                         className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                           formStatusPostoPrevia === "COBERTO"
                             ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
@@ -1836,7 +1855,10 @@ export default function OcorrenciasPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFormStatusPostoPrevia("DESCOBERTO")}
+                        onClick={() => {
+                          setFormStatusPostoPrevia("DESCOBERTO");
+                          setParecerTocado(true);
+                        }}
                         className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                           formStatusPostoPrevia === "DESCOBERTO"
                             ? "bg-rose-600 text-white border-rose-600 shadow-xs"
@@ -1856,12 +1878,21 @@ export default function OcorrenciasPage() {
                   <textarea
                     rows={2}
                     value={formComentarioConferencia}
-                    onChange={(e) => setFormComentarioConferencia(e.target.value)}
+                    onChange={(e) => {
+                      setFormComentarioConferencia(e.target.value);
+                      setParecerTocado(true);
+                    }}
                     placeholder="Descreva a conferência da Petrobras/fiscalização sobre o posto coberto ou descoberto..."
                     className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-800 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
                   />
                 </div>
               </div>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] text-slate-600">
+                  A prévia é definida pelas datas do registro. O parecer é dado depois, na prévia em que o
+                  registro tiver dias{previaSelecionada ? ` (selecionada: ${rotuloPreviaComDatas(previaSelecionada)})` : ""}.
+                </div>
+              )}
 
               {/* Rodapé do Formulário */}
               <div className="p-3 bg-slate-100 border-t border-slate-200 -mx-5 -mb-5 flex items-center justify-end gap-2 shrink-0">

@@ -1047,3 +1047,27 @@ model MarcacaoPonto {
   @@index([dataLocal], name: "idx_marcacao_data_local")
   @@map("marcacao_ponto")
 }
+
+// -----------------------------------------------------------------------------
+// PRÉVIAS DA COMPETÊNCIA (períodos de conferência: 1ª, 2ª e 3ª prévia)
+// Datas geradas pela regra de src/lib/servicos/previas.ts; ajuste manual só pela
+// Administração (Premier), com motivo obrigatório.
+// -----------------------------------------------------------------------------
+
+model PreviaCompetencia {
+  id             String   @id @default(uuid()) @db.Uuid
+  competencia    String   @map("competencia") @db.VarChar(7) // AAAA-MM (mês de término do ciclo)
+  numero         Int      @map("numero") // 1, 2 ou 3
+  dataInicio     DateTime @map("data_inicio") @db.Date
+  dataFim        DateTime @map("data_fim") @db.Date
+  ajustadaManual Boolean  @default(false) @map("ajustada_manual")
+  motivoAjuste   String?  @map("motivo_ajuste")
+  criadoEm       DateTime @default(now()) @map("criado_em")
+  criadoPor      String?  @map("criado_por")
+  atualizadoEm   DateTime @updatedAt @map("atualizado_em")
+  atualizadoPor  String?  @map("atualizado_por")
+
+  @@unique([competencia, numero], name: "uq_previa_competencia_numero")
+  @@index([dataInicio, dataFim], name: "idx_previa_datas")
+  @@map("previa_competencia")
+}
