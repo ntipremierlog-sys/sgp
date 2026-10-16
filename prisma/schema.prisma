@@ -1004,12 +1004,14 @@ model LoteCargaRm {
 enum TipoRegistroConferencia {
   COBERTURA
   OCORRENCIA
+  POSICAO_DIA
 }
 
 enum StatusConferenciaPosto {
   COBERTO
   DESCOBERTO
   PENDENTE
+  PARCIAL
 }
 
 model ConferenciaPrevia {
@@ -1023,7 +1025,15 @@ model ConferenciaPrevia {
   registradoPor   String?                 @map("registrado_por")
   registradoEm    DateTime                @default(now()) @map("registrado_em")
 
+  // Conferência por posição-dia (tipo POSICAO_DIA)
+  posicaoId        String?  @map("posicao_id") @db.VarChar(80) // posicao_id_sgp (ex.: POS-EDIHB-033-01)
+  dataReferencia   DateTime? @map("data_referencia") @db.Date
+  ocorrenciaId     String?  @map("ocorrencia_id") @db.VarChar(80)
+  coberturaId      String?  @map("cobertura_id") @db.VarChar(80)
+  horasDescobertas Decimal? @map("horas_descobertas") @db.Decimal(5, 2) // somente PARCIAL
+
   @@index([registroId, tipoRegistro], name: "idx_conferencia_registro")
+  @@index([posicaoId, dataReferencia], name: "idx_conferencia_posicao_dia")
   @@index([competencia, previaNumero], name: "idx_conferencia_competencia_previa")
   @@index([registradoEm], name: "idx_conferencia_data")
   @@map("conferencia_previa")
@@ -1053,6 +1063,22 @@ model MarcacaoPonto {
 // Datas geradas pela regra de src/lib/servicos/previas.ts; ajuste manual só pela
 // Administração (Premier), com motivo obrigatório.
 // -----------------------------------------------------------------------------
+
+// Justificativa da Premier por posição-dia na prévia (somente inclusão; a tela mostra a mais recente)
+model JustificativaPremier {
+  id            String   @id @default(uuid()) @db.Uuid
+  posicaoId     String   @map("posicao_id") @db.VarChar(80) // posicao_id_sgp
+  data          DateTime @map("data") @db.Date
+  competencia   String   @map("competencia") @db.VarChar(10)
+  previaNumero  Int      @map("previa_numero")
+  texto         String   @map("texto")
+  registradoPor String?  @map("registrado_por")
+  registradoEm  DateTime @default(now()) @map("registrado_em")
+
+  @@index([competencia, previaNumero], name: "idx_justificativa_competencia_previa")
+  @@index([posicaoId, data], name: "idx_justificativa_posicao_dia")
+  @@map("justificativa_premier")
+}
 
 model PreviaCompetencia {
   id             String   @id @default(uuid()) @db.Uuid

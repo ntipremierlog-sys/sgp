@@ -29,6 +29,8 @@ interface SubMenuItem {
   href: string;
 }
 
+import { PERFIS_CONFERENCIA } from "@/lib/servicos/conferencia-perfis";
+
 interface MenuItem {
   rotulo: string;
   href: string;
@@ -38,6 +40,8 @@ interface MenuItem {
   alertaPonto?: boolean;
   rotasAdicionais?: string[];
   subitens?: SubMenuItem[];
+  /** Restringe o item a perfis específicos (além/independente do recurso). */
+  perfis?: string[];
 }
 
 interface GrupoMenu {
@@ -59,6 +63,7 @@ const gruposMenuConfig: GrupoMenu[] = [
   {
     titulo: "FISCALIZAÇÃO",
     itens: [
+      { rotulo: "Conferência Petrobras", href: "/conferencia", icone: FileCheck, perfis: PERFIS_CONFERENCIA },
       {
         rotulo: "Relatórios",
         href: "/relatorios",
@@ -158,6 +163,7 @@ export function MenuLateral() {
         {gruposMenuConfig.map((grupo) => {
           // Filtra itens que o usuário autenticado tem permissão de ver
           const itensVisiveis = grupo.itens.filter((item) => {
+            if (item.perfis) return !!sessao && item.perfis.includes(sessao.perfil);
             if (!item.recurso) return true;
             if (!sessao) return false;
             return can(sessao, "LER", item.recurso);

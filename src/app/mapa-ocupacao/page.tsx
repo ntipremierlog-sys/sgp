@@ -73,7 +73,6 @@ import {
   StatusAgregadoPosto,
   MarcacaoPontoOriginal,
   ProfissionalOperacional,
-  rotuloPrevia,
 } from "@/lib/dados/estado-operacional";
 import { calcularPeriodoCompetencia, obterCicloCompetenciaAtual } from "@/lib/servicos/periodo-competencia";
 import { obterItemPPU } from "@/lib/dados/painel-calculo";
@@ -4009,53 +4008,12 @@ export default function MapaOcupacaoPage() {
                     </div>
                   )}
 
-                  {/* LEITURA DE CONFERÊNCIA PETROBRAS JÁ REGISTRADA (Somente leitura no Mapa) */}
-                  {(() => {
-                    const cob = (coberturas || []).find((c) =>
-                      isCoberturaAtivaParaPosicao(c, drawerInspecao.dataStr, drawerInspecao.posto, drawerInspecao.vaga)
-                    );
-                    const titularVig = obterAlocacaoVigenteVaga(drawerInspecao.vaga.id, alocacoes, drawerInspecao.dataStr);
-                    const chapaTit = titularVig?.matricula || (drawerInspecao.vaga as any).chapaTitular;
-                    const oco = (ocorrencias || []).find((o) =>
-                      o.matricula === chapaTit && o.status !== "CANCELADA" && o.dataInicio <= drawerInspecao.dataStr && o.dataFim >= drawerInspecao.dataStr
-                    );
-
-                    const previaAtiva = cob?.previaConferencia || oco?.previaConferencia;
-                    if (!previaAtiva) return null;
-
-                    const rotulo = rotuloPrevia(previaAtiva);
-                    const statusPosto = (cob?.statusConferenciaPosto || oco?.statusConferenciaPosto) === "DESCOBERTO" ? "Descoberto" : "Coberto";
-                    const comentario = cob?.comentarioConferencia || oco?.comentarioConferencia;
-                    const ehCob = Boolean(cob?.previaConferencia);
-                    const linkDestino = ehCob
-                      ? `/coberturas?posto=${drawerInspecao.posto.codigoPosto || drawerInspecao.posto.idPosto}&data=${drawerInspecao.dataStr}`
-                      : `/ocorrencias?chapa=${chapaTit}`;
-                    const nomeTela = ehCob ? "Coberturas" : "Ocorrências";
-
-                    return (
-                      <div className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200/80 text-xs flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                          <div className="min-w-0">
-                            <span className="font-bold text-amber-950 text-xs">
-                              Conferido na {rotulo} — {statusPosto}
-                            </span>
-                            {comentario && (
-                              <p className="text-[11px] text-slate-600 truncate mt-0.5" title={comentario}>
-                                &ldquo;{comentario}&rdquo;
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <Link
-                          href={linkDestino}
-                          className="text-[11px] font-bold text-amber-900 hover:text-amber-950 underline shrink-0 whitespace-nowrap cursor-pointer"
-                        >
-                          Ver em {nomeTela} →
-                        </Link>
-                      </div>
-                    );
-                  })()}
+                  {/* LEITURA DO PARECER DA CONFERÊNCIA PETROBRAS (somente leitura no Mapa; fonte: conferencia_previa POSICAO_DIA) */}
+                  <ParecerConferenciaMapa
+                    posicaoId={(drawerInspecao.vaga as any).posicaoIdSGP || drawerInspecao.vaga.id}
+                    data={drawerInspecao.dataStr}
+                    postoId={(drawerInspecao.posto as any).postoIdSGP || drawerInspecao.posto.idPosto || drawerInspecao.posto.codigoPosto}
+                  />
 
                   {/* Se houver apontamento manual ativo neste dia */}
                   {(() => {
@@ -4627,6 +4585,56 @@ export default function MapaOcupacaoPage() {
             </div>
           );
         })()}
+    </div>
+  );
+}
+
+/**
+ * Linha somente leitura com o parecer vigente da Conferência Petrobras para a posição-dia
+ * (prévia que contém a data). O link abre /conferencia já na prévia e no posto.
+ */
+function ParecerConferenciaMapa({ posicaoId, data, postoId }: { posicaoId: string; data: string; postoId: string }) {
+  const [info, setInfo] = useState<{
+    previa: { competencia: string; numero: number; dataInicio: string; dataFim: string };
+    parecer: { status: string; comentario: string | null; horasDescobertas: number | null } | null;
+  } | null>(null);
+  useEffect(() => {
+    let ativo = true;
+    setInfo(null);
+    fetch(`/api/conferencia/parecer?posicaoId=${encodeURIComponent(posicaoId)}&data=${data}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (ativo && d?.sucesso) setInfo({ previa: d.previa, parecer: d.parecer });
+      })
+      .catch(() => {});
+    return () => {
+      ativo = false;
+    };
+  }, [posicaoId, data]);
+  if (!info?.parecer) return null;
+  const [a, m] = info.previa.competencia.split("-");
+  const rotuloStatus: Record<string, string> = { COBERTO: "Coberto", DESCOBERTO: "Descoberto", PARCIAL: "Parcial" };
+  const p = info.parecer;
+  const link = `/conferencia?competencia=${info.previa.competencia}&previa=${info.previa.numero}&posto=${encodeURIComponent(postoId)}`;
+  return (
+    <div className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200/80 text-xs flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+        <div className="min-w-0">
+          <span className="font-bold text-amber-950 text-xs">
+            Parecer da fiscal: {info.previa.numero}ª prévia (competência {m}/{a}) - {rotuloStatus[p.status] || p.status}
+            {p.status === "PARCIAL" && p.horasDescobertas !== null ? ` (${String(p.horasDescobertas).replace(".", ",")} h descobertas)` : ""}
+          </span>
+          {p.comentario && (
+            <p className="text-[11px] text-slate-600 truncate mt-0.5" title={p.comentario}>
+              &ldquo;{p.comentario}&rdquo;
+            </p>
+          )}
+        </div>
+      </div>
+      <Link href={link} className="text-[11px] font-bold text-amber-900 hover:text-amber-950 underline shrink-0 whitespace-nowrap cursor-pointer">
+        Ver na Conferência
+      </Link>
     </div>
   );
 }
